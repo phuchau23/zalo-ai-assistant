@@ -24,7 +24,7 @@ Trợ lý AI chăm sóc khách hàng trên **Zalo Official Account (OA)**, cho d
 
 1. **Doanh nghiệp giữ OA của họ.** Chỉ kết nối qua OAuth cấp quyền cho Zalo App của mình. Không bao giờ yêu cầu mật khẩu Zalo.
 2. **Chỉ dùng Zalo OA + API chính thức.** Không tự động hóa Zalo cá nhân, không scrape, không thư viện không chính thức.
-3. **Bot chỉ trả lời theo dữ liệu được nạp.** Không chắc → nói thật và chuyển nhân viên. Không bịa giá, không bịa chính sách.
+3. **Bot chỉ trả lời theo dữ liệu được nạp.** Không chắc → nói thật và chuyển nhân viên. Không bịa giá, không bịa chính sách. Ngành liên quan sức khỏe: không chẩn đoán, không kê thuốc, không hứa kết quả, dấu hiệu nguy hiểm → chuyển khẩn cấp (`docs/INDUSTRIES.md` mục 3).
 4. **Tách dữ liệu tuyệt đối giữa các khách thuê.** Lộ dữ liệu khách A sang khách B là lỗi nghiêm trọng nhất có thể xảy ra.
 5. **Tuân thủ pháp luật Việt Nam bằng thiết kế** (mục 7): báo là trợ lý AI, che thông tin cá nhân trước khi gửi AI, đồng ý nhận tin, khung giờ gửi, xóa/xuất dữ liệu.
 6. **Không mất tin nhắn.** Mọi tin vào đều qua hàng đợi, có retry, có log.
@@ -124,6 +124,8 @@ C:\Zalo_Tool\
 ├── CLAUDE.md
 ├── docs/
 │   ├── ROADMAP.md             # lộ trình chia phase đến phát hành
+│   ├── FEATURE-SPECS.md       # đặc tả tính năng: chuyển tiếp, "Cần chăm sóc", tình huống chăm sóc
+│   ├── INDUSTRIES.md          # mẫu ngành, mức rủi ro, bộ an toàn y tế, quy trình mở ngành
 │   ├── PROGRESS.md            # tiến độ, cập nhật sau mỗi task
 │   ├── DECISIONS.md           # ghi lại quyết định kỹ thuật quan trọng
 │   └── zalo-api-notes.md      # ghi chú API Zalo đã kiểm chứng từ docs chính thức
@@ -319,14 +321,19 @@ description: Cách thay đổi schema Postgres/EF Core an toàn. Dùng mỗi khi
 name: add-industry-template
 description: Thêm mẫu ngành mới (spa, nha khoa, bất động sản, sửa chữa nhà...). Dùng khi chủ dự án muốn bot hỗ trợ ngành mới hoặc chỉnh kịch bản của ngành có sẵn.
 ---
+Đọc `docs/INDUSTRIES.md` trước (mức rủi ro, nội dung từng ngành, quy trình mở ngành). Không train model; ngành = mẫu ngành + kho kiến thức của DN.
 Tạo `src/ZaloAi.IndustryTemplates/Templates/<slug>/` (file nhúng `EmbeddedResource`) gồm:
+- `template.json`: slug, tên, mức rủi ro (low|medium|high), `medicalSafety` (bool), phiên bản.
 - `persona.md`: vai trò, giọng văn, xưng hô mặc định.
 - `rules.md`: điều bot phải làm/không làm trong ngành.
 - `forbidden.json`: cụm từ cấm (ví dụ ngành y, thẩm mỹ: "cam kết", "trị dứt điểm", "100%", "không tác dụng phụ"), kèm câu thay thế.
+- `danger_signals.json`: dấu hiệu cần chuyển người gấp/khẩn cấp + câu trả lời khẩn cấp.
 - `lead_fields.json`: thông tin cần thu thập (ví dụ sửa nhà: địa chỉ công trình, hạng mục, diện tích, thời gian muốn làm).
+- `required_docs.md`: tài liệu DN phải nạp trước khi bật bot.
 - `faq_sample.md`: dữ liệu mẫu để demo.
-- `flows.json` (GĐ2): flow chăm sóc mẫu.
-Đăng ký slug trong `IndustryTemplateRegistry.cs`. Viết test: prompt builder nạp đúng template; câu trả lời chứa cụm cấm bị chặn.
+- `care_flows.json` (GĐ2): flow chăm sóc mẫu.
+- `evals.json`: câu hỏi thường + câu bẫy; ngành `medicalSafety` thêm ≥ 20 câu an toàn (phải đạt 100%).
+Đăng ký slug trong `IndustryTemplateRegistry.cs`. Viết test: prompt builder nạp đúng template; câu trả lời chứa cụm cấm bị chặn; dấu hiệu nguy hiểm kích hoạt chuyển người khẩn cấp. Ngành mức "chưa mở" trong INDUSTRIES.md → không làm, báo chủ dự án hỏi luật sư.
 ```
 
 ### 10.4 `add-ai-provider`
@@ -455,6 +462,7 @@ Task:
   Parse lỗi → retry 1 lần → vẫn lỗi thì trả câu mặc định và chuyển người.
 - [ ] Quy tắc: không có chunk liên quan hoặc confidence low → không trả lời bừa, xin thông tin liên hệ và chuyển người.
 - [ ] Bộ lọc câu cấm theo ngành chạy trên `reply` trước khi gửi.
+- [ ] Khung mẫu ngành theo `docs/INDUSTRIES.md`; gợi ý gói khi khách hỏi; ngành rủi ro cao: bộ an toàn y tế (cờ `medically_reviewed`, dấu hiệu nguy hiểm, `urgency`, chuyển khẩn cấp).
 - [ ] Tin chào đầu tiên có câu báo trợ lý AI + link chính sách.
 - [ ] Tóm tắt hội thoại dài định kỳ để tiết kiệm token.
 - [ ] Ghi `ai_trace` và `usage_records` cho mọi lần gọi.
@@ -485,7 +493,7 @@ Task:
 - [ ] Realtime bằng SSE (đơn giản hơn websocket) cho admin.
 - [ ] Nút "Tiếp quản" (mode=human, gán nhân viên) và "Trả lại cho bot".
 - [ ] Nhân viên gửi tin từ admin → đi qua adapter kênh.
-- [ ] Tự chuyển người khi: `needs_human`, khách đòi gặp người, sentiment tiêu cực, low confidence liên tiếp. Bot gửi câu chuyển tiếp lịch sự.
+- [ ] Tự chuyển người khi: `needs_human`, khách đòi gặp người, sentiment tiêu cực, low confidence liên tiếp, dấu hiệu khẩn cấp. Câu chuyển tiếp cho 4 tình huống + chữ ký nhân viên + giờ làm việc, cấu hình theo tenant (`docs/FEATURE-SPECS.md` mục 1).
 - [ ] Hội thoại ở mode human quá X phút không ai trả lời → nhắc lại / cảnh báo.
 - [ ] Thông báo nhân viên qua Telegram (GĐ1), mỗi tenant cấu hình chat id.
 - [ ] Phân quyền owner/staff cơ bản; audit log khi xem/xuất dữ liệu.
@@ -496,12 +504,13 @@ Tiêu chí xong: nhân viên thấy tin mới realtime, tiếp quản và trả 
 Task:
 - [ ] Gộp `lead_fields` từ AI vào `contacts` (theo template ngành), lead_status tự động + sửa tay.
 - [ ] Trang Khách tiềm năng: lọc, xem hội thoại, xuất Excel (ghi audit log).
+- [ ] Trang "Cần chăm sóc": AI gợi ý khách nhân viên nên chủ động nhắn (mức độ, lý do, tin nháp, hạn nhắn OA, gán nhân viên), bảng `care_suggestions` (`docs/FEATURE-SPECS.md` mục 2).
 - [ ] Dashboard: hội thoại/ngày, khách tiềm năng mới, tỷ lệ bot tự xử lý, danh sách câu bot không trả lời được.
 - [ ] Xóa/xuất dữ liệu một khách cuối; xóa toàn bộ dữ liệu tenant.
 - [ ] Super admin (chỉ chủ dự án): danh sách tenant, gói, hạn, trạng thái, chi phí AI theo tháng, khóa/mở tenant.
 - [ ] Hạn mức hội thoại/tháng theo gói: gần hết → cảnh báo; hết → theo cấu hình (chuyển hết sang người hoặc chặn).
 
-Tiêu chí xong: DN dùng thử xem được lead và báo cáo tuần; chủ dự án thấy chi phí AI từng tenant.
+Tiêu chí xong: DN dùng thử xem được lead và báo cáo tuần; nhân viên nhắn được khách từ trang "Cần chăm sóc"; chủ dự án thấy chi phí AI từng tenant.
 
 ### Tuần 7–8 — Dùng thử thật và chuẩn bị bán
 - [ ] Deploy staging + production tách riêng; domain, HTTPS, backup, UptimeRobot, Sentry alert.

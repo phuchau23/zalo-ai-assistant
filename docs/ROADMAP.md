@@ -2,6 +2,7 @@
 
 > Lập ngày 2026-10-01. Bản chi tiết của mục 11 trong CLAUDE.md, đã đổi sang stack .NET (BE) + Next.js (FE `zalo-ai-portal`).
 > Tiến độ thực tế ghi ở `docs/PROGRESS.md`. File này chỉ sửa khi kế hoạch thay đổi.
+> Chi tiết tính năng: `docs/FEATURE-SPECS.md`. Mẫu ngành và quy tắc theo ngành: `docs/INDUSTRIES.md`.
 
 ---
 
@@ -114,8 +115,10 @@ Quy tắc chung cho mọi phase:
 - Tin chào đầu tiên: báo là trợ lý AI + link chính sách bảo mật (không tắt được câu báo AI).
 - Tóm tắt hội thoại dài; ghi `ai_trace` và `usage_records` (chi phí) cho mọi lần gọi.
 - `IChannelAdapter` + adapter `webchat` (đi cùng hàng đợi/worker như Zalo sau này).
-- Mẫu ngành đầu tiên (persona, quy tắc, câu cấm, trường lead).
-- Bộ eval: 20–30 câu hỏi thật + đáp án mong đợi, lệnh chạy chấm điểm.
+- Khung mẫu ngành theo `docs/INDUSTRIES.md` + mẫu ngành đầu tiên (persona, quy tắc, câu cấm, dấu hiệu nguy hiểm, trường lead, tài liệu bắt buộc).
+- Gợi ý gói khi khách hỏi (từ danh mục DN nạp).
+- Nếu ngành đầu là rủi ro cao (spa, nha khoa): **bộ an toàn y tế** — cờ `medically_reviewed` trên tài liệu, kiểm tra dấu hiệu nguy hiểm trước khi gọi AI + trường `urgency` trong output, chuyển người khẩn cấp (xem `INDUSTRIES.md` mục 3, `FEATURE-SPECS.md` mục 3).
+- Bộ eval: 20–30 câu hỏi thật + đáp án mong đợi + câu bẫy; ngành rủi ro cao thêm ≥ 20 câu an toàn (phải đạt 100%). Lệnh chạy chấm điểm.
 
 🤖 FE: trang **Chat thử**, trang **Giọng văn** (tên bot, xưng hô, phong cách).
 
@@ -131,7 +134,7 @@ Quy tắc chung cho mọi phase:
 
 **Mục tiêu:** khách nhắn vào OA thật → bot trả lời trong vài giây.
 
-🧑 Trước khi code: cung cấp/kiểm tra docs Zalo chính thức để Claude ghi vào `docs/zalo-api-notes.md` (OAuth cho OA, đổi/làm mới token, thời hạn token, chữ ký webhook, API gửi tin tư vấn, loại sự kiện, giới hạn tốc độ). Claude **không đoán** API Zalo.
+🧑 Trước khi code: cung cấp/kiểm tra docs Zalo chính thức để Claude ghi vào `docs/zalo-api-notes.md` (OAuth cho OA, đổi/làm mới token, thời hạn token, chữ ký webhook, API gửi tin tư vấn, **thời gian OA được nhắn tư vấn sau tin cuối của khách**, loại sự kiện — **có sự kiện "OA gửi tin" khi nhân viên trả lời trong app Zalo không**, giới hạn tốc độ). Claude **không đoán** API Zalo.
 
 🤖 BE:
 - `ZaloClient` (timeout, retry, log đã che token).
@@ -159,12 +162,13 @@ Quy tắc chung cho mọi phase:
 - Realtime bằng SSE.
 - "Tiếp quản" (chuyển sang nhân viên) và "Trả lại cho bot".
 - Nhân viên gửi tin từ portal → đi qua adapter kênh.
-- Tự chuyển người khi: AI báo cần người, khách đòi gặp người, khách bực bội, nhiều lần liên tiếp không chắc. Bot gửi câu chuyển tiếp lịch sự.
+- Tự chuyển người khi: AI báo cần người, khách đòi gặp người, khách bực bội, nhiều lần liên tiếp không chắc, dấu hiệu khẩn cấp.
+- **Câu chuyển tiếp** cho 4 tình huống (bot chuyển người / nhân viên tiếp quản / nhân viên chủ động nhắn / trả lại bot), chữ ký nhân viên, giờ làm việc, cấu hình theo tenant — xem `FEATURE-SPECS.md` mục 1.
 - Hội thoại chờ nhân viên quá X phút → nhắc lại.
 - Thông báo Telegram (mỗi tenant cấu hình chat id).
 - Phân quyền owner/staff; audit log khi xem/xuất dữ liệu.
 
-🤖 FE: trang **Hội thoại** (danh sách realtime, khung chat, nút tiếp quản/trả lại).
+🤖 FE: trang **Hội thoại** (danh sách realtime, khung chat, nút tiếp quản/trả lại); trang **Cài đặt → Chuyển tiếp** (sửa câu mẫu, chữ ký, giờ làm việc).
 
 **Tiêu chí xong:** nhân viên thấy tin mới ngay, tiếp quản và trả lời từ portal tới được Zalo của khách; bot không chen vào khi nhân viên đang trả lời.
 
@@ -177,12 +181,13 @@ Quy tắc chung cho mọi phase:
 🤖 BE + FE:
 - Gộp thông tin khách mà AI thu được vào `contacts`; trạng thái lead tự động + sửa tay.
 - Trang **Khách tiềm năng**: lọc, xem hội thoại, xuất Excel (ghi audit log).
+- Trang **Cần chăm sóc**: AI phân tích hội thoại "nguội" + quét khách cũ hằng ngày → danh sách khách nhân viên nên chủ động nhắn (mức độ, lý do, gợi ý, tin nháp, hạn nhắn OA, gán nhân viên), ghi kết quả để báo tỷ lệ chốt — xem `FEATURE-SPECS.md` mục 2. (+3–4 ngày)
 - **Dashboard**: hội thoại/ngày, lead mới, tỷ lệ bot tự xử lý, danh sách câu bot không trả lời được.
 - **Xóa/xuất dữ liệu** của một khách cuối; xóa toàn bộ dữ liệu tenant khi ngừng thuê (yêu cầu pháp lý).
 - **Super admin** (chỉ bạn): danh sách tenant, gói, hạn, trạng thái, chi phí AI theo tháng, khóa/mở tenant, tạo tenant mới.
 - Hạn mức hội thoại/tháng theo gói: gần hết → cảnh báo; hết → chuyển hết sang nhân viên hoặc chặn (theo cấu hình).
 
-**Tiêu chí xong:** DN dùng thử xem được lead và báo cáo tuần; bạn thấy chi phí AI của từng tenant.
+**Tiêu chí xong:** DN dùng thử xem được lead và báo cáo tuần; nhân viên nhắn được khách từ trang "Cần chăm sóc"; bạn thấy chi phí AI của từng tenant.
 
 ---
 
@@ -281,7 +286,8 @@ Sau phát hành (lặp lại hằng tuần):
 ## Sau v1
 
 ### Giai đoạn 2 (~1–2 tháng, khi đã có khách trả tiền)
-- Flow chăm sóc chủ động: chào khách mới, khách chưa chốt, nhắc lịch, hỏi thăm sau mua, xin đánh giá, sinh nhật, kéo khách cũ, xử lý phàn nàn.
+- Flow chăm sóc chủ động do bot gửi (tình huống mẫu ở `FEATURE-SPECS.md` mục 4, flow mẫu theo ngành ở `INDUSTRIES.md`): chào khách mới, khách chưa chốt, nhắc lịch, hỏi thăm sau dịch vụ + gợi ý gói, xin đánh giá, sinh nhật, kéo khách cũ, xử lý phàn nàn.
+- Trang "Cần chăm sóc" cho phép bot tự nhắn các trường hợp đơn giản, trường hợp quan trọng vẫn để nhân viên.
 - Bắt buộc kèm theo: ghi nhận đồng ý nhận tin, nhắn "hủy" là dừng, khung giờ và tần suất gửi cài cứng, ZNS cho tin ngoài khung.
 - Mẫu ngành đầy đủ, chọn ngành khi tạo tenant; nhiều nhân viên, chia hội thoại; nhãn tự động; đồng bộ Google Sheets.
 - Đặt lịch hẹn qua chat + nhắc lịch; hiểu ảnh khách gửi; giờ làm việc; nạp dữ liệu từ link website; báo cáo tuần tự động.
@@ -310,7 +316,8 @@ Sau phát hành (lặp lại hằng tuần):
 
 ## Các điểm bạn phải quyết định (theo thứ tự)
 
-1. **Phase 0:** câu hỏi B1–B5; ngành đầu tiên; DN dùng thử.
+1. **Phase 0:** câu hỏi B1–B5; ngành đầu tiên (chọn từ `INDUSTRIES.md`, rủi ro cao thì cần tài liệu chuyên môn đã duyệt); DN dùng thử.
+   Các mục "(đề xuất)" trong `FEATURE-SPECS.md`: tin nháp AI, gán nhân viên, nhắc lịch ở GĐ2 hay v1.
 2. **Phase 3:** mức eval đạt; đối chiếu chi phí giữa các model AI.
 3. **Phase 5:** thời gian X phút nhắc nhân viên; nội dung câu chuyển tiếp.
 4. **Phase 6:** gói dịch vụ, hạn mức, xử lý khi hết hạn mức.
