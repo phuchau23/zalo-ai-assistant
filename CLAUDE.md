@@ -1,6 +1,7 @@
 # CLAUDE.md — Trợ lý Zalo AI
 
-> File này là "bộ não" của dự án cho Claude Code. Đặt ở thư mục gốc repo.
+> File này là "bộ não" của dự án cho Claude Code. Đặt ở thư mục gốc repo **backend** (`zalo-ai-assistant`, .NET).
+> Dự án gồm 2 repo: repo này (BE .NET) và repo **frontend** riêng (Next.js, admin). File này là nguồn chính cho toàn dự án; repo FE có CLAUDE.md ngắn trỏ về đây.
 > Claude đọc file này đầu mỗi phiên, làm theo **Quy trình làm việc** (mục 9) và **Kế hoạch từng module** (mục 11).
 > Tiến độ được cập nhật ở `docs/PROGRESS.md` (mục 12).
 
@@ -33,19 +34,21 @@ Trợ lý AI chăm sóc khách hàng trên **Zalo Official Account (OA)**, cho d
 ## 3. Kiến trúc
 
 ```
-Khách cuối ──nhắn tin──▶ Zalo OA (của DN) ──webhook──▶ API (Fastify)
+Khách cuối ──nhắn tin──▶ Zalo OA (của DN) ──webhook──▶ API (ASP.NET Core)
                                                          │ verify chữ ký, dedupe, trả 200 ngay
                                                          ▼
-                                                   Redis + BullMQ
+                                              Hangfire (lưu job trong Postgres)
                                                          │
                                                          ▼
                                      Worker ──tra cứu──▶ Postgres + pgvector (lọc tenant_id)
-                                        │   ──gọi AI──▶ aiProvider (Gemini dev / Claude prod)
+                                        │   ──gọi AI──▶ IAiProvider (Gemini dev / Claude prod)
                                         ▼
                          Zalo OA API (gửi trả lời bằng token của đúng DN)
 
-Chủ DN, nhân viên ──trình duyệt──▶ Admin (Next.js) ──▶ API ──▶ Postgres
+Chủ DN, nhân viên ──trình duyệt──▶ Admin (Next.js, repo FE) ──HTTP──▶ API ──▶ Postgres
 ```
+
+Redis vẫn dùng cho: khóa phân tán khi refresh token, OAuth `state` có TTL, dedupe webhook nhanh, rate limit gửi theo OA.
 
 Luồng một tin nhắn:
 1. Zalo gọi webhook kèm OA ID. API xác thực chữ ký, bỏ qua tin trùng (theo message id), đẩy job vào hàng đợi, trả 200 ngay.
@@ -64,22 +67,43 @@ Kết nối OA:
 
 | Thành phần | Chọn | Ghi chú |
 | --- | --- | --- |
-| Ngôn ngữ | TypeScript (strict), Node.js 20+ | |
-| Monorepo | pnpm workspaces | |
-| API | Fastify | zod để validate input |
-| Worker | BullMQ trên Redis | Process riêng, scale được nhiều bản |
+**Backend (repo này):**
+
+| Thành phần | Chọn | Ghi chú |
+| --- | --- | --- |
+| Ngôn ngữ | C#, .NET 10 (LTS) | `<Nullable>enable</Nullable>`, `<TreatWarningsAsErrors>true</TreatWarningsAsErrors>` |
+| Solution | 1 file `.sln`, nhiều project trong `src/` + `tests/` | `Directory.Build.props` + `Directory.Packages.props` quản lý version tập trung |
+| API | ASP.NET Core (Minimal API) | Xuất OpenAPI (`Microsoft.AspNetCore.OpenApi`) để FE sinh client |
+| Validate | FluentValidation | |
+| Worker / hàng đợi | Hangfire + `Hangfire.PostgreSql` | API enqueue, process Worker chạy Hangfire server, scale được nhiều bản. Có dashboard (chỉ super admin) |
 | Database | Postgres 16 + pgvector | |
-| ORM | Drizzle ORM + drizzle-kit migrations | Truy vấn vector bằng SQL qua Drizzle |
-| Admin | Next.js (App Router) + Tailwind + shadcn/ui | |
-| Auth | Email + mật khẩu (argon2), session cookie httpOnly | |
-| AI chat | Lớp `aiProvider`: Gemini (dev, free) và Anthropic Claude (prod) | Model đặt trong env, không hardcode |
-| Embedding | Qua `aiProvider.embed` (Gemini embedding lúc đầu) | Số chiều vector đặt trong env. Đổi model = tạo lại toàn bộ vector |
-| Parse file | pdf-parse, mammoth (docx), xlsx | Chạy trong worker |
-| Logging | pino | Không log token, không log PII |
-| Lỗi | Sentry | |
-| Test | Vitest + testcontainers (Postgres, Redis) | |
-| Local dev | Docker Compose (postgres pgvector, redis) + ngrok/cloudflared cho webhook | |
-| Deploy | Docker, Railway hoặc VPS | Staging và production tách riêng |
+| ORM | EF Core + Npgsql + `Pgvector.EntityFrameworkCore` + `EFCore.NamingConventions` (snake_case) | Migration bằng `dotnet ef` |
+| Redis | StackExchange.Redis | Lock, OAuth state, dedupe, rate limit gửi |
+| Auth | Email + mật khẩu (`PasswordHasher` của ASP.NET Core Identity), cookie authentication httpOnly | |
+| Rate limit | Middleware rate limiting có sẵn của ASP.NET Core | |
+| Gọi HTTP ra ngoài | `HttpClientFactory` + `Microsoft.Extensions.Http.Resilience` (Polly) | Timeout, retry, circuit breaker |
+| AI chat | `IAiProvider`: Gemini (dev, free) và Anthropic Claude (prod) | Model đặt trong config, không hardcode. SDK chính thức nếu ổn định, không thì gọi REST qua HttpClient (chốt ở M3) |
+| Embedding | Qua `IAiProvider.EmbedAsync` (Gemini embedding lúc đầu) | Số chiều vector đặt trong config. Đổi model = tạo lại toàn bộ vector |
+| Parse file | PdfPig (pdf), DocumentFormat.OpenXml (docx), ClosedXML (xlsx) | Chạy trong worker |
+| Logging | Serilog (JSON) | Không log token, không log PII; có destructuring policy để redact |
+| Lỗi | Sentry (`Sentry.AspNetCore`) | |
+| Test | xUnit + Testcontainers for .NET (Postgres, Redis) | Assert bằng xUnit/Shouldly (không dùng FluentAssertions v8: license thương mại) |
+| Format/lint | `dotnet format` + .NET analyzers | |
+
+**Frontend (repo riêng):**
+
+| Thành phần | Chọn | Ghi chú |
+| --- | --- | --- |
+| Admin | Next.js (App Router) + TypeScript strict + Tailwind + shadcn/ui | |
+| Gọi API | `openapi-typescript` + `openapi-fetch`, sinh type từ OpenAPI của BE | Không viết tay type API |
+| Cookie | Next.js rewrite `/api/*` → BE, để cookie session cùng domain | |
+
+**Chung:**
+
+| Thành phần | Chọn | Ghi chú |
+| --- | --- | --- |
+| Local dev | Docker Compose (postgres pgvector, redis) + ngrok/cloudflared cho webhook | Nằm trong repo BE |
+| Deploy | Docker. BE (api + worker): Railway hoặc VPS. FE: Vercel (gói Pro khi thương mại) hoặc Railway | Staging và production tách riêng; FE và API chung tên miền gốc |
 
 Thêm thư viện ngoài danh sách → **hỏi chủ dự án trước**.
 
@@ -87,6 +111,14 @@ Thêm thư viện ngoài danh sách → **hỏi chủ dự án trước**.
 
 ## 5. Cấu trúc thư mục
 
+Hai repo nằm cạnh nhau:
+```
+C:\Zalo_Tool\
+├── zalo-ai-assistant\     # repo BE (.NET) — repo này
+└── zalo-ai-admin\         # repo FE (Next.js)
+```
+
+**Repo BE (`zalo-ai-assistant`):**
 ```
 /
 ├── CLAUDE.md
@@ -95,55 +127,65 @@ Thêm thư viện ngoài danh sách → **hỏi chủ dự án trước**.
 │   ├── DECISIONS.md           # ghi lại quyết định kỹ thuật quan trọng
 │   └── zalo-api-notes.md      # ghi chú API Zalo đã kiểm chứng từ docs chính thức
 ├── .claude/skills/            # skills (mục 10) tách ra từ file này ở M1
-├── apps/
-│   ├── api/                   # Fastify: REST cho admin, webhook, OAuth callback
-│   ├── worker/                # BullMQ workers: message, ingest, token-refresh, flow
-│   └── admin/                 # Next.js trang quản trị
-├── packages/
-│   ├── db/                    # Drizzle schema, migrations, repository có tenant
-│   ├── ai/                    # aiProvider, prompt builder, PII masking, RAG search
-│   ├── channels/              # ChannelAdapter interface + zalo adapter
-│   ├── shared/                # types, zod schemas, crypto, logger, config
-│   └── industry-templates/    # mẫu ngành: prompt, câu cấm, câu hỏi thu thập, flow mẫu
+├── ZaloAi.sln
+├── Directory.Build.props      # cài đặt chung: net10.0, nullable, warnings as errors
+├── Directory.Packages.props   # version NuGet tập trung
+├── src/
+│   ├── ZaloAi.Api/            # ASP.NET Core: REST cho admin, webhook, OAuth callback, enqueue job
+│   ├── ZaloAi.Worker/         # Hangfire server: message, ingest, token-refresh, flow
+│   ├── ZaloAi.Core/           # entity, interface, options (config), lỗi chung. Không phụ thuộc hạ tầng
+│   ├── ZaloAi.Infrastructure/ # EF Core DbContext, migrations, repository có tenant, crypto, Redis, Serilog redact
+│   ├── ZaloAi.Ai/             # IAiProvider, prompt builder, PII masking, RAG search, evals/
+│   ├── ZaloAi.Channels/       # IChannelAdapter + Zalo adapter + webchat adapter
+│   └── ZaloAi.IndustryTemplates/ # mẫu ngành (file nhúng): prompt, câu cấm, câu hỏi thu thập, flow mẫu
+├── tests/
+│   ├── ZaloAi.UnitTests/
+│   └── ZaloAi.IntegrationTests/  # Testcontainers: test cô lập tenant, API, job
 ├── docker-compose.yml
 └── .env.example
 ```
 
-`channels/` dùng interface chung để sau này thêm Messenger, chat website mà không sửa worker.
+Phụ thuộc giữa project: `Api`, `Worker` → `Infrastructure`, `Ai`, `Channels` → `Core`. `Core` không tham chiếu project nào.
+`Channels` dùng interface chung để sau này thêm Messenger, chat website mà không sửa worker.
+
+**Repo FE (`zalo-ai-admin`):** Next.js App Router, `src/app/` (trang), `src/lib/api/` (client sinh từ OpenAPI của BE, lệnh `pnpm gen:api`), `src/components/`. FE **chỉ gọi BE qua HTTP**, không chứa secret, không kết nối DB.
 
 ---
 
 ## 6. Biến môi trường (`.env.example`)
 
+BE dùng quy ước .NET: `__` (hai gạch dưới) phân cấp section, ví dụ `Ai__ChatModel` ↔ `Ai:ChatModel` trong `appsettings.json`. Secret chỉ đặt trong env hoặc `dotnet user-secrets` (dev), không đặt trong `appsettings.json`.
+
 ```
-NODE_ENV=development
-APP_URL=http://localhost:3000
-API_URL=http://localhost:4000
-PUBLIC_WEBHOOK_BASE_URL=            # URL https từ ngrok/cloudflared
+ASPNETCORE_ENVIRONMENT=Development
+App__AdminUrl=http://localhost:3000          # URL FE (CORS, redirect sau OAuth)
+App__ApiUrl=http://localhost:4000
+App__PublicWebhookBaseUrl=                   # URL https từ ngrok/cloudflared
 
-DATABASE_URL=postgres://app:app@localhost:5432/zaloai
-REDIS_URL=redis://localhost:6379
+ConnectionStrings__Postgres=Host=localhost;Port=5432;Database=zaloai;Username=app;Password=app
+ConnectionStrings__Redis=localhost:6379
 
-SESSION_SECRET=
-ENCRYPTION_KEY=                     # 32 bytes base64, dùng AES-256-GCM cho token và dữ liệu nhạy cảm
+Security__EncryptionKey=                     # 32 bytes base64, dùng AES-256-GCM cho token và dữ liệu nhạy cảm
 
-AI_CHAT_PROVIDER=gemini             # gemini | anthropic
-AI_CHAT_MODEL=
-AI_EMBED_PROVIDER=gemini
-AI_EMBED_MODEL=
-AI_EMBED_DIM=
-GEMINI_API_KEY=
-ANTHROPIC_API_KEY=
+Ai__ChatProvider=gemini                      # gemini | anthropic
+Ai__ChatModel=
+Ai__EmbedProvider=gemini
+Ai__EmbedModel=
+Ai__EmbedDim=
+Ai__GeminiApiKey=
+Ai__AnthropicApiKey=
 
-ZALO_APP_ID=
-ZALO_APP_SECRET=
-ZALO_OAUTH_REDIRECT_URL=
+Zalo__AppId=
+Zalo__AppSecret=
+Zalo__OAuthRedirectUrl=
 
-SENTRY_DSN=
-TELEGRAM_BOT_TOKEN=                 # kênh thông báo nhân viên giai đoạn đầu
+Sentry__Dsn=
+Telegram__BotToken=                          # kênh thông báo nhân viên giai đoạn đầu
 ```
 
-Không commit `.env`. Mọi config đọc qua `packages/shared/config.ts`, validate bằng zod khi khởi động, thiếu biến bắt buộc thì crash sớm.
+FE (`zalo-ai-admin/.env.local`): `API_INTERNAL_URL=http://localhost:4000` (đích rewrite `/api/*`). Không có secret nào ở FE.
+
+Không commit `.env`. Mọi config đọc qua Options pattern (`IOptions<T>` trong `ZaloAi.Core`), validate bằng `ValidateDataAnnotations().ValidateOnStart()`, thiếu biến bắt buộc thì crash sớm khi khởi động.
 
 ---
 
@@ -169,7 +211,10 @@ Tính năng bắt buộc trong code:
 
 ### Multi-tenant
 - Mọi bảng dữ liệu của khách đều có `tenant_id NOT NULL`, có index.
-- **Không bao giờ** truy vấn bảng có tenant mà không lọc `tenant_id`. Dùng repository trong `packages/db` nhận `tenantId` bắt buộc; cấm gọi Drizzle trực tiếp từ route/worker cho bảng có tenant.
+- **Không bao giờ** truy vấn bảng có tenant mà không lọc `tenant_id`. Hai lớp bảo vệ:
+  1. Repository trong `ZaloAi.Infrastructure/Repositories` nhận `Guid tenantId` là tham số đầu tiên; cấm dùng `DbContext` trực tiếp từ endpoint/job cho bảng có tenant.
+  2. EF Core **global query filter** trên mọi entity `ITenantOwned`, lấy tenant từ `ITenantContext` (API: từ cookie session; Worker: từ job data). `SaveChanges` từ chối ghi entity có `TenantId` khác tenant hiện tại.
+- Cấm `IgnoreQueryFilters()` và SQL thô không có `tenant_id`, trừ code super admin / job hệ thống đã ghi rõ lý do trong comment.
 - Tìm kiếm vector luôn `WHERE tenant_id = $1` trước khi sắp xếp theo khoảng cách.
 - Mỗi module có **test cô lập tenant**: tạo 2 tenant, chứng minh tenant A không đọc/ghi được dữ liệu B.
 
@@ -177,7 +222,7 @@ Tính năng bắt buộc trong code:
 - Không log access token, refresh token, API key, số điện thoại, nội dung tin nhắn gốc. Logger có hàm redact.
 - Webhook phải xác thực chữ ký theo docs Zalo. Sai chữ ký → 401, không xử lý.
 - OAuth `state` ngẫu nhiên, lưu Redis có TTL, gắn tenant và user.
-- Validate mọi input bằng zod. Giới hạn dung lượng upload (mặc định 20MB/file).
+- Validate mọi input bằng FluentValidation (BE). Giới hạn dung lượng upload (mặc định 20MB/file).
 - Rate limit các endpoint đăng nhập và webhook.
 
 ### Độ tin cậy
@@ -187,7 +232,8 @@ Tính năng bắt buộc trong code:
 - Idempotent: xử lý lại cùng một job không gửi trùng tin cho khách.
 
 ### Chung
-- TypeScript strict, không `any` trừ khi có comment giải thích.
+- BE: nullable reference types bật, warnings as errors, `async` xuyên suốt và truyền `CancellationToken`. FE: TypeScript strict, không `any` trừ khi có comment giải thích.
+- Đổi API (BE) → cập nhật OpenAPI → chạy `pnpm gen:api` ở repo FE, commit ở cả hai repo.
 - Sửa schema = tạo migration mới, không sửa migration cũ.
 - Commit nhỏ, message dạng `feat(m2): ...`, `fix(m4): ...`.
 - **API Zalo:** không đoán endpoint, tham số, cơ chế chữ ký, thời hạn token. Kiểm tra docs chính thức (developers.zalo.me) hoặc hỏi chủ dự án, rồi ghi vào `docs/zalo-api-notes.md` kèm ngày kiểm tra.
@@ -201,7 +247,7 @@ Mỗi task làm theo đúng vòng này:
 1. **Đọc** CLAUDE.md, `docs/PROGRESS.md`, và code liên quan.
 2. **Lập kế hoạch**: liệt kê file sẽ tạo/sửa, schema thay đổi, thư viện cần thêm, rủi ro. **Dừng lại chờ chủ dự án đồng ý** trước khi code nếu task đụng schema, bảo mật, hoặc thêm thư viện.
 3. **Code** theo từng bước nhỏ, mỗi bước chạy được.
-4. **Test**: viết test cho logic chính + test cô lập tenant nếu đụng dữ liệu. Chạy `pnpm lint && pnpm typecheck && pnpm test`.
+4. **Test**: viết test cho logic chính + test cô lập tenant nếu đụng dữ liệu. BE: `dotnet format --verify-no-changes && dotnet build && dotnet test`. FE: `pnpm lint && pnpm typecheck && pnpm test`.
 5. **Tự review** theo checklist:
    - [ ] Mọi truy vấn có `tenant_id`?
    - [ ] Không log token/PII?
@@ -216,12 +262,19 @@ Khi không chắc về yêu cầu sản phẩm → hỏi, không tự đoán. Kh
 
 Lệnh thường dùng (tạo ở M1):
 ```
-pnpm dev            # chạy api + worker + admin
-pnpm db:generate    # tạo migration từ schema
-pnpm db:migrate
-pnpm db:seed        # 2 tenant mẫu + dữ liệu mẫu
-pnpm lint | pnpm typecheck | pnpm test
+# repo BE (zalo-ai-assistant)
 docker compose up -d
+dotnet run --project src/ZaloAi.Api        # API, cổng 4000
+dotnet run --project src/ZaloAi.Worker     # Hangfire worker
+dotnet ef migrations add <Ten> -p src/ZaloAi.Infrastructure -s src/ZaloAi.Api
+dotnet ef database update -p src/ZaloAi.Infrastructure -s src/ZaloAi.Api
+dotnet run --project src/ZaloAi.Api -- seed   # 2 tenant mẫu + dữ liệu mẫu
+dotnet format | dotnet build | dotnet test
+
+# repo FE (zalo-ai-admin)
+pnpm dev            # Next.js, cổng 3000
+pnpm gen:api        # sinh type từ OpenAPI của BE
+pnpm lint | pnpm typecheck | pnpm test
 ```
 
 ---
@@ -237,11 +290,11 @@ name: tenant-safe-feature
 description: Quy trình thêm bảng, endpoint, job hoặc màn hình admin đụng tới dữ liệu khách thuê. Dùng mỗi khi thêm hoặc sửa bất kỳ tính năng nào đọc/ghi dữ liệu của doanh nghiệp, kể cả khi task không nhắc tới "tenant".
 ---
 1. Bảng mới: thêm `tenant_id uuid not null references tenants(id) on delete cascade` + index.
-2. Thêm hàm trong repository `packages/db/repos/<name>.ts`, tham số đầu tiên luôn là `tenantId`.
-3. Route API lấy `tenantId` từ session (middleware), KHÔNG lấy từ body/query.
-4. Worker lấy `tenantId` từ job data đã được API/webhook xác định, không suy ra từ input của khách cuối.
+2. Entity implement `ITenantOwned` (để global query filter tự áp dụng). Thêm hàm trong repository `src/ZaloAi.Infrastructure/Repositories/<Name>Repository.cs`, tham số đầu tiên luôn là `Guid tenantId`.
+3. Endpoint API lấy `tenantId` từ `ITenantContext` (đọc từ cookie session), KHÔNG lấy từ body/query/route.
+4. Job Hangfire nhận `tenantId` làm tham số và set vào `ITenantContext` đầu job; tenantId do API/webhook xác định, không suy ra từ input của khách cuối.
 5. Kiểm tra quyền: owner, staff, super_admin.
-6. Viết test cô lập: tenant A tạo dữ liệu, tenant B gọi cùng API → 404 (không phải 403, để không lộ sự tồn tại).
+6. Viết test cô lập (`tests/ZaloAi.IntegrationTests`, Testcontainers): tenant A tạo dữ liệu, tenant B gọi cùng API → 404 (không phải 403, để không lộ sự tồn tại).
 7. Nếu có dữ liệu cá nhân: thêm vào luồng xóa/xuất dữ liệu (M6).
 ```
 
@@ -249,12 +302,12 @@ description: Quy trình thêm bảng, endpoint, job hoặc màn hình admin đ�
 ```markdown
 ---
 name: db-migration
-description: Cách thay đổi schema Postgres/Drizzle an toàn. Dùng mỗi khi thêm/sửa/xóa bảng, cột, index, hoặc đổi số chiều vector.
+description: Cách thay đổi schema Postgres/EF Core an toàn. Dùng mỗi khi thêm/sửa/xóa bảng, cột, index, hoặc đổi số chiều vector.
 ---
-1. Sửa schema trong `packages/db/schema/`.
-2. `pnpm db:generate`, đọc lại file SQL sinh ra.
+1. Sửa entity + cấu hình (`IEntityTypeConfiguration`) trong `src/ZaloAi.Infrastructure/Persistence/`.
+2. `dotnet ef migrations add <Ten> -p src/ZaloAi.Infrastructure -s src/ZaloAi.Api`, rồi `dotnet ef migrations script` để đọc lại SQL sinh ra.
 3. Không xóa cột đang dùng trong cùng một lần deploy: thêm cột mới → deploy code dùng cả hai → migrate dữ liệu → xóa cột cũ ở lần sau.
-4. Index trên bảng lớn dùng `CREATE INDEX CONCURRENTLY` (migration riêng).
+4. Index trên bảng lớn dùng `CREATE INDEX CONCURRENTLY` (migration riêng, `migrationBuilder.Sql(..., suppressTransaction: true)`).
 5. Đổi model hoặc số chiều embedding: tạo cột/bảng vector mới, job re-embed toàn bộ, chuyển truy vấn, rồi mới xóa cái cũ.
 6. Cập nhật seed nếu cần. Ghi vào DECISIONS.md nếu thay đổi lớn.
 ```
@@ -265,14 +318,14 @@ description: Cách thay đổi schema Postgres/Drizzle an toàn. Dùng mỗi khi
 name: add-industry-template
 description: Thêm mẫu ngành mới (spa, nha khoa, bất động sản, sửa chữa nhà...). Dùng khi chủ dự án muốn bot hỗ trợ ngành mới hoặc chỉnh kịch bản của ngành có sẵn.
 ---
-Tạo `packages/industry-templates/<slug>/` gồm:
+Tạo `src/ZaloAi.IndustryTemplates/Templates/<slug>/` (file nhúng `EmbeddedResource`) gồm:
 - `persona.md`: vai trò, giọng văn, xưng hô mặc định.
 - `rules.md`: điều bot phải làm/không làm trong ngành.
 - `forbidden.json`: cụm từ cấm (ví dụ ngành y, thẩm mỹ: "cam kết", "trị dứt điểm", "100%", "không tác dụng phụ"), kèm câu thay thế.
 - `lead_fields.json`: thông tin cần thu thập (ví dụ sửa nhà: địa chỉ công trình, hạng mục, diện tích, thời gian muốn làm).
 - `faq_sample.md`: dữ liệu mẫu để demo.
 - `flows.json` (GĐ2): flow chăm sóc mẫu.
-Đăng ký slug trong `index.ts`. Viết test: prompt builder nạp đúng template; câu trả lời chứa cụm cấm bị chặn.
+Đăng ký slug trong `IndustryTemplateRegistry.cs`. Viết test: prompt builder nạp đúng template; câu trả lời chứa cụm cấm bị chặn.
 ```
 
 ### 10.4 `add-ai-provider`
@@ -281,13 +334,13 @@ Tạo `packages/industry-templates/<slug>/` gồm:
 name: add-ai-provider
 description: Thêm hoặc đổi nhà cung cấp AI (Gemini, Claude, model khác). Dùng khi đổi model chat/embedding hoặc thêm provider mới.
 ---
-1. Implement interface trong `packages/ai/provider.ts`:
-   `chat({system, messages, jsonSchema?, maxTokens, timeoutMs}) -> {text, json?, usage: {inputTokens, outputTokens}, costUsd}`
-   `embed(texts[]) -> number[][]`
-2. Đọc model và key từ config, không hardcode.
-3. Map lỗi của provider về lỗi chung: `RateLimited`, `Timeout`, `ProviderError` để worker retry đúng.
+1. Implement `IAiProvider` trong `src/ZaloAi.Ai/Providers/`:
+   `Task<ChatResult> ChatAsync(ChatRequest req, CancellationToken ct)` — req: `System, Messages, JsonSchema?, MaxTokens, Timeout`; result: `Text, Json?, Usage(InputTokens, OutputTokens), CostUsd`
+   `Task<float[][]> EmbedAsync(IReadOnlyList<string> texts, CancellationToken ct)`
+2. Đọc model và key từ config (Options), không hardcode.
+3. Map lỗi của provider về exception chung: `AiRateLimitedException`, `AiTimeoutException`, `AiProviderException` để job Hangfire retry đúng.
 4. Tính chi phí từ bảng giá trong config (cập nhật thủ công theo trang giá của provider).
-5. Chạy bộ eval nhỏ (`packages/ai/evals/`) so sánh chất lượng trả lời tiếng Việt với provider cũ trước khi đổi ở production.
+5. Chạy bộ eval nhỏ (`src/ZaloAi.Ai/Evals/`) so sánh chất lượng trả lời tiếng Việt với provider cũ trước khi đổi ở production.
 6. Nhắc chủ dự án: production chỉ dùng gói trả phí có cam kết không dùng dữ liệu để huấn luyện.
 ```
 
@@ -311,14 +364,14 @@ description: Điều tra vì sao bot trả lời sai, bịa, hoặc không trả
 ```markdown
 ---
 name: zalo-api-work
-description: Làm bất cứ việc gì với API Zalo (OAuth, webhook, gửi tin, ZNS, token). Dùng mỗi khi code đụng tới packages/channels/zalo hoặc callback/webhook Zalo.
+description: Làm bất cứ việc gì với API Zalo (OAuth, webhook, gửi tin, ZNS, token). Dùng mỗi khi code đụng tới src/ZaloAi.Channels/Zalo hoặc callback/webhook Zalo.
 ---
 1. Đọc `docs/zalo-api-notes.md` trước. Nếu thông tin cần dùng chưa có hoặc cũ hơn 3 tháng → nhờ chủ dự án kiểm tra docs chính thức, ghi lại kèm ngày.
-2. Mọi lệnh gọi Zalo đi qua `ZaloClient` trong adapter, có timeout, retry, log (đã redact).
+2. Mọi lệnh gọi Zalo đi qua `ZaloClient` (typed HttpClient) trong adapter, có timeout, retry (resilience handler), log (đã redact).
 3. Refresh token: dùng Redis lock theo OA, đọc lại token sau khi lấy được lock (có thể worker khác đã refresh), lưu token mới trong cùng transaction.
 4. Lỗi token không hợp lệ/bị thu hồi → đánh dấu connection `needs_reauth`, thông báo DN, dừng gửi.
 5. Tôn trọng khung thời gian được phép nhắn chủ động; ngoài khung chỉ gửi ZNS theo mẫu đã duyệt.
-6. Test bằng fixture payload thật (đã xóa PII) lưu ở `packages/channels/zalo/__fixtures__/`.
+6. Test bằng fixture payload thật (đã xóa PII) lưu ở `tests/ZaloAi.UnitTests/Fixtures/Zalo/`.
 ```
 
 ### 10.7 `add-care-flow` (GĐ2)
@@ -327,7 +380,7 @@ description: Làm bất cứ việc gì với API Zalo (OAuth, webhook, gửi ti
 name: add-care-flow
 description: Thêm loại flow chăm sóc khách hàng hoặc bước mới trong flow (chờ, điều kiện, gửi tin, gắn nhãn, báo nhân viên). Dùng khi làm tính năng chăm sóc chủ động.
 ---
-1. Flow = trigger → [condition] → action → wait → ... lưu dạng JSON, validate bằng zod.
+1. Flow = trigger → [condition] → action → wait → ... lưu dạng JSON (jsonb), validate bằng FluentValidation.
 2. Trước mỗi lần gửi: kiểm tra đồng ý nhận tin, khung giờ, tần suất tối đa, điều kiện dừng (đã mua, đã phản hồi, đã hủy).
 3. Chọn kênh: còn trong khung → tin tư vấn; ngoài khung → ZNS (nếu có mẫu phù hợp) → không gửi được thì bỏ qua và ghi log.
 4. Khách trả lời giữa flow → chuyển về luồng hội thoại bình thường, flow tạm dừng.
@@ -350,12 +403,12 @@ Thứ tự bắt buộc: M0 → M1 → M2 → M3 → M4 → M5 → M6. Không nh
 
 ### M1 — Nền tảng (tuần 1)
 Task:
-- [ ] Monorepo pnpm, TS strict, eslint, prettier, vitest; docker-compose (pgvector/pgvector:pg16, redis:7).
-- [ ] `packages/shared`: config (zod), logger pino có redact, crypto AES-256-GCM, error types.
-- [ ] `packages/db`: Drizzle schema + migration đầu tiên (bảng bên dưới), repository có tenant, seed 2 tenant.
-- [ ] `apps/api`: Fastify, `/health`, auth (đăng ký, đăng nhập, đăng xuất), middleware gắn `tenantId` + `role`, rate limit.
-- [ ] `apps/admin`: Next.js, trang đăng nhập, layout, trang cài đặt tenant (tên, ngành, tên bot, xưng hô, link chính sách bảo mật).
-- [ ] `apps/worker`: khung BullMQ, 1 job mẫu.
+- [ ] BE: solution .NET 10 (`ZaloAi.sln`, `Directory.Build.props`, `Directory.Packages.props`), analyzers, `dotnet format`, xUnit; docker-compose (pgvector/pgvector:pg16, redis:7).
+- [ ] `ZaloAi.Core` + `ZaloAi.Infrastructure`: Options có validate, Serilog có redact, crypto AES-256-GCM, exception chung, `ITenantContext`.
+- [ ] EF Core: DbContext + migration đầu tiên (bảng bên dưới), global query filter tenant, repository có tenant, seed 2 tenant.
+- [ ] `ZaloAi.Api`: `/health`, auth (đăng nhập, đăng xuất, cookie httpOnly), gắn `tenantId` + `role`, rate limit, OpenAPI, endpoint cài đặt tenant.
+- [ ] `ZaloAi.Worker`: Hangfire server, 1 job mẫu, retry backoff, job lỗi hết lượt → cảnh báo.
+- [ ] Repo FE `zalo-ai-admin`: Next.js, trang đăng nhập, layout, trang cài đặt tenant (tên, ngành, tên bot, xưng hô, link chính sách bảo mật); rewrite `/api/*` → BE; `pnpm gen:api`.
 - [ ] Sentry cho api + worker. Script backup database.
 - [ ] Tách skills ra `.claude/skills/`. Tạo `docs/PROGRESS.md`, `docs/DECISIONS.md`, `docs/zalo-api-notes.md`.
 
@@ -378,7 +431,7 @@ usage_records(id, tenant_id, kind: chat|embed|zns, provider, model, input_tokens
 audit_logs(id, tenant_id, user_id, action, target, created_at)
 ```
 
-Tiêu chí xong: `docker compose up` + `pnpm dev` chạy được; đăng nhập admin; test cô lập tenant cho repository đầu tiên pass; CI chạy lint/typecheck/test.
+Tiêu chí xong: `docker compose up` + `dotnet run` (api, worker) + `pnpm dev` (FE) chạy được; đăng nhập admin; test cô lập tenant cho repository đầu tiên pass; CI ở cả 2 repo chạy format/build/test.
 
 ### M2 — Kho kiến thức (tuần 2)
 Task:
@@ -406,7 +459,7 @@ Task:
 - [ ] Ghi `ai_trace` và `usage_records` cho mọi lần gọi.
 - [ ] `ChannelAdapter` interface + adapter `webchat` (dùng cho khung chat thử trong admin, cùng luồng hàng đợi/worker với Zalo sau này).
 - [ ] Admin: trang "Chat thử" và trang cài đặt giọng văn.
-- [ ] `packages/ai/evals/`: 20–30 câu hỏi mẫu của ngành đầu tiên + đáp án mong đợi, script chạy eval.
+- [ ] `src/ZaloAi.Ai/Evals/`: 20–30 câu hỏi mẫu của ngành đầu tiên + đáp án mong đợi, script chạy eval.
 
 Tiêu chí xong: chủ DN dùng thử tự chat trên khung chat thử và đánh giá câu trả lời đạt; eval pass ≥ mức chủ dự án chốt; câu hỏi ngoài dữ liệu được chuyển người, không bịa. **Chưa đạt thì chưa sang M4.**
 
@@ -468,7 +521,7 @@ Tiêu chí xong: DN dùng thử xem được lead và báo cáo tuần; chủ d�
 - Trình kéo thả tự thiết kế flow.
 - Thanh toán tự động (QR chuyển khoản, cổng thanh toán), hóa đơn.
 - Zalo Mini App (đặt lịch, xem sản phẩm), PWA cho admin.
-- Kênh Facebook Messenger, chat website (adapter mới trong `packages/channels`).
+- Kênh Facebook Messenger, chat website (adapter mới trong `src/ZaloAi.Channels`).
 
 ---
 
