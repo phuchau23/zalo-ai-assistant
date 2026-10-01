@@ -36,12 +36,15 @@ Thay kế hoạch pnpm ngày 2026-09-30 (xem DECISIONS.md). 8 bước, mỗi bư
 ## Đã xong
 - [x] Chốt tách 2 repo: BE .NET (`zalo-ai-assistant`) + FE Next.js (`zalo-ai-portal`), queue Hangfire + Postgres (2026-10-01)
 - [x] Tạo project FE `C:\Zalo_Tool\zalo-ai-portal` (Next.js 16, TS strict, Tailwind 4, ESLint, App Router, `src/`); lint/typecheck/build pass (2026-10-01)
+- [x] Viết ROADMAP.md (10 phase đến phát hành), FEATURE-SPECS.md (chuyển tiếp, "Cần chăm sóc", tình huống chăm sóc), INDUSTRIES.md (mẫu ngành, bộ an toàn y tế) (2026-10-01)
 
 ## Vấn đề mở / nợ kỹ thuật
 - Cân nhắc Postgres Row Level Security làm lớp phòng thủ thứ 3 (sau M1)
 - Next.js 16 có thay đổi lớn so với bản cũ: đọc `node_modules/next/dist/docs/` trước khi code FE
 - Chọn SDK AI .NET (chính thức hay REST) ở M3
+- Xác minh ở Phase 4 (docs Zalo): thời gian OA được nhắn tư vấn sau tin cuối của khách; webhook có sự kiện "OA gửi tin" khi nhân viên trả lời trong app Zalo không
 
 ## Việc chủ dự án cần làm
 - Hoàn thành Phần A và trả lời Phần B ở trên
+- Chọn ngành đầu tiên từ `docs/INDUSTRIES.md`; xem lại các mục "(đề xuất)" trong `docs/FEATURE-SPECS.md`
 - Các việc M0 (OA test, Zalo App, domain, Gemini key, DN dùng thử)
