@@ -123,6 +123,7 @@ C:\Zalo_Tool\
 /
 ├── CLAUDE.md
 ├── docs/
+│   ├── ROADMAP.md             # lộ trình chia phase đến phát hành
 │   ├── PROGRESS.md            # tiến độ, cập nhật sau mỗi task
 │   ├── DECISIONS.md           # ghi lại quyết định kỹ thuật quan trọng
 │   └── zalo-api-notes.md      # ghi chú API Zalo đã kiểm chứng từ docs chính thức
