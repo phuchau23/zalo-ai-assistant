@@ -21,7 +21,7 @@ Thay kế hoạch pnpm ngày 2026-09-30 (xem DECISIONS.md). 8 bước, mỗi bư
 - [ ] A2: **.NET 10 SDK** (LTS) — tải ở dotnet.microsoft.com → kiểm tra `dotnet --list-sdks` có dòng `10.x`. Máy đang có 9.0 (hết hỗ trợ 11/2026), giữ song song cũng được. Cài thêm: `dotnet tool install --global dotnet-ef`
 - [ ] A3: Docker Desktop — `wsl --install` (restart nếu cần) → cài Docker Desktop (WSL 2) → `docker run --rm hello-world`. Cài vào ổ C (còn ~76 GB, cần ~6–10 GB; ổ D gần đầy)
 - [ ] A4: kiểm tra `git --version`
-- [ ] A5: tạo repo GitHub cho `zalo-ai-admin` (repo FE) khi muốn push
+- [ ] A5: tạo repo GitHub cho `zalo-ai-portal` (repo FE) khi muốn push
 
 ## Phần B: câu hỏi chờ chủ dự án trả lời (đề xuất của Claude trong ngoặc)
 - [ ] B1: duyệt thư viện (duyệt hết)
@@ -34,8 +34,8 @@ Thay kế hoạch pnpm ngày 2026-09-30 (xem DECISIONS.md). 8 bước, mỗi bư
 - [ ] B5: tên/ngành 2 tenant mẫu ("Spa Hoa Mai", "Sửa nhà An Phát")
 
 ## Đã xong
-- [x] Chốt tách 2 repo: BE .NET (`zalo-ai-assistant`) + FE Next.js (`zalo-ai-admin`), queue Hangfire + Postgres (2026-10-01)
-- [x] Tạo project FE `C:\Zalo_Tool\zalo-ai-admin` (Next.js 16, TS strict, Tailwind 4, ESLint, App Router, `src/`); lint/typecheck/build pass (2026-10-01)
+- [x] Chốt tách 2 repo: BE .NET (`zalo-ai-assistant`) + FE Next.js (`zalo-ai-portal`), queue Hangfire + Postgres (2026-10-01)
+- [x] Tạo project FE `C:\Zalo_Tool\zalo-ai-portal` (Next.js 16, TS strict, Tailwind 4, ESLint, App Router, `src/`); lint/typecheck/build pass (2026-10-01)
 
 ## Vấn đề mở / nợ kỹ thuật
 - Cân nhắc Postgres Row Level Security làm lớp phòng thủ thứ 3 (sau M1)

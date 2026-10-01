@@ -6,7 +6,7 @@ Mỗi quyết định: ngày, nội dung, lý do, hệ quả.
 
 **Quyết định:** Bỏ monorepo pnpm (Node.js/Fastify/BullMQ/Drizzle). Dự án gồm 2 repo nằm cạnh nhau trong `C:\Zalo_Tool\`:
 - `zalo-ai-assistant`: backend **.NET 10** (ASP.NET Core API + Hangfire Worker + EF Core). Giữ CLAUDE.md và `docs/` làm nguồn chính.
-- `zalo-ai-admin`: frontend **Next.js** (App Router, TypeScript, Tailwind, shadcn/ui).
+- `zalo-ai-portal`: frontend **Next.js** (App Router, TypeScript, Tailwind, shadcn/ui).
 
 **Lý do:** chủ dự án quen C#/.NET hơn Node, nên tự đọc, sửa, vận hành BE được.
 

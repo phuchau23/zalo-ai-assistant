@@ -115,7 +115,7 @@ Hai repo nằm cạnh nhau:
 ```
 C:\Zalo_Tool\
 ├── zalo-ai-assistant\     # repo BE (.NET) — repo này
-└── zalo-ai-admin\         # repo FE (Next.js)
+└── zalo-ai-portal\         # repo FE (Next.js)
 ```
 
 **Repo BE (`zalo-ai-assistant`):**
@@ -148,7 +148,7 @@ C:\Zalo_Tool\
 Phụ thuộc giữa project: `Api`, `Worker` → `Infrastructure`, `Ai`, `Channels` → `Core`. `Core` không tham chiếu project nào.
 `Channels` dùng interface chung để sau này thêm Messenger, chat website mà không sửa worker.
 
-**Repo FE (`zalo-ai-admin`):** Next.js App Router, `src/app/` (trang), `src/lib/api/` (client sinh từ OpenAPI của BE, lệnh `pnpm gen:api`), `src/components/`. FE **chỉ gọi BE qua HTTP**, không chứa secret, không kết nối DB.
+**Repo FE (`zalo-ai-portal`):** Next.js App Router, `src/app/` (trang), `src/lib/api/` (client sinh từ OpenAPI của BE, lệnh `pnpm gen:api`), `src/components/`. FE **chỉ gọi BE qua HTTP**, không chứa secret, không kết nối DB.
 
 ---
 
@@ -183,7 +183,7 @@ Sentry__Dsn=
 Telegram__BotToken=                          # kênh thông báo nhân viên giai đoạn đầu
 ```
 
-FE (`zalo-ai-admin/.env.local`): `API_INTERNAL_URL=http://localhost:4000` (đích rewrite `/api/*`). Không có secret nào ở FE.
+FE (`zalo-ai-portal/.env.local`): `API_INTERNAL_URL=http://localhost:4000` (đích rewrite `/api/*`). Không có secret nào ở FE.
 
 Không commit `.env`. Mọi config đọc qua Options pattern (`IOptions<T>` trong `ZaloAi.Core`), validate bằng `ValidateDataAnnotations().ValidateOnStart()`, thiếu biến bắt buộc thì crash sớm khi khởi động.
 
@@ -271,7 +271,7 @@ dotnet ef database update -p src/ZaloAi.Infrastructure -s src/ZaloAi.Api
 dotnet run --project src/ZaloAi.Api -- seed   # 2 tenant mẫu + dữ liệu mẫu
 dotnet format | dotnet build | dotnet test
 
-# repo FE (zalo-ai-admin)
+# repo FE (zalo-ai-portal)
 pnpm dev            # Next.js, cổng 3000
 pnpm gen:api        # sinh type từ OpenAPI của BE
 pnpm lint | pnpm typecheck | pnpm test
@@ -408,7 +408,7 @@ Task:
 - [ ] EF Core: DbContext + migration đầu tiên (bảng bên dưới), global query filter tenant, repository có tenant, seed 2 tenant.
 - [ ] `ZaloAi.Api`: `/health`, auth (đăng nhập, đăng xuất, cookie httpOnly), gắn `tenantId` + `role`, rate limit, OpenAPI, endpoint cài đặt tenant.
 - [ ] `ZaloAi.Worker`: Hangfire server, 1 job mẫu, retry backoff, job lỗi hết lượt → cảnh báo.
-- [ ] Repo FE `zalo-ai-admin`: Next.js, trang đăng nhập, layout, trang cài đặt tenant (tên, ngành, tên bot, xưng hô, link chính sách bảo mật); rewrite `/api/*` → BE; `pnpm gen:api`.
+- [ ] Repo FE `zalo-ai-portal`: Next.js, trang đăng nhập, layout, trang cài đặt tenant (tên, ngành, tên bot, xưng hô, link chính sách bảo mật); rewrite `/api/*` → BE; `pnpm gen:api`.
 - [ ] Sentry cho api + worker. Script backup database.
 - [ ] Tách skills ra `.claude/skills/`. Tạo `docs/PROGRESS.md`, `docs/DECISIONS.md`, `docs/zalo-api-notes.md`.
 
