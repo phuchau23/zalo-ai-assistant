@@ -7,6 +7,7 @@ using ZaloAi.Core.Entities;
 using ZaloAi.Core.Options;
 using ZaloAi.Core.Security;
 using ZaloAi.Core.Tenancy;
+using ZaloAi.Infrastructure.Jobs;
 using ZaloAi.Infrastructure.Persistence;
 using ZaloAi.Infrastructure.Repositories;
 using ZaloAi.Infrastructure.Security;
@@ -24,6 +25,7 @@ public static class DependencyInjection
         services.AddValidatedOptions<AppOptions>(configuration, AppOptions.SectionName);
         services.AddValidatedOptions<SecurityOptions>(configuration, SecurityOptions.SectionName);
         services.AddValidatedOptions<DatabaseOptions>(configuration, DatabaseOptions.SectionName);
+        services.AddValidatedOptions<JobsOptions>(configuration, JobsOptions.SectionName);
         services.AddValidatedOptions<AiOptions>(configuration, AiOptions.SectionName);
         services.AddValidatedOptions<ZaloOptions>(configuration, ZaloOptions.SectionName);
 
@@ -41,6 +43,9 @@ public static class DependencyInjection
         services.AddScoped<AuditLogRepository>();
         services.AddScoped<UserRepository>();
         services.AddScoped<AccessQueries>();
+
+        services.AddZaloAiHangfire();
+        services.AddScoped<SampleTenantJob>();
 
         return services;
     }

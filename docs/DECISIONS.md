@@ -63,3 +63,12 @@ Mỗi quyết định: ngày, nội dung, lý do, hệ quả.
 - **Khóa Data Protection** (mã hóa cookie) lưu bảng `data_protection_keys` qua `Microsoft.AspNetCore.DataProtection.EntityFrameworkCore` (chủ dự án duyệt): deploy lại hoặc chạy nhiều bản API không đăng xuất người dùng.
 - **Lỗi API** trả ProblemDetails kèm `code` ổn định (`invalid_credentials`, `unauthenticated`, `forbidden`, `no_active_tenant`, `not_found`, `validation_failed`, `rate_limited`, `internal_error`). Lỗi validate trả tên trường camelCase.
 - **OpenAPI** chỉ mở ngoài Production (`/openapi/v1.json`).
+
+## 2026-10-02 — Hàng đợi job (M1 bước 5)
+
+- **Hangfire lưu trong Postgres**, schema riêng `hangfire`, bảng do Hangfire tự quản (không qua migration EF). **Chỉ Worker tạo/nâng cấp bảng** (`PrepareSchemaIfNecessary`); Api chỉ dùng, để Api khởi động không phụ thuộc thao tác DDL. Lệnh `seed` và bộ test gọi `HangfireSetup.EnsureSchemaAsync` để bảng có sẵn trên máy dev.
+- **Job có dữ liệu tenant:** tham số đầu là `tenantId` (do API/webhook xác định), dòng đầu `TenantContext.Set(...)`. Hangfire tạo DI scope riêng cho mỗi lần chạy. Khuôn mẫu: `SampleTenantJob`.
+- **Retry toàn cục:** 5 lần, chờ 10s, 30s, 90s, 270s, 810s (thay mặc định 10 lần của Hangfire). Hết lượt → trạng thái Failed (dead-letter, chạy lại tay trên dashboard) + log Error qua `JobFailureAlertFilter` (chỉ ghi tên job + loại lỗi, không ghi tham số/message vì có thể chứa dữ liệu khách).
+- **Dashboard `/hangfire` chỉ super admin** (hiện job của mọi tenant, chạy lại/xóa được). Không hiện connection string.
+- Worker hỏi hàng đợi mỗi 5s (`Jobs:QueuePollSeconds`), 10 job song song (`Jobs:WorkerCount`).
+- Hangfire.Core kéo `Newtonsoft.Json` 11.0.1 có lỗ hổng (GHSA-5crp-9r3c-p9vr) → ghim 13.0.4 trong `Directory.Packages.props`.

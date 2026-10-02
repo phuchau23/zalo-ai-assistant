@@ -1,5 +1,6 @@
 using Serilog;
 using ZaloAi.Infrastructure;
+using ZaloAi.Infrastructure.Jobs;
 using ZaloAi.Infrastructure.Logging;
 
 // Logger tạm để ghi lỗi xảy ra trước khi host dựng xong (ví dụ thiếu cấu hình).
@@ -14,7 +15,8 @@ try
 
     builder.Services.AddZaloAiInfrastructure(builder.Configuration);
 
-    // Hangfire server đăng ký ở bước 5.
+    // Worker là nơi duy nhất chạy job; Api chỉ đẩy job vào hàng đợi.
+    builder.Services.AddZaloAiJobServer();
 
     var host = builder.Build();
     await host.RunAsync();
