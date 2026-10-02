@@ -2,7 +2,7 @@
 
 ## Đang làm
 - Module: M1 — Nền tảng
-- Task: bước 3 xong, chờ chủ dự án chạy migration + seed; tiếp theo bước 4 (Api: auth, /health, rate limit, OpenAPI, cài đặt tenant)
+- Task: bước 4 xong (nhánh `feat/m1-auth-tenant-settings`), chờ chủ dự án chạy thử + commit; tiếp theo bước 5 (Worker: Hangfire)
 - Chặn bởi: không
 
 ## Kế hoạch M1 (bản .NET, 2026-10-01) — đã duyệt 2026-10-02
@@ -35,6 +35,7 @@ Thay kế hoạch pnpm ngày 2026-09-30 (xem DECISIONS.md). 8 bước, mỗi bư
 - [x] B5: 2 tenant mẫu: "Khoa Học Nguyệt Đạo" (bấm huyệt, massage → slug `spa`, rủi ro Cao) và "Sửa nhà An Phát" (sửa nhà, rủi ro thấp)
 
 ## Đã xong
+- [x] M1 bước 4: đăng nhập cookie (login, logout, me, switch-tenant), middleware kiểm membership + trạng thái tenant mỗi request, phân quyền owner/staff, `GET/PUT /tenant/settings` (FluentValidation, audit log), rate limit login 5/phút/IP, `/health` kiểm Postgres, ProblemDetails, OpenAPI `/openapi/v1.json`, khóa cookie lưu Postgres (`data_protection_keys`); tổng 68 test (2026-10-02)
 - [x] M1 bước 3: EF Core + Npgsql (snake_case, pgvector), migration `InitialCreate` (tenants, users, memberships, audit_logs), global query filter + chặn ghi sai tenant trong SaveChanges, repository có tenantId, lệnh `seed` (2 tenant mẫu + super admin), 10 test cô lập/seed bằng Testcontainers; tổng 46 test (2026-10-02)
 - [x] M1 bước 2: Options có validate khi khởi động (App, Security, Ai, Zalo), mã hóa AES-256-GCM `v1:nonce:tag:ct`, Serilog che token/PII (theo tên field + SĐT VN/email), exception chung, `ITenantContext`; 36 test (2026-10-02)
 - [x] M1 bước 1: solution `ZaloAi.sln` (7 project src + 2 test), `Directory.Build.props` (net10, nullable, warnings as errors, analyzers), `Directory.Packages.props`, `.editorconfig`, `global.json` (SDK 10.0.401), docker-compose (pgvector pg16 + redis 7), `.env.example`; `/health` tạm + test smoke (2026-10-02)
@@ -44,6 +45,9 @@ Thay kế hoạch pnpm ngày 2026-09-30 (xem DECISIONS.md). 8 bước, mỗi bư
 
 ## Vấn đề mở / nợ kỹ thuật
 - Test "chuyển dòng sang tenant khác" hiện chỉ chạy trên memberships (tenant_id thuộc khóa chính, EF tự chặn). Thêm test cho bảng đầu tiên có tenant_id ngoài khóa (documents, M2)
+- Deploy: cấu hình ForwardedHeaders sau reverse proxy, nếu không rate limit login tính theo IP của proxy (gộp mọi khách)
+- Đăng xuất chưa thu hồi cookie phía server: cookie bị đánh cắp còn dùng được tới khi hết hạn (12h trượt). Xóa user/membership thì mất quyền ngay. Cân nhắc thêm "security stamp" trên users (đổi mật khẩu, đăng xuất mọi nơi)
+- Super admin xem/chuyển sang tenant bất kỳ: làm ở M6
 - Log: message của exception (ví dụ lỗi từ Zalo/AI trả về) chưa được che PII — xử lý khi viết ZaloClient (M4) và AI provider (M3)
 - Cân nhắc Postgres Row Level Security làm lớp phòng thủ thứ 3 (sau M1)
 - Next.js 16 có thay đổi lớn so với bản cũ: đọc `node_modules/next/dist/docs/` trước khi code FE

@@ -52,3 +52,14 @@ Mỗi quyết định: ngày, nội dung, lý do, hệ quả.
 - **Seed** chạy từng tenant trong scope riêng có set tenant, đi qua đúng luật cô lập như code thật. Chỉ chạy ở Development.
 - **Version NuGet:** bật `CentralPackageTransitivePinningEnabled` và ghim EF Core 10.0.12, vì Npgsql kéo EF bản cũ hơn gây xung đột.
 - Code migration sinh tự động được loại khỏi analyzer (`Persistence/Migrations/.editorconfig`), không sửa tay.
+
+## 2026-10-02 — Đăng nhập và phân quyền (M1 bước 4)
+
+- **Cookie ASP.NET Core** tên `zaloai.session`: httpOnly, `SameSite=Lax`, `Secure` bắt buộc ngoài Development/Testing, hết hạn 12h trượt. Cookie chỉ chứa `sub` (userId) và `tid` (tenant đang chọn).
+- **Kiểm lại quyền mỗi request** (`TenantContextMiddleware`): đọc user, membership, trạng thái tenant từ DB. Xóa user → 401; mất membership hoặc tenant không `active` → 403 `no_active_tenant`. Đổi lại 2 truy vấn nhỏ mỗi request; cache sau nếu cần.
+- **CSRF:** không dùng antiforgery token. Dựa vào `SameSite=Lax` + API chỉ nhận JSON (form của trang khác không gửi được `application/json` mà không qua CORS preflight). Lax thay vì Strict để callback OAuth Zalo (M4) vẫn mang cookie.
+- **Đăng nhập sai:** cùng một thông báo và cùng thời gian xử lý (hash giả) cho email không tồn tại và sai mật khẩu. Mọi lần đăng nhập/đăng xuất/đổi tenant ghi `audit_logs`.
+- **`AccessQueries`** dùng `IgnoreQueryFilters()` có chủ đích: là nơi quyết định tenant nên chạy trước khi có tenant context; chỉ lọc theo userId đã xác thực, chỉ trả tên + vai trò.
+- **Khóa Data Protection** (mã hóa cookie) lưu bảng `data_protection_keys` qua `Microsoft.AspNetCore.DataProtection.EntityFrameworkCore` (chủ dự án duyệt): deploy lại hoặc chạy nhiều bản API không đăng xuất người dùng.
+- **Lỗi API** trả ProblemDetails kèm `code` ổn định (`invalid_credentials`, `unauthenticated`, `forbidden`, `no_active_tenant`, `not_found`, `validation_failed`, `rate_limited`, `internal_error`). Lỗi validate trả tên trường camelCase.
+- **OpenAPI** chỉ mở ngoài Production (`/openapi/v1.json`).

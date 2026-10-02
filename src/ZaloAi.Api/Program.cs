@@ -1,4 +1,5 @@
 using Serilog;
+using ZaloAi.Api;
 using ZaloAi.Infrastructure;
 using ZaloAi.Infrastructure.Logging;
 using ZaloAi.Infrastructure.Persistence.Seed;
@@ -14,6 +15,7 @@ try
         logger.ConfigureZaloAi(builder.Configuration, builder.Environment).ReadFrom.Services(services));
 
     builder.Services.AddZaloAiInfrastructure(builder.Configuration);
+    builder.Services.AddZaloAiApi(builder.Configuration, builder.Environment);
 
     var app = builder.Build();
 
@@ -21,15 +23,15 @@ try
     if (args is ["seed", ..])
     {
         await DevSeeder.RunAsync(app.Services, app.Environment, CancellationToken.None);
-        Log.Information("Seed xong. Mật khẩu mọi tài khoản mẫu: {DevPassword}", DevSeeder.DevPassword);
+        // Console thay vì logger: logger che mọi giá trị có tên chứa "password".
+        Console.WriteLine($"Seed xong. Mật khẩu mọi tài khoản mẫu: {DevSeeder.DevPassword}");
         return;
     }
 
     // Chỉ ghi method, path (không có query string), status, thời gian.
     app.UseSerilogRequestLogging();
 
-    // Tạm thời: /health đầy đủ (kiểm tra Postgres, Redis) làm ở bước 4.
-    app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
+    app.UseZaloAiApi();
 
     await app.RunAsync();
 }

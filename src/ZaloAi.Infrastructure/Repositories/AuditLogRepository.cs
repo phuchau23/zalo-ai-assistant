@@ -17,6 +17,13 @@ public sealed class AuditLogRepository(AppDbContext db, ITenantContext tenantCon
         Db.AuditLogs.Add(new AuditLog { TenantId = tenantId, UserId = userId, Action = action, Target = target });
     }
 
+    /// <summary>
+    /// Ghi sự kiện đăng nhập/đăng xuất, khi tenant context chưa (hoặc không còn) được set.
+    /// tenantId/userId ở đây luôn do server xác định (sau khi kiểm mật khẩu / cookie), không bao giờ lấy từ input client.
+    /// </summary>
+    public void AddAuthEvent(Guid? tenantId, Guid? userId, string action) =>
+        Db.AuditLogs.Add(new AuditLog { TenantId = tenantId, UserId = userId, Action = action });
+
     public async Task<IReadOnlyList<AuditLog>> ListAsync(Guid tenantId, int limit, CancellationToken cancellationToken)
     {
         EnsureTenant(tenantId);

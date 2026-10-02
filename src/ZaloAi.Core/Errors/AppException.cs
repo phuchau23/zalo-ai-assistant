@@ -20,9 +20,18 @@ public abstract class AppException : Exception
 public sealed class NotFoundException(string message = "Không tìm thấy.")
     : AppException("not_found", message);
 
+/// <summary>401. Sai email hoặc mật khẩu. Message chung, không cho biết email có tồn tại hay không.</summary>
+public sealed class InvalidCredentialsException()
+    : AppException("invalid_credentials", "Email hoặc mật khẩu không đúng.");
+
 /// <summary>403. Đã đăng nhập nhưng không đủ quyền trong tenant hiện tại.</summary>
-public sealed class ForbiddenException(string message = "Không có quyền thực hiện.")
-    : AppException("forbidden", message);
+public sealed class ForbiddenException(string message = "Không có quyền thực hiện.", string code = "forbidden")
+    : AppException(code, message)
+{
+    /// <summary>Chưa chọn tenant, hoặc tenant đã bị khóa / user không còn là thành viên.</summary>
+    public static ForbiddenException NoActiveTenant() =>
+        new("Tài khoản chưa thuộc doanh nghiệp nào đang hoạt động.", "no_active_tenant");
+}
 
 /// <summary>400. Input sai mà validator không bắt được (kiểm tra theo trạng thái).</summary>
 public sealed class InvalidInputException(string message)
