@@ -1,0 +1,5 @@
+[*.cs]
+# Tên test dạng Method_condition_result cho dễ đọc.
+dotnet_diagnostic.CA1707.severity = none
+# xUnit không có SynchronizationContext.
+dotnet_diagnostic.CA2007.severity = none

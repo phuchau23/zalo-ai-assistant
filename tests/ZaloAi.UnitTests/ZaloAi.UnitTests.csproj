@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\ZaloAi.Core\ZaloAi.Core.csproj" />
+    <ProjectReference Include="..\..\src\ZaloAi.Infrastructure\ZaloAi.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\ZaloAi.Ai\ZaloAi.Ai.csproj" />
+    <ProjectReference Include="..\..\src\ZaloAi.Channels\ZaloAi.Channels.csproj" />
+    <ProjectReference Include="..\..\src\ZaloAi.IndustryTemplates\ZaloAi.IndustryTemplates.csproj" />
+  </ItemGroup>
+</Project>
