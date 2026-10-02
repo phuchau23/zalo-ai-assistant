@@ -37,8 +37,8 @@ internal sealed class LoginRequestValidator : AbstractValidator<LoginRequest>
 {
     public LoginRequestValidator()
     {
-        RuleFor(x => x.Email).NotEmpty().MaximumLength(320).EmailAddress();
-        RuleFor(x => x.Password).NotEmpty().MaximumLength(200);
+        RuleFor(x => x.Email).NotEmpty().MaximumLength(320).EmailAddress().WithName("Email");
+        RuleFor(x => x.Password).NotEmpty().MaximumLength(200).WithName("Mật khẩu");
     }
 }
 

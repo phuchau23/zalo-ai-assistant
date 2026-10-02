@@ -29,12 +29,12 @@ internal sealed class UpdateTenantSettingsRequestValidator : AbstractValidator<U
 {
     public UpdateTenantSettingsRequestValidator()
     {
-        RuleFor(x => x.Name).NotEmpty().MaximumLength(200);
+        RuleFor(x => x.Name).NotEmpty().MaximumLength(200).WithName("Tên doanh nghiệp");
         RuleFor(x => x.IndustrySlug)
             .Must(IndustryCatalog.IsKnown)
             .WithMessage("Ngành không có trong danh sách hỗ trợ.");
-        RuleFor(x => x.BotName).NotEmpty().MaximumLength(100);
-        RuleFor(x => x.BotPronoun).NotEmpty().MaximumLength(20);
+        RuleFor(x => x.BotName).NotEmpty().MaximumLength(100).WithName("Tên bot");
+        RuleFor(x => x.BotPronoun).NotEmpty().MaximumLength(20).WithName("Cách bot xưng hô");
         RuleFor(x => x.PrivacyUrl)
             .MaximumLength(500)
             .Must(BeHttpsUrl)

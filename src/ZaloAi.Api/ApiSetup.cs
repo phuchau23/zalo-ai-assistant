@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Threading.RateLimiting;
 using FluentValidation;
@@ -30,6 +31,8 @@ internal static class ApiSetup
         // Lỗi validate trả tên trường dạng camelCase, khớp JSON mà FE gửi.
         ValidatorOptions.Global.PropertyNameResolver = (_, member, _) =>
             member is null ? null : JsonNamingPolicy.CamelCase.ConvertName(member.Name);
+        // Câu lỗi mặc định bằng tiếng Việt (FluentValidation có sẵn bản dịch "vi").
+        ValidatorOptions.Global.LanguageManager.Culture = new CultureInfo("vi");
         services.AddValidatorsFromAssemblyContaining<LoginRequestValidator>(includeInternalTypes: true);
 
         // Khóa mã hóa cookie lưu trong Postgres: deploy lại hay chạy nhiều bản API không làm mọi người bị đăng xuất.
@@ -97,6 +100,7 @@ internal static class ApiSetup
 
         app.MapAuthEndpoints();
         app.MapTenantSettingsEndpoints();
+        app.MapIndustryEndpoints();
 
         app.MapHangfireDashboard("/hangfire", new DashboardOptions
         {
