@@ -239,6 +239,7 @@ Tính năng bắt buộc trong code:
 - Đổi API (BE) → cập nhật OpenAPI → chạy `pnpm gen:api` ở repo FE, commit ở cả hai repo.
 - Sửa schema = tạo migration mới, không sửa migration cũ.
 - Commit nhỏ, message dạng `feat(m2): ...`, `fix(m4): ...`.
+- **Claude KHÔNG BAO GIỜ tự chạy `git commit`, `git push`, `git reset`, `git rebase`** hay lệnh nào làm thay đổi lịch sử git. Chủ dự án tự commit. Claude chỉ chia thay đổi thành từng commit hợp lý và đưa sẵn lệnh `git add <file...>` + message cho từng commit. Được phép dùng lệnh git chỉ đọc (`status`, `diff`, `log`).
 - **API Zalo:** không đoán endpoint, tham số, cơ chế chữ ký, thời hạn token. Kiểm tra docs chính thức (developers.zalo.me) hoặc hỏi chủ dự án, rồi ghi vào `docs/zalo-api-notes.md` kèm ngày kiểm tra.
 
 ---
@@ -259,7 +260,7 @@ Mỗi task làm theo đúng vòng này:
    - [ ] Migration mới nếu đổi schema?
 6. **Cập nhật** `docs/PROGRESS.md` (tick task, ghi vấn đề còn mở) và `docs/DECISIONS.md` nếu có quyết định mới.
 7. **Báo cáo** ngắn cho chủ dự án: làm gì, cách chạy thử, giải thích phần quan trọng (bảo mật, vận hành) bằng tiếng Việt dễ hiểu, việc chủ dự án cần tự làm (tạo key, cấu hình Zalo...).
-8. Commit.
+8. **Đề xuất commit** (không tự commit): chia thay đổi thành từng commit, mỗi commit ghi danh sách file + message. Chủ dự án tự chạy.
 
 Khi không chắc về yêu cầu sản phẩm → hỏi, không tự đoán. Khi chủ dự án yêu cầu điều vi phạm mục 2 hoặc mục 8 → nói rõ rủi ro trước.
 
