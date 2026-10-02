@@ -17,6 +17,7 @@ public class ApiFactory : WebApplicationFactory<Program>
         ["App:AdminUrl"] = "http://localhost:3000",
         ["App:ApiUrl"] = "http://localhost:4000",
         ["Security:EncryptionKey"] = NewEncryptionKey(),
+        ["ConnectionStrings:Postgres"] = "Host=localhost;Database=unused",
     };
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)

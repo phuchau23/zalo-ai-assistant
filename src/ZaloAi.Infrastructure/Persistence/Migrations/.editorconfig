@@ -1,0 +1,4 @@
+[*.cs]
+# Code do `dotnet ef migrations add` sinh ra: không chạy analyzer/format, không sửa tay.
+generated_code = true
+dotnet_analyzer_diagnostic.severity = none
