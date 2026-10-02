@@ -1,6 +1,30 @@
-var builder = Host.CreateApplicationBuilder(args);
+using Serilog;
+using ZaloAi.Infrastructure;
+using ZaloAi.Infrastructure.Logging;
 
-// Hangfire server đăng ký ở bước 5.
+// Logger tạm để ghi lỗi xảy ra trước khi host dựng xong (ví dụ thiếu cấu hình).
+Log.Logger = new LoggerConfiguration().WriteTo.Console(formatProvider: null).CreateLogger();
 
-var host = builder.Build();
-await host.RunAsync();
+try
+{
+    var builder = Host.CreateApplicationBuilder(args);
+
+    builder.Services.AddSerilog((services, logger) =>
+        logger.ConfigureZaloAi(builder.Configuration, builder.Environment).ReadFrom.Services(services));
+
+    builder.Services.AddZaloAiInfrastructure(builder.Configuration);
+
+    // Hangfire server đăng ký ở bước 5.
+
+    var host = builder.Build();
+    await host.RunAsync();
+}
+catch (Exception ex)
+{
+    Log.Fatal(ex, "Worker dừng do lỗi khi khởi động");
+    throw;
+}
+finally
+{
+    await Log.CloseAndFlushAsync();
+}

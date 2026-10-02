@@ -1,7 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
   <PropertyGroup>
-    <UserSecretsId>zaloai-api</UserSecretsId>
+    <UserSecretsId>zaloai-dev</UserSecretsId>
   </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Serilog.AspNetCore" />
+  </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\ZaloAi.Core\ZaloAi.Core.csproj" />
     <ProjectReference Include="..\ZaloAi.Infrastructure\ZaloAi.Infrastructure.csproj" />
