@@ -8,7 +8,8 @@ namespace ZaloAi.IntegrationTests;
 /// <summary>
 /// Chạy API trong môi trường "Testing" (không đọc user-secrets của máy dev), cấu hình hoàn toàn từ test.
 /// </summary>
-public class ApiFactory : WebApplicationFactory<Program>
+public class ApiFactory(string connectionString = "Host=localhost;Database=unused", int loginPermitPerMinute = 1000)
+    : WebApplicationFactory<Program>
 {
     public static string NewEncryptionKey() => Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
 
@@ -17,7 +18,8 @@ public class ApiFactory : WebApplicationFactory<Program>
         ["App:AdminUrl"] = "http://localhost:3000",
         ["App:ApiUrl"] = "http://localhost:4000",
         ["Security:EncryptionKey"] = NewEncryptionKey(),
-        ["ConnectionStrings:Postgres"] = "Host=localhost;Database=unused",
+        ["ConnectionStrings:Postgres"] = connectionString,
+        ["RateLimit:LoginPermitPerMinute"] = loginPermitPerMinute.ToString(System.Globalization.CultureInfo.InvariantCulture),
     };
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
