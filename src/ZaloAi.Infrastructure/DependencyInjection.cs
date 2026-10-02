@@ -40,6 +40,7 @@ public static class DependencyInjection
         services.AddScoped<MembershipRepository>();
         services.AddScoped<AuditLogRepository>();
         services.AddScoped<UserRepository>();
+        services.AddScoped<AccessQueries>();
 
         return services;
     }

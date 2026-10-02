@@ -1,4 +1,5 @@
 using System.Reflection;
+using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using ZaloAi.Core.Entities;
 using ZaloAi.Core.Errors;
@@ -13,9 +14,13 @@ namespace ZaloAi.Infrastructure.Persistence;
 /// 2. SaveChanges từ chối ghi/sửa/xóa dòng không thuộc tenant hiện tại.
 /// Cấm IgnoreQueryFilters() trừ code super admin / job hệ thống có comment lý do (CLAUDE.md mục 8).
 /// </summary>
-public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenantContext tenantContext) : DbContext(options)
+public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenantContext tenantContext)
+    : DbContext(options), IDataProtectionKeyContext
 {
     public DbSet<Tenant> Tenants => Set<Tenant>();
+
+    /// <summary>Khóa mã hóa cookie đăng nhập của ASP.NET Core. Bảng hệ thống, không thuộc tenant.</summary>
+    public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
 
     public DbSet<User> Users => Set<User>();
 
