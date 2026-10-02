@@ -238,7 +238,7 @@ Tính năng bắt buộc trong code:
 - BE: nullable reference types bật, warnings as errors, `async` xuyên suốt và truyền `CancellationToken`. FE: TypeScript strict, không `any` trừ khi có comment giải thích.
 - Đổi API (BE) → cập nhật OpenAPI → chạy `pnpm gen:api` ở repo FE, commit ở cả hai repo.
 - Sửa schema = tạo migration mới, không sửa migration cũ.
-- Commit nhỏ, message dạng `feat(m2): ...`, `fix(m4): ...`.
+- Commit nhỏ, message **bằng tiếng Anh**, dạng `feat(m2): ...`, `fix(m4): ...`.
 - **Claude KHÔNG BAO GIỜ tự chạy `git commit`, `git push`, `git reset`, `git rebase`** hay lệnh nào làm thay đổi lịch sử git. Chủ dự án tự commit. Claude chỉ chia thay đổi thành từng commit hợp lý và đưa sẵn lệnh `git add <file...>` + message cho từng commit. Được phép dùng lệnh git chỉ đọc (`status`, `diff`, `log`).
 - **API Zalo:** không đoán endpoint, tham số, cơ chế chữ ký, thời hạn token. Kiểm tra docs chính thức (developers.zalo.me) hoặc hỏi chủ dự án, rồi ghi vào `docs/zalo-api-notes.md` kèm ngày kiểm tra.
 
