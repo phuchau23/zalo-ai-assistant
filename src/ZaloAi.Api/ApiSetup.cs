@@ -1,11 +1,13 @@
 using System.Text.Json;
 using System.Threading.RateLimiting;
 using FluentValidation;
+using Hangfire;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Options;
 using ZaloAi.Api.Auth;
 using ZaloAi.Api.Common;
+using ZaloAi.Api.Jobs;
 using ZaloAi.Api.Tenants;
 using ZaloAi.Infrastructure.Persistence;
 
@@ -95,6 +97,18 @@ internal static class ApiSetup
 
         app.MapAuthEndpoints();
         app.MapTenantSettingsEndpoints();
+
+        app.MapHangfireDashboard("/hangfire", new DashboardOptions
+        {
+            Authorization = [new SuperAdminDashboardFilter()],
+            DisplayStorageConnectionString = false,
+            DashboardTitle = "Zalo AI — Jobs",
+        });
+
+        if (app.Environment.IsDevelopment() || app.Environment.IsEnvironment("Testing"))
+        {
+            app.MapDevJobEndpoints();
+        }
 
         return app;
     }

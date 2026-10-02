@@ -34,6 +34,7 @@ public sealed class PostgresFixture : IAsyncLifetime
         await _container.StartAsync();
         await using var db = CreateDbContext(tenantId: null);
         await db.Database.MigrateAsync();
+        await ZaloAi.Infrastructure.Jobs.HangfireSetup.EnsureSchemaAsync(ConnectionString, CancellationToken.None);
     }
 
     public async Task DisposeAsync()
@@ -127,6 +128,23 @@ public sealed class PostgresFixture : IAsyncLifetime
         }
 
         db.Memberships.Add(new Membership { TenantId = tenantId, UserId = user.Id, Role = role });
+        await db.SaveChangesAsync();
+        return email;
+    }
+
+    /// <summary>Super admin không thuộc tenant nào. Trả về email.</summary>
+    public async Task<string> CreateSuperAdminAsync()
+    {
+        var email = $"superadmin-{Guid.NewGuid():N}@test.local";
+        await using var db = CreateDbContext(tenantId: null);
+        db.Users.Add(new User
+        {
+            Id = Guid.CreateVersion7(),
+            Email = email,
+            PasswordHash = new PasswordHasher<User>().HashPassword(null!, TestPassword),
+            Name = "Super Admin",
+            IsSuperAdmin = true,
+        });
         await db.SaveChangesAsync();
         return email;
     }
