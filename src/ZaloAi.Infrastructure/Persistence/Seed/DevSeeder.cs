@@ -2,15 +2,18 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 using ZaloAi.Core.Entities;
+using ZaloAi.Core.Options;
 using ZaloAi.Core.Tenancy;
+using ZaloAi.Infrastructure.Jobs;
 using ZaloAi.Infrastructure.Repositories;
 using ZaloAi.Infrastructure.Tenancy;
 
 namespace ZaloAi.Infrastructure.Persistence.Seed;
 
 /// <summary>
-/// Dữ liệu mẫu cho dev: chạy migration, tạo super admin + 2 tenant mẫu, mỗi tenant 1 owner.
+/// Dữ liệu mẫu cho dev: chạy migration + tạo bảng Hangfire, tạo super admin + 2 tenant mẫu, mỗi tenant 1 owner.
 /// Chạy lại nhiều lần không tạo trùng. Từ chối chạy ngoài môi trường Development.
 /// </summary>
 public static class DevSeeder
@@ -40,6 +43,8 @@ public static class DevSeeder
         {
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             await db.Database.MigrateAsync(cancellationToken);
+            await HangfireSetup.EnsureSchemaAsync(
+                services.GetRequiredService<IOptions<DatabaseOptions>>().Value.Postgres, cancellationToken);
 
             var users = scope.ServiceProvider.GetRequiredService<UserRepository>();
             if (await users.FindByEmailAsync(SuperAdminEmail, cancellationToken) is null)
