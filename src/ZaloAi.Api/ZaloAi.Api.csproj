@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <UserSecretsId>zaloai-api</UserSecretsId>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\ZaloAi.Core\ZaloAi.Core.csproj" />
+    <ProjectReference Include="..\ZaloAi.Infrastructure\ZaloAi.Infrastructure.csproj" />
+    <ProjectReference Include="..\ZaloAi.Ai\ZaloAi.Ai.csproj" />
+    <ProjectReference Include="..\ZaloAi.Channels\ZaloAi.Channels.csproj" />
+    <ProjectReference Include="..\ZaloAi.IndustryTemplates\ZaloAi.IndustryTemplates.csproj" />
+  </ItemGroup>
+</Project>
