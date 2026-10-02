@@ -2,7 +2,7 @@
 
 ## Đang làm
 - Module: M1 — Nền tảng
-- Task: bước 2 xong, chờ chủ dự án tạo khóa dev + chạy thử; tiếp theo bước 3 (EF Core, migration, cô lập tenant)
+- Task: bước 3 xong, chờ chủ dự án chạy migration + seed; tiếp theo bước 4 (Api: auth, /health, rate limit, OpenAPI, cài đặt tenant)
 - Chặn bởi: không
 
 ## Kế hoạch M1 (bản .NET, 2026-10-01) — đã duyệt 2026-10-02
@@ -21,6 +21,7 @@ Thay kế hoạch pnpm ngày 2026-09-30 (xem DECISIONS.md). 8 bước, mỗi bư
 - [x] A2: .NET 10 SDK 10.0.401 + dotnet-ef 10.0.12 — xong 2026-10-02
 - [x] A3: Docker Desktop (WSL 2) — xong 2026-10-02 (phải cài WSL trước, nếu không Docker báo nhầm "Virtualization support not detected")
 - [x] A4: git 2.55 — có sẵn
+- [x] A6: tắt Smart App Control (2026-10-02) — nó chặn DLL tự build (dotnet ef, test) và pnpm. Không bật lại được nếu không reset Windows; Defender vẫn chạy
 - [ ] A5: tạo repo GitHub cho `zalo-ai-portal` (repo FE) khi muốn push
 
 ## Phần B: quyết định của chủ dự án (chốt 2026-10-02)
@@ -34,6 +35,7 @@ Thay kế hoạch pnpm ngày 2026-09-30 (xem DECISIONS.md). 8 bước, mỗi bư
 - [x] B5: 2 tenant mẫu: "Khoa Học Nguyệt Đạo" (bấm huyệt, massage → slug `spa`, rủi ro Cao) và "Sửa nhà An Phát" (sửa nhà, rủi ro thấp)
 
 ## Đã xong
+- [x] M1 bước 3: EF Core + Npgsql (snake_case, pgvector), migration `InitialCreate` (tenants, users, memberships, audit_logs), global query filter + chặn ghi sai tenant trong SaveChanges, repository có tenantId, lệnh `seed` (2 tenant mẫu + super admin), 10 test cô lập/seed bằng Testcontainers; tổng 46 test (2026-10-02)
 - [x] M1 bước 2: Options có validate khi khởi động (App, Security, Ai, Zalo), mã hóa AES-256-GCM `v1:nonce:tag:ct`, Serilog che token/PII (theo tên field + SĐT VN/email), exception chung, `ITenantContext`; 36 test (2026-10-02)
 - [x] M1 bước 1: solution `ZaloAi.sln` (7 project src + 2 test), `Directory.Build.props` (net10, nullable, warnings as errors, analyzers), `Directory.Packages.props`, `.editorconfig`, `global.json` (SDK 10.0.401), docker-compose (pgvector pg16 + redis 7), `.env.example`; `/health` tạm + test smoke (2026-10-02)
 - [x] Chốt tách 2 repo: BE .NET (`zalo-ai-assistant`) + FE Next.js (`zalo-ai-portal`), queue Hangfire + Postgres (2026-10-01)
@@ -41,6 +43,7 @@ Thay kế hoạch pnpm ngày 2026-09-30 (xem DECISIONS.md). 8 bước, mỗi bư
 - [x] Viết ROADMAP.md (10 phase đến phát hành), FEATURE-SPECS.md (chuyển tiếp, "Cần chăm sóc", tình huống chăm sóc), INDUSTRIES.md (mẫu ngành, bộ an toàn y tế) (2026-10-01)
 
 ## Vấn đề mở / nợ kỹ thuật
+- Test "chuyển dòng sang tenant khác" hiện chỉ chạy trên memberships (tenant_id thuộc khóa chính, EF tự chặn). Thêm test cho bảng đầu tiên có tenant_id ngoài khóa (documents, M2)
 - Log: message của exception (ví dụ lỗi từ Zalo/AI trả về) chưa được che PII — xử lý khi viết ZaloClient (M4) và AI provider (M3)
 - Cân nhắc Postgres Row Level Security làm lớp phòng thủ thứ 3 (sau M1)
 - Next.js 16 có thay đổi lớn so với bản cũ: đọc `node_modules/next/dist/docs/` trước khi code FE

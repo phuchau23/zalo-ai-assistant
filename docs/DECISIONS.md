@@ -41,3 +41,14 @@ Mỗi quyết định: ngày, nội dung, lý do, hệ quả.
 - **Che log:** Serilog enricher che (1) property có tên nhạy cảm (token, password, secret, apikey, phone, content...) kể cả trong object lồng nhau, (2) SĐT VN và email trong mọi chuỗi. Đây là lớp phòng thủ thứ 2; code vẫn không được chủ động log token/PII. Chưa che nội dung trong message của exception (ghi nhận nợ kỹ thuật).
 - Api và Worker dùng chung một UserSecretsId (`zaloai-dev`) để dev chỉ cấu hình secret một lần.
 - Dev log dạng chữ dễ đọc; môi trường khác log JSON (`RenderedCompactJsonFormatter`).
+
+## 2026-10-02 — Database nền (M1 bước 3)
+
+- **Bảng tạo dần theo module:** migration đầu chỉ có `tenants`, `users`, `memberships`, `audit_logs`. Các bảng khác (documents/chunks M2, contacts/conversations/messages/usage_records M3, channel_connections M4) thêm đúng lúc module dùng tới (chủ dự án chốt).
+- **ID:** UUID v7 sinh ở code (`Guid.CreateVersion7()`): không đoán được, sắp xếp được theo thời gian.
+- **Enum lưu chữ thường** (`active`, `owner`) qua `LowercaseEnumConverter`, để đọc DB trực tiếp vẫn hiểu.
+- **Cô lập tenant trong `AppDbContext`:** global query filter cho mọi `ITenantOwned` và bảng `tenants` (`id = tenant hiện tại`); chưa có tenant → không thấy dòng nào. `SaveChanges` ném `TenantIsolationException` khi thêm/sửa/xóa dòng không thuộc tenant hiện tại, kể cả đổi `tenant_id`. Repository kiểm tra thêm `tenantId` tham số khớp `ITenantContext` (lớp 3).
+- **`users` là bảng toàn cục** (một người có thể ở nhiều tenant qua `memberships`). **`audit_logs` không có global filter** vì `tenant_id` có thể null (B4); `AuditLogRepository` tự lọc. Xóa tenant xóa luôn audit log của tenant đó.
+- **Seed** chạy từng tenant trong scope riêng có set tenant, đi qua đúng luật cô lập như code thật. Chỉ chạy ở Development.
+- **Version NuGet:** bật `CentralPackageTransitivePinningEnabled` và ghim EF Core 10.0.12, vì Npgsql kéo EF bản cũ hơn gây xung đột.
+- Code migration sinh tự động được loại khỏi analyzer (`Persistence/Migrations/.editorconfig`), không sửa tay.
