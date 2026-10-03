@@ -72,3 +72,11 @@ Mỗi quyết định: ngày, nội dung, lý do, hệ quả.
 - **Dashboard `/hangfire` chỉ super admin** (hiện job của mọi tenant, chạy lại/xóa được). Không hiện connection string.
 - Worker hỏi hàng đợi mỗi 5s (`Jobs:QueuePollSeconds`), 10 job song song (`Jobs:WorkerCount`).
 - Hangfire.Core kéo `Newtonsoft.Json` 11.0.1 có lỗ hổng (GHSA-5crp-9r3c-p9vr) → ghim 13.0.4 trong `Directory.Packages.props`.
+
+## 2026-10-02 — Trang quản trị FE (M1 bước 6)
+
+- **Gọi BE qua rewrite** `/api/*` → `API_INTERNAL_URL` (và `/hangfire/*` cho dashboard). Trình duyệt gọi cùng domain nên cookie httpOnly hoạt động mà không cần CORS.
+- **Lấy dữ liệu ở trình duyệt** (client component + `openapi-fetch`), không qua server component, để không phải chuyển tiếp cookie thủ công từ server Next.js sang BE. Xem lại khi cần SEO hoặc tối ưu tải trang (trang quản trị không cần SEO).
+- **`proxy.ts`** (Next.js 16 đổi tên middleware → proxy) chỉ kiểm có cookie hay chưa; không chuyển hướng ngược từ `/login` khi có cookie, để cookie cũ/bị thu hồi không gây vòng lặp. BE trả 401 → FE về `/login?next=...`; `next` được lọc chống open redirect.
+- **shadcn/ui** (style `radix-nova`, Radix UI). Bản mới dùng gói `cn` (của chính tác giả shadcn, thay clsx + tailwind-merge) — đã kiểm tra người duy trì và repo trước khi giữ.
+- Lỗi validate từ BE trả tiếng Việt (FluentValidation culture `vi`, tên trường đặt bằng `WithName`); FE hiện lỗi dưới từng ô theo key camelCase.

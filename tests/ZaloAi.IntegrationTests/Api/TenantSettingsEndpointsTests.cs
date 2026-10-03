@@ -103,6 +103,24 @@ public sealed class TenantSettingsEndpointsTests(PostgresFixture db)
         await response.ShouldBeProblemAsync(401, "unauthenticated");
     }
 
+    [Fact]
+    public async Task Industries_list_requires_login_and_contains_known_slugs()
+    {
+        var (tenantId, _) = await db.CreateTenantAsync("Spa Industries");
+        var industries = new Uri("/industries", UriKind.Relative);
+
+        using var anonymous = db.Api.CreateClient();
+        using (var response = await anonymous.GetAsync(industries))
+        {
+            response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+        }
+
+        using var client = await db.Api.CreateLoggedInClientAsync(PostgresFixture.OwnerEmail(tenantId));
+        var list = (await client.GetFromJsonAsync<List<IndustryResponse>>(industries)).ShouldNotBeNull();
+        list.Select(i => i.Slug).ShouldContain("spa");
+        list.Select(i => i.Slug).ShouldContain("sua-nha");
+    }
+
     [Theory]
     [InlineData("", "spa", "https://a.vn", "name")]
     [InlineData("Tên", "khong-co-nganh", "https://a.vn", "industrySlug")]
