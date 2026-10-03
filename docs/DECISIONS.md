@@ -109,3 +109,11 @@ Mỗi quyết định: ngày, nội dung, lý do, hệ quả.
 - **Không mã hóa** nội dung kiến thức: là thông tin công khai của doanh nghiệp. Dữ liệu cá nhân (tin nhắn khách) vẫn mã hóa từ M3.
 - **Tìm kiếm vector:** SQL thô có `WHERE tenant_id = …` trước `ORDER BY embedding <=> …`, bật `SET LOCAL hnsw.iterative_scan = relaxed_order` (pgvector 0.8.7) để chỉ mục HNSW không trả thiếu kết quả khi nhiều tenant dùng chung bảng; sắp lại theo khoảng cách ở code.
 - Core giữ `float[]` cho embedding (không phụ thuộc thư viện pgvector), Infrastructure chuyển sang kiểu `vector`.
+
+## 2026-10-03 — So sánh và gộp khi nhập file (M2 bước 4)
+
+- **Phân quyền:** staff xem kho kiến thức, bản so sánh, lịch sử; **chỉ owner** tạo bản so sánh, áp dụng, hủy (dữ liệu bot dùng để báo giá cho khách). Đổi được sau nếu DN muốn giao cho nhân viên.
+- **"Có thể trùng":** chỉ xét mục cùng loại, mã khác; so tên sau khi bỏ dấu + chữ thường, **các con số phải khớp tuyệt đối** (Massage 60' ≠ Massage 90'), độ giống Levenshtein ≥ 0,85. Mặc định không chọn; người dùng bắt buộc chọn "gộp vào mục cũ" (giữ mã cũ, lấy nội dung mới) hoặc "giữ cả hai".
+- **An toàn khi áp dụng:** một transaction; mỗi mục cũ phải còn đúng dấu vân tay (`content_hash`) như lúc so sánh, nếu không → 409, nhập lại file; không cho vừa gộp vào vừa xóa cùng một mục; lần nhập đã áp dụng/hủy không áp dụng lại được.
+- Bản so sánh lưu cả nội dung mới của từng mục → áp dụng không cần tải lại file. Mục thêm/đổi/gộp có đoạn (chunk) mới chưa có vector; bước 5 đánh chỉ mục.
+- Upload multipart không dùng antiforgery token (dựa vào cookie SameSite=Lax như các API khác); giới hạn 5 MB/file mẫu.

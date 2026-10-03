@@ -2,7 +2,7 @@
 
 ## Đang làm
 - Module: **M2 — Kho kiến thức** (M1 xong 2026-10-03)
-- Task: bước 3 xong (đọc/ghi file mẫu), chờ chủ dự án commit; tiếp theo bước 4 (so sánh và gộp)
+- Task: bước 4 xong (so sánh và gộp), chờ chủ dự án commit; tiếp theo bước 5 (Gemini embedding, đánh chỉ mục, API tìm kiếm)
 - Chặn bởi: không (Gemini key đã có, đặt bằng user-secrets `Ai:GeminiApiKey`)
 
 ## Kế hoạch M2 (2026-10-03) — đã duyệt 2026-10-03
@@ -47,6 +47,7 @@ Thay kế hoạch pnpm ngày 2026-09-30 (xem DECISIONS.md). 8 bước, mỗi bư
 - [x] B5: 2 tenant mẫu: "Khoa Học Nguyệt Đạo" (bấm huyệt, massage → slug `spa`, rủi ro Cao) — đổi thành "Khoa Học Huyệt Đạo" (tên thật) ngày 2026-10-03 và "Sửa nhà An Phát" (sửa nhà, rủi ro thấp)
 
 ## Đã xong
+- [x] M2 bước 4: so sánh file nhập với dữ liệu đang có (thêm mới / thay đổi từng trường / có thể trùng — bỏ dấu, số phải khớp / không còn trong file), bản xem trước lưu `knowledge_imports`, áp dụng mục được chọn trong 1 transaction (gộp vào mục cũ hoặc giữ cả hai; chặn vừa gộp vừa xóa; từ chối nếu mục bị sửa trong lúc chờ duyệt), hủy, lịch sử, `GET /knowledge/items`; mục đổi/thêm tạo đoạn chờ đánh chỉ mục; lệnh `knowledge diff`; dữ liệu mẫu v1→v2 cho kết quả đúng README; tổng 123 test (2026-10-03)
 - [x] M2 bước 3: đọc file mẫu Excel (ClosedXML) + JSON, kiểm lỗi từng ô báo theo sheet/dòng/cột (dễ dãi: tiêu đề khác hoa thường, giá "450.000đ", dòng trống), tạo file mẫu trống + xuất dữ liệu (`GET /knowledge/template`, `GET /knowledge/export`), lệnh `knowledge validate|convert`; dữ liệu mẫu có thêm bản .xlsx; tổng 108 test (2026-10-03)
 - [x] M2 bước 2: migration `AddKnowledgeBase` (knowledge_items, knowledge_imports, documents, chunks vector(768) + HNSW cosine, ràng buộc "đúng một nguồn"), 4 repository có tenant, tìm kiếm vector lọc tenant_id + `hnsw.iterative_scan`; 8 test cô lập (kể cả tìm kiếm vector, chuyển dòng sang tenant khác); tổng 85 test (2026-10-03)
 - [x] M2 bước 1: `docs/KNOWLEDGE-FORMAT.md` (mẫu dữ liệu 5 loại mục, quy tắc Mã, JSON, luồng so sánh/gộp, câu lệnh nhờ AI điền); dữ liệu mẫu Khoa Học Huyệt Đạo v1 (71 mục) + v2 giả lập (để test gộp) + 1 tài liệu tự do ở `C:Zalo_Toolsample-docs`; đổi tenant mẫu thành "Khoa Học Huyệt Đạo" (seed, test, DB dev) (2026-10-03)

@@ -103,6 +103,7 @@ internal static class ApiSetup
         app.MapTenantSettingsEndpoints();
         app.MapIndustryEndpoints();
         app.MapKnowledgeEndpoints();
+        app.MapKnowledgeImportEndpoints();
 
         app.MapHangfireDashboard("/hangfire", new DashboardOptions
         {

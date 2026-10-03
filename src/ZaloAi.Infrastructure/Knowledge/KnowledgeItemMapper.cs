@@ -96,10 +96,17 @@ public static class KnowledgeItemMapper
     public static KnowledgeEntry FromItem(KnowledgeItem item)
     {
         ArgumentNullException.ThrowIfNull(item);
-        var definition = KnowledgeTemplate.For(item.Kind);
+        return FromDataJson(item.Kind, item.Code, item.DataJson);
+    }
+
+    /// <summary>Dựng lại mục từ JSON đã lưu; <paramref name="code"/> ghi đè mã trong JSON (dùng khi gộp vào mục có mã khác).</summary>
+    public static KnowledgeEntry FromDataJson(KnowledgeKind kind, string code, string dataJson)
+    {
+        ArgumentNullException.ThrowIfNull(dataJson);
+        var definition = KnowledgeTemplate.For(kind);
         var fields = new Dictionary<string, object>(StringComparer.Ordinal);
 
-        using var document = JsonDocument.Parse(item.DataJson);
+        using var document = JsonDocument.Parse(dataJson);
         foreach (var property in document.RootElement.EnumerateObject())
         {
             if (definition.FindByJsonName(property.Name) is not { } field)
@@ -112,8 +119,8 @@ public static class KnowledgeItemMapper
                 : property.Value.GetString() ?? "";
         }
 
-        fields["code"] = item.Code;
-        return new KnowledgeEntry(item.Kind, item.Code, fields);
+        fields["code"] = code;
+        return new KnowledgeEntry(kind, code, fields);
     }
 
     /// <summary>File JSON đầy đủ theo mẫu (xuất dữ liệu, hoặc đưa cho AI sửa).</summary>

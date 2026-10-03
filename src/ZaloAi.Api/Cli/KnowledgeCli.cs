@@ -20,12 +20,57 @@ internal static class KnowledgeCli
                 return Validate(input);
             case ["knowledge", "convert", var input, var output]:
                 return Convert(input, output);
+            case ["knowledge", "diff", var oldFile, var newFile]:
+                return Diff(oldFile, newFile);
             default:
                 Console.WriteLine("Cách dùng:");
                 Console.WriteLine("  knowledge validate <file.xlsx|file.json>");
                 Console.WriteLine("  knowledge convert <vào.json|vào.xlsx> <ra.xlsx|ra.json>");
+                Console.WriteLine("  knowledge diff <cũ.xlsx|cũ.json> <mới.xlsx|mới.json>");
                 return 2;
         }
+    }
+
+    /// <summary>So sánh hai file như khi nhập file mới lên hệ thống (file cũ đóng vai dữ liệu đang có), không cần database.</summary>
+    private static int Diff(string oldFile, string newFile)
+    {
+        if (Read(oldFile) is not { } before || Read(newFile) is not { } after)
+        {
+            return 2;
+        }
+
+        PrintErrors(before);
+        PrintErrors(after);
+        if (!before.IsValid || !after.IsValid)
+        {
+            return 1;
+        }
+
+        var diff = KnowledgeDiffer.Compare(after.Entries, before.Entries.Select(e => KnowledgeItemMapper.ToItem(e, null)).ToList());
+        var s = diff.Summary;
+        Console.WriteLine($"Thêm mới: {s.Added} | Thay đổi: {s.Changed} | Có thể trùng: {s.PossibleDuplicate} | Không còn trong file mới: {s.Missing} | Không đổi: {s.Unchanged}");
+
+        foreach (var entry in diff.Entries)
+        {
+            var label = entry.Type switch
+            {
+                KnowledgeChangeType.Added => "THÊM",
+                KnowledgeChangeType.Changed => "ĐỔI",
+                KnowledgeChangeType.PossibleDuplicate => $"CÓ THỂ TRÙNG với {entry.ExistingCode} \"{entry.ExistingTitle}\" ({entry.Similarity:P0})",
+                _ => "KHÔNG CÒN",
+            };
+            Console.WriteLine();
+            Console.WriteLine($"[{label}] {entry.Code} — {entry.Title}");
+            if (entry.Type is KnowledgeChangeType.Changed or KnowledgeChangeType.PossibleDuplicate)
+            {
+                foreach (var change in entry.Changes)
+                {
+                    Console.WriteLine($"    {change.Label}: {change.Old ?? "(trống)"}  →  {change.New ?? "(trống)"}");
+                }
+            }
+        }
+
+        return 0;
     }
 
     private static int Validate(string input)
