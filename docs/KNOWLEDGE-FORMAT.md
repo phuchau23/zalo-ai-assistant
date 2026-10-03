@@ -158,3 +158,17 @@ Quy tắc:
 7. Giữ nguyên nội dung gốc, không thêm thông tin không có trong tài liệu. Trường không có thông tin → null.
 8. Nội dung tiếng Việt có dấu.
 ````
+
+## 7. Công cụ kiểm tra / chuyển định dạng (cho chủ dự án)
+
+Không cần database, chạy trong thư mục repo BE:
+
+```
+dotnet run --project src/ZaloAi.Api -- knowledge validate <file.xlsx|file.json>
+dotnet run --project src/ZaloAi.Api -- knowledge convert <vào.json|vào.xlsx> <ra.xlsx|ra.json>
+```
+
+- `validate`: in lỗi theo sheet/dòng/cột, hoặc "Hợp lệ. N mục (...)". Mã thoát 0 = hợp lệ, 1 = có lỗi.
+- `convert`: JSON (AI tạo) → Excel (người sửa) và ngược lại. File vào còn lỗi thì không chuyển.
+
+Trên giao diện (M2 bước 7): nút **Tải file mẫu** (`GET /knowledge/template`) và **Xuất dữ liệu hiện tại** (`GET /knowledge/export?format=xlsx|json`).

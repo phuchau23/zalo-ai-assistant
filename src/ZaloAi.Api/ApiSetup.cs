@@ -9,6 +9,7 @@ using Microsoft.Extensions.Options;
 using ZaloAi.Api.Auth;
 using ZaloAi.Api.Common;
 using ZaloAi.Api.Jobs;
+using ZaloAi.Api.Knowledge;
 using ZaloAi.Api.Tenants;
 using ZaloAi.Infrastructure.Persistence;
 
@@ -101,6 +102,7 @@ internal static class ApiSetup
         app.MapAuthEndpoints();
         app.MapTenantSettingsEndpoints();
         app.MapIndustryEndpoints();
+        app.MapKnowledgeEndpoints();
 
         app.MapHangfireDashboard("/hangfire", new DashboardOptions
         {
