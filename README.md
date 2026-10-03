@@ -5,7 +5,7 @@ Transform your customer service on Zalo! Our AI assistant works 24/7 to answer i
 
 Cần: .NET 10 SDK, Docker Desktop (đang chạy).
 
-**Cách nhanh (Windows):** chạy `dev.cmd` ở thư mục gốc repo (gõ `dev` trong terminal hoặc bấm đúp). Script bật Postgres + Redis, build rồi mở 3 cửa sổ: API (cổng 4000), Worker, FE `../zalo-ai-portal` (cổng 3000). Đóng cửa sổ để tắt.
+**Cách nhanh (Windows):** chạy `dev.cmd` ở thư mục gốc repo (gõ `dev` trong terminal hoặc bấm đúp). Script bật Postgres + Redis, build rồi mở 3 cửa sổ: API (cổng 4000), Worker, FE `../zalo-ai-portal` (cổng 3000). Tắt: chạy `stop` (tắt API, Worker, FE) hoặc `stop all` (tắt thêm Postgres/Redis, dữ liệu vẫn giữ).
 
 Chạy từng phần bằng tay:
 

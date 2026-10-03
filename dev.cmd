@@ -5,7 +5,7 @@ chcp 65001 >nul
 setlocal
 cd /d "%~dp0"
 
-docker info >/dev/null 2>&1
+docker info >nul 2>&1
 if errorlevel 1 (
   echo [!] Docker Desktop chưa chạy. Mở Docker Desktop, đợi "Engine running" rồi chạy lại.
   exit /b 1
