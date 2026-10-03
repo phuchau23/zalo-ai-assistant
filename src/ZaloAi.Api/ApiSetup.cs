@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using FluentValidation;
 using Hangfire;
@@ -25,6 +26,9 @@ internal static class ApiSetup
             .Bind(configuration.GetSection(RateLimitSettings.SectionName))
             .ValidateDataAnnotations()
             .ValidateOnStart();
+
+        // Số trong JSON phải là số thật (không nhận "123"): OpenAPI sinh type number thay vì number | string cho FE.
+        services.ConfigureHttpJsonOptions(options => options.SerializerOptions.NumberHandling = JsonNumberHandling.Strict);
 
         services.AddProblemDetails();
         services.AddExceptionHandler<AppExceptionHandler>();
@@ -104,6 +108,7 @@ internal static class ApiSetup
         app.MapIndustryEndpoints();
         app.MapKnowledgeEndpoints();
         app.MapKnowledgeImportEndpoints();
+        app.MapKnowledgeSearchEndpoints();
 
         app.MapHangfireDashboard("/hangfire", new DashboardOptions
         {

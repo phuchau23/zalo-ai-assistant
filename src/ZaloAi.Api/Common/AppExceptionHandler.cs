@@ -20,6 +20,7 @@ internal sealed partial class AppExceptionHandler(IProblemDetailsService problem
             ConflictException e => (StatusCodes.Status409Conflict, e.Code, e.Message),
             InvalidInputException e => (StatusCodes.Status400BadRequest, e.Code, e.Message),
             BadHttpRequestException e => (e.StatusCode, "bad_request", "Yêu cầu không hợp lệ."),
+            AiProviderException e => (StatusCodes.Status503ServiceUnavailable, "ai_unavailable", e.Message),
             _ => (StatusCodes.Status500InternalServerError, "internal_error", "Có lỗi xảy ra, vui lòng thử lại."),
         };
 

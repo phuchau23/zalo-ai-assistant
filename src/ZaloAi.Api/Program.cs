@@ -1,4 +1,5 @@
 using Serilog;
+using ZaloAi.Ai;
 using ZaloAi.Api;
 using ZaloAi.Api.Cli;
 using ZaloAi.Infrastructure;
@@ -35,6 +36,7 @@ try
     }
 
     builder.Services.AddZaloAiInfrastructure(builder.Configuration);
+    builder.Services.AddZaloAiAi();
     builder.Services.AddZaloAiApi(builder.Configuration, builder.Environment);
 
     var app = builder.Build();

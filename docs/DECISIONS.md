@@ -117,3 +117,13 @@ Mỗi quyết định: ngày, nội dung, lý do, hệ quả.
 - **An toàn khi áp dụng:** một transaction; mỗi mục cũ phải còn đúng dấu vân tay (`content_hash`) như lúc so sánh, nếu không → 409, nhập lại file; không cho vừa gộp vào vừa xóa cùng một mục; lần nhập đã áp dụng/hủy không áp dụng lại được.
 - Bản so sánh lưu cả nội dung mới của từng mục → áp dụng không cần tải lại file. Mục thêm/đổi/gộp có đoạn (chunk) mới chưa có vector; bước 5 đánh chỉ mục.
 - Upload multipart không dùng antiforgery token (dựa vào cookie SameSite=Lax như các API khác); giới hạn 5 MB/file mẫu.
+
+## 2026-10-03 — Đánh chỉ mục, tài liệu tự do, giao diện kho kiến thức (M2 bước 5–8)
+
+- **Embedding tách khỏi chat:** interface `IEmbeddingProvider` (Core) riêng với chat (M3), vì `Ai:EmbedProvider` và `Ai:ChatProvider` cấu hình độc lập. Gemini gọi REST `batchEmbedContents` (định dạng kiểm chứng từ docs chính thức 2026-10-03): key ở header `x-goog-api-key` (không trên URL), `output_dimensionality` 768, nhiệm vụ ghi vào nội dung (`title: … | text: …` cho tài liệu, `task: search result | query: …` cho câu hỏi). Lỗi 429 → `AiRateLimitedException`; lỗi khác không đưa body phản hồi vào message (có thể lặp lại nội dung khách).
+- **`Ai:EmbedProvider = fake`**: vector giả tính tại chỗ (bag-of-words) cho test/CI, không gọi mạng. Khởi động kiểm tra: `EmbedDim` phải 768; dùng gemini thì bắt buộc có key.
+- **Đánh chỉ mục bất đồng bộ:** áp dụng bản nhập → xếp `IndexKnowledgeJob` cho tenant; job quét `IndexSweepJob` mỗi 5 phút làm lưới an toàn (truy vấn hệ thống `IgnoreQueryFilters` chỉ đọc tenant_id). Mỗi lô 50 đoạn lưu ngay để lỗi giữa chừng không mất phần đã làm.
+- **Tài liệu tự do:** ≤ 20MB; kiểm nội dung khớp đuôi (PDF `%PDF`, docx/xlsx `PK`, văn bản không có byte 0); tên hiển thị giữ tiếng Việt nhưng tên trên đĩa chỉ ASCII; lưu local `%LOCALAPPDATA%\zaloai\files` (Api và Worker cùng máy) — production phải dùng object storage. Chia đoạn ~1.500 ký tự, chồng lấn ~220 ký tự, đoạn mới ở mỗi tiêu đề mục. File hỏng / PDF ảnh scan → `failed` kèm lý do, không thử lại; lỗi AI → thử lại.
+- **Câu lệnh nhờ AI** là hằng số trong code (`KnowledgeTemplate.AiPrompt`), hiện trên giao diện có nút sao chép; bản trong docs phải giữ giống.
+- **JSON API chỉ nhận số thật** (`NumberHandling = Strict`): OpenAPI của .NET 10 mặc định sinh `number | string` cho trường số, làm type FE khó dùng.
+- **Giao diện duyệt:** logic chọn (mặc định, khóa "vừa gộp vừa xóa", đếm thay đổi) nằm trong `selection.ts` có test riêng; áp dụng/hủy luôn hỏi xác nhận; mục "không còn trong file" hiện nhãn "Sẽ xóa" khi được chọn.

@@ -57,6 +57,16 @@ public static class HangfireSetup
         return services;
     }
 
+    /// <summary>Job định kỳ (đăng ký ở Worker khi khởi động; đăng ký lại nhiều lần vô hại).</summary>
+    public static void RegisterRecurringJobs(IServiceProvider services)
+    {
+        var recurring = services.GetRequiredService<IRecurringJobManager>();
+        recurring.AddOrUpdate<IndexSweepJob>(
+            IndexSweepJob.RecurringId,
+            job => job.RunAsync(CancellationToken.None),
+            "*/5 * * * *");
+    }
+
     /// <summary>Tạo/nâng cấp bảng Hangfire (dùng cho lệnh seed và test, để Api dùng được hàng đợi khi Worker chưa chạy lần nào).</summary>
     public static async Task EnsureSchemaAsync(string connectionString, CancellationToken cancellationToken)
     {

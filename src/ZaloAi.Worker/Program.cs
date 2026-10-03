@@ -1,4 +1,5 @@
 using Serilog;
+using ZaloAi.Ai;
 using ZaloAi.Infrastructure;
 using ZaloAi.Infrastructure.Jobs;
 using ZaloAi.Infrastructure.Logging;
@@ -14,11 +15,13 @@ try
         logger.ConfigureZaloAi(builder.Configuration, builder.Environment, initializeSentrySdk: true).ReadFrom.Services(services));
 
     builder.Services.AddZaloAiInfrastructure(builder.Configuration);
+    builder.Services.AddZaloAiAi();
 
     // Worker là nơi duy nhất chạy job; Api chỉ đẩy job vào hàng đợi.
     builder.Services.AddZaloAiJobServer();
 
     var host = builder.Build();
+    HangfireSetup.RegisterRecurringJobs(host.Services);
     await host.RunAsync();
 }
 catch (Exception ex)
