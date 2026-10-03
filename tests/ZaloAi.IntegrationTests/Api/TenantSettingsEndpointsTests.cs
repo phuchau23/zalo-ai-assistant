@@ -14,13 +14,13 @@ public sealed class TenantSettingsEndpointsTests(PostgresFixture db)
 {
     private static readonly Uri Settings = new("/tenant/settings", UriKind.Relative);
 
-    private static object ValidUpdate(string name = "Khoa Học Nguyệt Đạo") => new
+    private static object ValidUpdate(string name = "Khoa Học Huyệt Đạo") => new
     {
         name,
         industrySlug = "spa",
-        botName = "Nguyệt",
+        botName = "Huyệt Đạo",
         botPronoun = "em",
-        privacyUrl = "https://nguyetdao.vn/chinh-sach-bao-mat",
+        privacyUrl = "https://khoahochuyetdao.com/chinh-sach-bao-mat",
     };
 
     [Fact]
@@ -33,9 +33,9 @@ public sealed class TenantSettingsEndpointsTests(PostgresFixture db)
 
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
         var settings = (await client.GetFromJsonAsync<TenantSettingsResponse>(Settings)).ShouldNotBeNull();
-        settings.Name.ShouldBe("Khoa Học Nguyệt Đạo");
-        settings.BotName.ShouldBe("Nguyệt");
-        settings.PrivacyUrl.ShouldBe("https://nguyetdao.vn/chinh-sach-bao-mat");
+        settings.Name.ShouldBe("Khoa Học Huyệt Đạo");
+        settings.BotName.ShouldBe("Huyệt Đạo");
+        settings.PrivacyUrl.ShouldBe("https://khoahochuyetdao.com/chinh-sach-bao-mat");
 
         await using var asTenant = db.CreateDbContext(tenantId);
         (await asTenant.AuditLogs.CountAsync(a => a.UserId == ownerId && a.Action == "tenant.settings_updated")).ShouldBe(1);
