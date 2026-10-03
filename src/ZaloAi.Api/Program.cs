@@ -12,7 +12,19 @@ try
     var builder = WebApplication.CreateBuilder(args);
 
     builder.Services.AddSerilog((services, logger) =>
-        logger.ConfigureZaloAi(builder.Configuration, builder.Environment).ReadFrom.Services(services));
+        logger.ConfigureZaloAi(builder.Configuration, builder.Environment, initializeSentrySdk: false).ReadFrom.Services(services));
+
+    if (LoggingSetup.GetSentryDsn(builder.Configuration) is { } sentryDsn)
+    {
+        builder.WebHost.UseSentry(options =>
+        {
+            LoggingSetup.ApplySentryDefaults(options, sentryDsn, builder.Environment);
+            // Lỗi đã được gửi qua Serilog (một nguồn duy nhất, đã che dữ liệu); tắt kênh log riêng của Sentry để không gửi trùng.
+            options.MinimumEventLevel = LogLevel.None;
+            options.MinimumBreadcrumbLevel = LogLevel.None;
+            options.MaxRequestBodySize = Sentry.Extensibility.RequestSize.None;
+        });
+    }
 
     builder.Services.AddZaloAiInfrastructure(builder.Configuration);
     builder.Services.AddZaloAiApi(builder.Configuration, builder.Environment);

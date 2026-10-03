@@ -80,3 +80,11 @@ Mỗi quyết định: ngày, nội dung, lý do, hệ quả.
 - **`proxy.ts`** (Next.js 16 đổi tên middleware → proxy) chỉ kiểm có cookie hay chưa; không chuyển hướng ngược từ `/login` khi có cookie, để cookie cũ/bị thu hồi không gây vòng lặp. BE trả 401 → FE về `/login?next=...`; `next` được lọc chống open redirect.
 - **shadcn/ui** (style `radix-nova`, Radix UI). Bản mới dùng gói `cn` (của chính tác giả shadcn, thay clsx + tailwind-merge) — đã kiểm tra người duy trì và repo trước khi giữ.
 - Lỗi validate từ BE trả tiếng Việt (FluentValidation culture `vi`, tên trường đặt bằng `WithName`); FE hiện lỗi dưới từng ô theo key camelCase.
+
+## 2026-10-03 — Sentry, backup, CI (M1 bước 7)
+
+- **Sentry một nguồn:** lỗi đi qua Serilog → `Sentry.Serilog` (cả Api và Worker), nên đã qua bộ che log. `Sentry.AspNetCore` ở Api chỉ để gắn ngữ cảnh request; tắt kênh log riêng của nó (`MinimumEventLevel = None`) để không gửi trùng. Worker để Serilog khởi tạo SDK.
+- **Che trước khi gửi** (`SentryScrubber`, BeforeSend/BeforeBreadcrumb): che SĐT/email trong message và exception, bỏ query string (callback OAuth có `code`), cookie, header, body; `SendDefaultPii = false`. Breadcrumb bỏ phần data.
+- **Vùng dữ liệu EU** (`*.ingest.de.sentry.io`). Chỉ bật Error monitoring; không bật Logs/Tracing/Metrics của Sentry để hạn chế dữ liệu ra nước ngoài.
+- **Backup dev** bằng `pg_dump -Fc` trong container, chép ra `backups\`, giữ 14 bản. Production: backup của nhà cung cấp + bản `pg_dump` hằng ngày ở nơi khác + thử khôi phục hằng tháng (`docs/OPERATIONS.md`).
+- **CI:** GitHub Actions ở cả 2 repo, chạy khi push `main`/`dev` và mọi PR; BE chạy test tích hợp với Docker có sẵn trên runner ubuntu.
