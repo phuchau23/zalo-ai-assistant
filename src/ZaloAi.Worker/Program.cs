@@ -11,7 +11,7 @@ try
     var builder = Host.CreateApplicationBuilder(args);
 
     builder.Services.AddSerilog((services, logger) =>
-        logger.ConfigureZaloAi(builder.Configuration, builder.Environment).ReadFrom.Services(services));
+        logger.ConfigureZaloAi(builder.Configuration, builder.Environment, initializeSentrySdk: true).ReadFrom.Services(services));
 
     builder.Services.AddZaloAiInfrastructure(builder.Configuration);
 

@@ -8,7 +8,7 @@ namespace ZaloAi.Api.Jobs;
 
 public sealed record EnqueuedJobResponse(string JobId);
 
-/// <summary>Endpoint thử hàng đợi, chỉ map ở Development/Testing.</summary>
+/// <summary>Endpoint thử hàng đợi và Sentry, chỉ map ở Development/Testing.</summary>
 internal static class DevJobEndpoints
 {
     public static IEndpointRouteBuilder MapDevJobEndpoints(this IEndpointRouteBuilder app)
@@ -16,6 +16,14 @@ internal static class DevJobEndpoints
         app.MapPost("/dev/jobs/sample", EnqueueSample)
             .WithTags("Dev")
             .RequireTenantRole(TenantRole.Owner);
+
+        // Thử Sentry: lỗi cố ý, message chứa SĐT giả để kiểm tra trên Sentry rằng SĐT đã bị che.
+        app.MapPost("/dev/errors/test", () =>
+            {
+                throw new InvalidOperationException("Lỗi thử Sentry, SĐT giả 0912345678 phải hiện là ***");
+            })
+            .WithTags("Dev")
+            .RequireAuthorization();
 
         return app;
     }
