@@ -1,8 +1,16 @@
 using Serilog;
 using ZaloAi.Api;
+using ZaloAi.Api.Cli;
 using ZaloAi.Infrastructure;
 using ZaloAi.Infrastructure.Logging;
 using ZaloAi.Infrastructure.Persistence.Seed;
+
+// Lệnh xử lý file mẫu kiến thức: không cần cấu hình, database hay khóa mã hóa.
+if (KnowledgeCli.IsKnowledgeCommand(args))
+{
+    Console.OutputEncoding = System.Text.Encoding.UTF8;
+    return KnowledgeCli.Run(args);
+}
 
 // Logger tạm để ghi lỗi xảy ra trước khi host dựng xong (ví dụ thiếu cấu hình).
 Log.Logger = new LoggerConfiguration().WriteTo.Console(formatProvider: null).CreateLogger();
@@ -37,7 +45,7 @@ try
         await DevSeeder.RunAsync(app.Services, app.Environment, CancellationToken.None);
         // Console thay vì logger: logger che mọi giá trị có tên chứa "password".
         Console.WriteLine($"Seed xong. Mật khẩu mọi tài khoản mẫu: {DevSeeder.DevPassword}");
-        return;
+        return 0;
     }
 
     // Chỉ ghi method, path (không có query string), status, thời gian.
@@ -46,6 +54,7 @@ try
     app.UseZaloAiApi();
 
     await app.RunAsync();
+    return 0;
 }
 catch (Exception ex) when (ex is not HostAbortedException)
 {
