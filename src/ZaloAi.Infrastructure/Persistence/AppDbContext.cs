@@ -28,6 +28,14 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
 
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
 
+    public DbSet<KnowledgeItem> KnowledgeItems => Set<KnowledgeItem>();
+
+    public DbSet<KnowledgeImport> KnowledgeImports => Set<KnowledgeImport>();
+
+    public DbSet<KnowledgeDocument> Documents => Set<KnowledgeDocument>();
+
+    public DbSet<Chunk> Chunks => Set<Chunk>();
+
     /// <summary>EF đọc lại giá trị này mỗi lần truy vấn (tham số hóa theo instance DbContext).</summary>
     public Guid? CurrentTenantId => tenantContext.TenantId;
 
