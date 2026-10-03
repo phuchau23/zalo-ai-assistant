@@ -1,9 +1,21 @@
 # Tiến độ
 
 ## Đang làm
-- Module: M1 — Nền tảng: **XONG** (2026-10-03). Tiếp theo: M2 — Kho kiến thức
-- Task: chờ chủ dự án commit bước 8, rồi lập kế hoạch M2 (cần duyệt: bảng documents/chunks, thư viện parse file PdfPig/OpenXml/ClosedXML, nơi lưu file, model embedding Gemini)
-- Chặn bởi: Gemini API key (việc M0) để embed ở M2
+- Module: **M2 — Kho kiến thức** (M1 xong 2026-10-03)
+- Task: bước 1 xong (đặc tả mẫu dữ liệu, dữ liệu mẫu, đổi tên tenant mẫu), chờ chủ dự án commit; tiếp theo bước 2 (schema)
+- Chặn bởi: không (Gemini key đã có, đặt bằng user-secrets `Ai:GeminiApiKey`)
+
+## Kế hoạch M2 (2026-10-03) — đã duyệt 2026-10-03
+Mở rộng so với CLAUDE.md M2 theo yêu cầu chủ dự án: kiến thức có cấu trúc theo **mẫu chuẩn có Mã** (`docs/KNOWLEDGE-FORMAT.md`) + **so sánh/gộp kiểu review pull request** khi nhập bản mới; tài liệu tự do vẫn nạp được (không so sánh từng mục). Dữ liệu nạp **từ FE**. Ước lượng ~2 tuần.
+1. `docs(m2)`: đặc tả mẫu (Excel/JSON, 5 loại mục), câu lệnh nhờ AI ngoài điền mẫu, dữ liệu mẫu Khoa Học Huyệt Đạo ở `C:\Zalo_Tool\sample-docs\` (ngoài repo), đổi tên tenant mẫu
+2. `feat(m2)`: bảng `knowledge_items`, `knowledge_imports`, `documents`, `chunks` (vector 768 + HNSW, lọc tenant trước), repository, test cô lập tenant
+3. `feat(m2)`: đọc/kiểm lỗi file mẫu (xlsx qua ClosedXML, json), báo lỗi theo sheet + dòng; tải file mẫu trống; xuất dữ liệu hiện tại ra mẫu
+4. `feat(m2)`: so sánh (thêm mới / thay đổi từng trường / có thể trùng / không còn trong file / không đổi) → bản xem trước → áp dụng mục được chọn; lịch sử nhập; audit log
+5. `feat(m2)`: Gemini embedding (skill `add-ai-provider`, kiểm tra docs chính thức trước), job đánh chỉ mục mục thay đổi, API tìm kiếm `searchChunks(tenantId, query, k)`
+6. `feat(m2)`: tài liệu tự do (pdf/docx/xlsx/txt/md ≤ 20MB) lưu file local (dev), job đọc + chia đoạn + embed, thay thế khi trùng tên (hỏi xác nhận), xóa
+7. `feat(m2)` (FE): trang Kho kiến thức — danh sách theo loại, nhập file, màn hình so sánh/duyệt, lịch sử, tải mẫu/xuất, tài liệu tự do, ô thử tìm kiếm
+8. `test(m2)`: chạy đầu-cuối với dữ liệu mẫu v1 → v2, kiểm tra tiêu chí xong M2
+Để sau: hệ thống tự trích PDF lộn xộn sang mẫu bằng AI (cần chat model, M3); so sánh từng dòng cho tài liệu tự do; nơi lưu file production.
 
 ## Kế hoạch M1 (bản .NET, 2026-10-01) — đã duyệt 2026-10-02, hoàn thành 2026-10-03
 Thay kế hoạch pnpm ngày 2026-09-30 (xem DECISIONS.md). 8 bước, mỗi bước 1 commit, dừng sau mỗi bước để chủ dự án chạy thử:
@@ -32,9 +44,10 @@ Thay kế hoạch pnpm ngày 2026-09-30 (xem DECISIONS.md). 8 bước, mỗi bư
 - [x] B2: chỉ super admin tạo tenant (qua CLI), chưa mở đăng ký công khai
 - [x] B3: embedding 768 chiều
 - [x] B4: đồng ý cả 3: `audit_logs.tenant_id` nullable; unique `(tenant_id, external_msg_id)`; session lưu bằng cookie ticket của ASP.NET Core thay vì bảng `sessions`
-- [x] B5: 2 tenant mẫu: "Khoa Học Nguyệt Đạo" (bấm huyệt, massage → slug `spa`, rủi ro Cao) và "Sửa nhà An Phát" (sửa nhà, rủi ro thấp)
+- [x] B5: 2 tenant mẫu: "Khoa Học Nguyệt Đạo" (bấm huyệt, massage → slug `spa`, rủi ro Cao) — đổi thành "Khoa Học Huyệt Đạo" (tên thật) ngày 2026-10-03 và "Sửa nhà An Phát" (sửa nhà, rủi ro thấp)
 
 ## Đã xong
+- [x] M2 bước 1: `docs/KNOWLEDGE-FORMAT.md` (mẫu dữ liệu 5 loại mục, quy tắc Mã, JSON, luồng so sánh/gộp, câu lệnh nhờ AI điền); dữ liệu mẫu Khoa Học Huyệt Đạo v1 (71 mục) + v2 giả lập (để test gộp) + 1 tài liệu tự do ở `C:Zalo_Toolsample-docs`; đổi tenant mẫu thành "Khoa Học Huyệt Đạo" (seed, test, DB dev) (2026-10-03)
 - [x] M1 bước 8: tách 7 skill BE ra `.claude/skills/` (bổ sung đường dẫn code thật), thêm 4 skill FE ở `zalo-ai-portal/.claude/skills/` (portal-page, portal-form, api-client-sync, portal-ui dùng `ui-ux-pro-max` — bản MIT đã rà soát, copy vào repo FE, chạy không cần Python), khung `docs/zalo-api-notes.md` (mọi mục CHƯA KIỂM CHỨNG, làm đầu M4), CLAUDE.md mục 10 thành bảng trỏ tới skill, tick task M1 (2026-10-03)
 - [x] **M1 đạt tiêu chí xong**: docker compose + api + worker + FE chạy, đăng nhập admin, test cô lập tenant pass, CI 2 repo (2026-10-03)
 - [x] M1 bước 7: Sentry (Sentry.AspNetCore cho Api + Sentry.Serilog cho cả Api và Worker, vùng EU, che SĐT/email và bỏ query/cookie/header trước khi gửi), `POST /dev/errors/test`; `scripts/backup-db.cmd` + `restore-db.cmd` (đã thử khôi phục vào DB tạm); CI GitHub Actions cả 2 repo; `docs/OPERATIONS.md` (2026-10-03)
@@ -59,7 +72,7 @@ Thay kế hoạch pnpm ngày 2026-09-30 (xem DECISIONS.md). 8 bước, mỗi bư
 - Log console: message của exception (ví dụ lỗi từ Zalo/AI trả về) chưa được che PII (Sentry thì đã che từ bước 7) — xử lý khi viết ZaloClient (M4) và AI provider (M3)
 - Cân nhắc Postgres Row Level Security làm lớp phòng thủ thứ 3 (sau M1)
 - Next.js 16 có thay đổi lớn so với bản cũ: đọc `node_modules/next/dist/docs/` trước khi code FE
-- Khoa Học Nguyệt Đạo: nếu DN quảng cáo chữa bệnh (châm cứu, trị liệu YHCT) → thường cần giấy phép, thành ngành "chưa mở", hỏi luật sư. Chỉ massage/bấm huyệt thư giãn thì xếp `spa`
+- Khoa Học Huyệt Đạo (phòng khám có thật, khoahochuyetdao.com): website quảng cáo trị liệu bệnh (u xơ tử cung, nang ngực, tim, tuyến giáp, liệt dây VII...), châm cứu, "không tác dụng phụ", "giảm đau buổi đầu hoặc hoàn tiền" → trước khi chạy thật với khách của họ: hỏi luật sư, xác minh giấy phép; hiện chỉ dùng làm dữ liệu test. Nguyên tắc chung: nếu DN quảng cáo chữa bệnh (châm cứu, trị liệu YHCT) → thường cần giấy phép, thành ngành "chưa mở", hỏi luật sư. Chỉ massage/bấm huyệt thư giãn thì xếp `spa`
 - Chọn SDK AI .NET (chính thức hay REST) ở M3
 - Xác minh ở Phase 4 (docs Zalo): thời gian OA được nhắn tư vấn sau tin cuối của khách; webhook có sự kiện "OA gửi tin" khi nhân viên trả lời trong app Zalo không
 
@@ -67,4 +80,4 @@ Thay kế hoạch pnpm ngày 2026-09-30 (xem DECISIONS.md). 8 bước, mỗi bư
 - Đặt Sentry DSN (`dotnet user-secrets set "Sentry:Dsn" ...`), bật branch protection cho `dev`/`main` ở cả 2 repo (docs/OPERATIONS.md mục 3)
 - Khi làm hồ sơ pháp lý: Sentry (EU) là bên nhận dữ liệu ở nước ngoài
 - Chọn ngành đầu tiên từ `docs/INDUSTRIES.md`; xem lại các mục "(đề xuất)" trong `docs/FEATURE-SPECS.md`
-- Các việc M0 (OA test, Zalo App, domain, Gemini key, DN dùng thử)
+- Các việc M0 còn lại: OA test, Zalo App, domain, liên hệ DN dùng thử (Gemini key: xong)

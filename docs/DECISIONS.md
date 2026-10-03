@@ -88,3 +88,16 @@ Mỗi quyết định: ngày, nội dung, lý do, hệ quả.
 - **Vùng dữ liệu EU** (`*.ingest.de.sentry.io`). Chỉ bật Error monitoring; không bật Logs/Tracing/Metrics của Sentry để hạn chế dữ liệu ra nước ngoài.
 - **Backup dev** bằng `pg_dump -Fc` trong container, chép ra `backups\`, giữ 14 bản. Production: backup của nhà cung cấp + bản `pg_dump` hằng ngày ở nơi khác + thử khôi phục hằng tháng (`docs/OPERATIONS.md`).
 - **CI:** GitHub Actions ở cả 2 repo, chạy khi push `main`/`dev` và mọi PR; BE chạy test tích hợp với Docker có sẵn trên runner ubuntu.
+
+## 2026-10-03 — Kho kiến thức có cấu trúc + so sánh/gộp (M2, chủ dự án duyệt)
+
+**Bối cảnh:** chủ dự án muốn doanh nghiệp tự nạp dữ liệu từ giao diện, và khi doanh nghiệp gửi bộ dữ liệu "chuẩn" sau này thì giao diện phải chỉ ra chỗ khác nhau và cho duyệt gộp (như merge code), tránh hai tài liệu cùng chủ đề nhưng khác thông tin "đá nhau".
+
+**Quyết định:**
+- Kiến thức chính nạp bằng **mẫu chuẩn** (Excel/JSON) gồm 5 loại mục (thông tin chung, dịch vụ, gói, FAQ, chính sách), **mỗi mục có Mã ổn định** → so sánh theo Mã được tới từng trường. Đặc tả: `docs/KNOWLEDGE-FORMAT.md`.
+- Nhập file → **bản xem trước** (thêm mới / thay đổi / có thể trùng / không còn trong file / không đổi) → người dùng chọn → áp dụng. Mục "không còn trong file" mặc định **giữ lại**; "có thể trùng" (mã khác, tên gần giống) phải chọn tay. Mỗi lần nhập lưu lịch sử + audit log.
+- Doanh nghiệp tự điền mẫu, hoặc dùng **câu lệnh mẫu cho AI bên ngoài** (ChatGPT/Claude/Gemini) để chuyển tài liệu lộn xộn → JSON. Hệ thống tự trích bằng AI để sang M3 (cần chat model).
+- Tài liệu tự do (PDF/Word/...) vẫn nạp được làm "tài liệu tham khảo", không so sánh từng mục; trùng tên → hỏi rồi thay thế.
+- Đơn giá lưu số nguyên VNĐ; `price = null` + `priceNote` khi không công bố giá (bot phải nói "liên hệ", không đoán).
+
+**Dữ liệu mẫu:** lấy từ website công khai của phòng khám có thật "Khoa Học Huyệt Đạo" (đổi tên tenant mẫu cho đúng), giữ nguyên các câu quảng cáo chữa bệnh/cam kết để test bộ lọc ở M3. Lưu ngoài repo. Phòng khám này quảng cáo trị liệu bệnh → trước khi phục vụ thật: hỏi luật sư, xác minh giấy phép (INDUSTRIES.md "chưa mở").
