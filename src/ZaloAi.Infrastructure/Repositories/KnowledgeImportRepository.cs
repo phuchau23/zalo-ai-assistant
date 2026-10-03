@@ -30,7 +30,7 @@ public sealed class KnowledgeImportRepository(AppDbContext db, ITenantContext te
             .FirstOrDefaultAsync(cancellationToken);
     }
 
-    /// <summary>Lịch sử nhập, mới nhất trước. Không tải bản so sánh (có thể lớn).</summary>
+    /// <summary>Lịch sử nhập, mới nhất trước.</summary>
     public async Task<IReadOnlyList<KnowledgeImport>> ListAsync(Guid tenantId, int limit, CancellationToken cancellationToken)
     {
         EnsureTenant(tenantId);
@@ -38,7 +38,7 @@ public sealed class KnowledgeImportRepository(AppDbContext db, ITenantContext te
             .AsNoTracking()
             .Where(i => i.TenantId == tenantId)
             .OrderByDescending(i => i.CreatedAt)
-            .Take(Math.Clamp(limit, 1, 200))
+            .Take(Math.Clamp(limit, 1, 100))
             .Select(i => new KnowledgeImport
             {
                 Id = i.Id,
@@ -46,7 +46,7 @@ public sealed class KnowledgeImportRepository(AppDbContext db, ITenantContext te
                 FileName = i.FileName,
                 SourceFormat = i.SourceFormat,
                 Status = i.Status,
-                DiffJson = "",
+                DiffJson = i.DiffJson, // cần phần tóm tắt cho lịch sử; giới hạn số dòng ở Take()
                 CreatedBy = i.CreatedBy,
                 CreatedAt = i.CreatedAt,
                 AppliedBy = i.AppliedBy,

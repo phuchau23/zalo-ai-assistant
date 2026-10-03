@@ -8,6 +8,7 @@ using ZaloAi.Core.Options;
 using ZaloAi.Core.Security;
 using ZaloAi.Core.Tenancy;
 using ZaloAi.Infrastructure.Jobs;
+using ZaloAi.Infrastructure.Knowledge;
 using ZaloAi.Infrastructure.Persistence;
 using ZaloAi.Infrastructure.Repositories;
 using ZaloAi.Infrastructure.Security;
@@ -47,6 +48,7 @@ public static class DependencyInjection
         services.AddScoped<KnowledgeImportRepository>();
         services.AddScoped<KnowledgeDocumentRepository>();
         services.AddScoped<ChunkRepository>();
+        services.AddScoped<KnowledgeImportService>();
 
         services.AddZaloAiHangfire();
         services.AddScoped<SampleTenantJob>();
