@@ -274,6 +274,9 @@ dotnet ef migrations add <Ten> -p src/ZaloAi.Infrastructure -s src/ZaloAi.Api
 dotnet ef database update -p src/ZaloAi.Infrastructure -s src/ZaloAi.Api
 dotnet run --project src/ZaloAi.Api -- seed   # 2 tenant mẫu + dữ liệu mẫu
 dotnet format | dotnet build | dotnet test
+dev                 # (Windows) bật Postgres/Redis + API + Worker + FE, mỗi cái một cửa sổ
+stop                # tắt API, Worker, FE; "stop all" tắt thêm Postgres/Redis
+scripts/backup-db.cmd                        # backup DB dev; khôi phục: scripts/restore-db.cmd <file>
 
 # repo FE (zalo-ai-portal)
 pnpm dev            # Next.js, cổng 3000
@@ -285,116 +288,21 @@ pnpm lint | pnpm typecheck | pnpm test
 
 ## 10. Skills
 
-Các quy trình lặp lại. Ở M1, Claude tách mỗi skill dưới đây thành `.claude/skills/<name>/SKILL.md` (giữ nguyên frontmatter). Trước khi tách, chúng vẫn có hiệu lực từ file này.
+Các quy trình lặp lại, mỗi skill là một file `.claude/skills/<name>/SKILL.md` (tách ra ở M1 bước 8). Claude Code tự nạp skill khi task khớp mô tả; nội dung chi tiết **chỉ sửa trong file skill**, không chép lại vào đây.
 
-### 10.1 `tenant-safe-feature`
-```markdown
----
-name: tenant-safe-feature
-description: Quy trình thêm bảng, endpoint, job hoặc màn hình admin đụng tới dữ liệu khách thuê. Dùng mỗi khi thêm hoặc sửa bất kỳ tính năng nào đọc/ghi dữ liệu của doanh nghiệp, kể cả khi task không nhắc tới "tenant".
----
-1. Bảng mới: thêm `tenant_id uuid not null references tenants(id) on delete cascade` + index.
-2. Entity implement `ITenantOwned` (để global query filter tự áp dụng). Thêm hàm trong repository `src/ZaloAi.Infrastructure/Repositories/<Name>Repository.cs`, tham số đầu tiên luôn là `Guid tenantId`.
-3. Endpoint API lấy `tenantId` từ `ITenantContext` (đọc từ cookie session), KHÔNG lấy từ body/query/route.
-4. Job Hangfire nhận `tenantId` làm tham số và set vào `ITenantContext` đầu job; tenantId do API/webhook xác định, không suy ra từ input của khách cuối.
-5. Kiểm tra quyền: owner, staff, super_admin.
-6. Viết test cô lập (`tests/ZaloAi.IntegrationTests`, Testcontainers): tenant A tạo dữ liệu, tenant B gọi cùng API → 404 (không phải 403, để không lộ sự tồn tại).
-7. Nếu có dữ liệu cá nhân: thêm vào luồng xóa/xuất dữ liệu (M6).
-```
+| Skill | Dùng khi |
+| --- | --- |
+| `tenant-safe-feature` | Thêm/sửa bảng, endpoint, job, màn hình đụng dữ liệu doanh nghiệp (kể cả khi task không nhắc "tenant") |
+| `db-migration` | Thêm/sửa/xóa bảng, cột, index, đổi số chiều vector |
+| `add-industry-template` | Thêm hoặc chỉnh mẫu ngành |
+| `add-ai-provider` | Thêm/đổi nhà cung cấp hoặc model AI |
+| `debug-bot-answer` | Bot trả lời sai, bịa, hoặc không trả lời |
+| `zalo-api-work` | Bất cứ việc gì với API Zalo (OAuth, webhook, gửi tin, ZNS, token) |
+| `add-care-flow` | Flow chăm sóc chủ động (GĐ2) |
 
-### 10.2 `db-migration`
-```markdown
----
-name: db-migration
-description: Cách thay đổi schema Postgres/EF Core an toàn. Dùng mỗi khi thêm/sửa/xóa bảng, cột, index, hoặc đổi số chiều vector.
----
-1. Sửa entity + cấu hình (`IEntityTypeConfiguration`) trong `src/ZaloAi.Infrastructure/Persistence/`.
-2. `dotnet ef migrations add <Ten> -p src/ZaloAi.Infrastructure -s src/ZaloAi.Api`, rồi `dotnet ef migrations script` để đọc lại SQL sinh ra.
-3. Không xóa cột đang dùng trong cùng một lần deploy: thêm cột mới → deploy code dùng cả hai → migrate dữ liệu → xóa cột cũ ở lần sau.
-4. Index trên bảng lớn dùng `CREATE INDEX CONCURRENTLY` (migration riêng, `migrationBuilder.Sql(..., suppressTransaction: true)`).
-5. Đổi model hoặc số chiều embedding: tạo cột/bảng vector mới, job re-embed toàn bộ, chuyển truy vấn, rồi mới xóa cái cũ.
-6. Cập nhật seed nếu cần. Ghi vào DECISIONS.md nếu thay đổi lớn.
-```
+Skill của FE nằm ở `../zalo-ai-portal/.claude/skills/`: `portal-page`, `portal-form`, `api-client-sync`, `portal-ui` (giao diện theo skill `ui-ux-pro-max` đặt trong repo FE, trong ranh giới dự án). Bảng mô tả ở CLAUDE.md của FE.
 
-### 10.3 `add-industry-template`
-```markdown
----
-name: add-industry-template
-description: Thêm mẫu ngành mới (spa, nha khoa, bất động sản, sửa chữa nhà...). Dùng khi chủ dự án muốn bot hỗ trợ ngành mới hoặc chỉnh kịch bản của ngành có sẵn.
----
-Đọc `docs/INDUSTRIES.md` trước (mức rủi ro, nội dung từng ngành, quy trình mở ngành). Không train model; ngành = mẫu ngành + kho kiến thức của DN.
-Tạo `src/ZaloAi.IndustryTemplates/Templates/<slug>/` (file nhúng `EmbeddedResource`) gồm:
-- `template.json`: slug, tên, mức rủi ro (low|medium|high), `medicalSafety` (bool), phiên bản.
-- `persona.md`: vai trò, giọng văn, xưng hô mặc định.
-- `rules.md`: điều bot phải làm/không làm trong ngành.
-- `forbidden.json`: cụm từ cấm (ví dụ ngành y, thẩm mỹ: "cam kết", "trị dứt điểm", "100%", "không tác dụng phụ"), kèm câu thay thế.
-- `danger_signals.json`: dấu hiệu cần chuyển người gấp/khẩn cấp + câu trả lời khẩn cấp.
-- `lead_fields.json`: thông tin cần thu thập (ví dụ sửa nhà: địa chỉ công trình, hạng mục, diện tích, thời gian muốn làm).
-- `required_docs.md`: tài liệu DN phải nạp trước khi bật bot.
-- `faq_sample.md`: dữ liệu mẫu để demo.
-- `care_flows.json` (GĐ2): flow chăm sóc mẫu.
-- `evals.json`: câu hỏi thường + câu bẫy; ngành `medicalSafety` thêm ≥ 20 câu an toàn (phải đạt 100%).
-Đăng ký slug trong `IndustryTemplateRegistry.cs`. Viết test: prompt builder nạp đúng template; câu trả lời chứa cụm cấm bị chặn; dấu hiệu nguy hiểm kích hoạt chuyển người khẩn cấp. Ngành mức "chưa mở" trong INDUSTRIES.md → không làm, báo chủ dự án hỏi luật sư.
-```
-
-### 10.4 `add-ai-provider`
-```markdown
----
-name: add-ai-provider
-description: Thêm hoặc đổi nhà cung cấp AI (Gemini, Claude, model khác). Dùng khi đổi model chat/embedding hoặc thêm provider mới.
----
-1. Implement `IAiProvider` trong `src/ZaloAi.Ai/Providers/`:
-   `Task<ChatResult> ChatAsync(ChatRequest req, CancellationToken ct)` — req: `System, Messages, JsonSchema?, MaxTokens, Timeout`; result: `Text, Json?, Usage(InputTokens, OutputTokens), CostUsd`
-   `Task<float[][]> EmbedAsync(IReadOnlyList<string> texts, CancellationToken ct)`
-2. Đọc model và key từ config (Options), không hardcode.
-3. Map lỗi của provider về exception chung: `AiRateLimitedException`, `AiTimeoutException`, `AiProviderException` để job Hangfire retry đúng.
-4. Tính chi phí từ bảng giá trong config (cập nhật thủ công theo trang giá của provider).
-5. Chạy bộ eval nhỏ (`src/ZaloAi.Ai/Evals/`) so sánh chất lượng trả lời tiếng Việt với provider cũ trước khi đổi ở production.
-6. Nhắc chủ dự án: production chỉ dùng gói trả phí có cam kết không dùng dữ liệu để huấn luyện.
-```
-
-### 10.5 `debug-bot-answer`
-```markdown
----
-name: debug-bot-answer
-description: Điều tra vì sao bot trả lời sai, bịa, hoặc không trả lời. Dùng khi chủ dự án hoặc khách báo "bot nói sai giá", "bot trả lời lạ", "bot không trả lời".
----
-1. Tìm tin nhắn trong `messages` (theo tenant, thời gian). Lấy `ai_trace` gồm: chunk ids đã dùng, prompt version, model, output JSON, lý do handoff.
-2. Kiểm tra theo thứ tự:
-   a. Dữ liệu có thông tin đúng không? (tài liệu cũ, chưa ingest xong, ingest lỗi)
-   b. Search có lấy đúng chunk không? (chạy lại search với câu hỏi, xem điểm similarity)
-   c. Prompt có hướng dẫn đúng không?
-   d. Model có làm theo không?
-3. Sửa đúng tầng gây lỗi. Thêm câu hỏi đó vào bộ eval để không tái diễn.
-4. Không tắt quy tắc "không biết thì chuyển người" để sửa lỗi.
-```
-
-### 10.6 `zalo-api-work`
-```markdown
----
-name: zalo-api-work
-description: Làm bất cứ việc gì với API Zalo (OAuth, webhook, gửi tin, ZNS, token). Dùng mỗi khi code đụng tới src/ZaloAi.Channels/Zalo hoặc callback/webhook Zalo.
----
-1. Đọc `docs/zalo-api-notes.md` trước. Nếu thông tin cần dùng chưa có hoặc cũ hơn 3 tháng → nhờ chủ dự án kiểm tra docs chính thức, ghi lại kèm ngày.
-2. Mọi lệnh gọi Zalo đi qua `ZaloClient` (typed HttpClient) trong adapter, có timeout, retry (resilience handler), log (đã redact).
-3. Refresh token: dùng Redis lock theo OA, đọc lại token sau khi lấy được lock (có thể worker khác đã refresh), lưu token mới trong cùng transaction.
-4. Lỗi token không hợp lệ/bị thu hồi → đánh dấu connection `needs_reauth`, thông báo DN, dừng gửi.
-5. Tôn trọng khung thời gian được phép nhắn chủ động; ngoài khung chỉ gửi ZNS theo mẫu đã duyệt.
-6. Test bằng fixture payload thật (đã xóa PII) lưu ở `tests/ZaloAi.UnitTests/Fixtures/Zalo/`.
-```
-
-### 10.7 `add-care-flow` (GĐ2)
-```markdown
----
-name: add-care-flow
-description: Thêm loại flow chăm sóc khách hàng hoặc bước mới trong flow (chờ, điều kiện, gửi tin, gắn nhãn, báo nhân viên). Dùng khi làm tính năng chăm sóc chủ động.
----
-1. Flow = trigger → [condition] → action → wait → ... lưu dạng JSON (jsonb), validate bằng FluentValidation.
-2. Trước mỗi lần gửi: kiểm tra đồng ý nhận tin, khung giờ, tần suất tối đa, điều kiện dừng (đã mua, đã phản hồi, đã hủy).
-3. Chọn kênh: còn trong khung → tin tư vấn; ngoài khung → ZNS (nếu có mẫu phù hợp) → không gửi được thì bỏ qua và ghi log.
-4. Khách trả lời giữa flow → chuyển về luồng hội thoại bình thường, flow tạm dừng.
-5. Mọi lần gửi ghi vào `flow_runs` để báo cáo và làm bằng chứng tuân thủ.
-```
+Vận hành (Sentry, backup, CI): `docs/OPERATIONS.md`.
 
 ---
 
@@ -412,14 +320,14 @@ Thứ tự bắt buộc: M0 → M1 → M2 → M3 → M4 → M5 → M6. Không nh
 
 ### M1 — Nền tảng (tuần 1)
 Task:
-- [ ] BE: solution .NET 10 (`ZaloAi.sln`, `Directory.Build.props`, `Directory.Packages.props`), analyzers, `dotnet format`, xUnit; docker-compose (pgvector/pgvector:pg16, redis:7).
-- [ ] `ZaloAi.Core` + `ZaloAi.Infrastructure`: Options có validate, Serilog có redact, crypto AES-256-GCM, exception chung, `ITenantContext`.
-- [ ] EF Core: DbContext + migration đầu tiên (bảng bên dưới), global query filter tenant, repository có tenant, seed 2 tenant.
-- [ ] `ZaloAi.Api`: `/health`, auth (đăng nhập, đăng xuất, cookie httpOnly), gắn `tenantId` + `role`, rate limit, OpenAPI, endpoint cài đặt tenant.
-- [ ] `ZaloAi.Worker`: Hangfire server, 1 job mẫu, retry backoff, job lỗi hết lượt → cảnh báo.
-- [ ] Repo FE `zalo-ai-portal`: Next.js, trang đăng nhập, layout, trang cài đặt tenant (tên, ngành, tên bot, xưng hô, link chính sách bảo mật); rewrite `/api/*` → BE; `pnpm gen:api`.
-- [ ] Sentry cho api + worker. Script backup database.
-- [ ] Tách skills ra `.claude/skills/`. Tạo `docs/PROGRESS.md`, `docs/DECISIONS.md`, `docs/zalo-api-notes.md`.
+- [x] BE: solution .NET 10 (`ZaloAi.sln`, `Directory.Build.props`, `Directory.Packages.props`), analyzers, `dotnet format`, xUnit; docker-compose (pgvector/pgvector:pg16, redis:7).
+- [x] `ZaloAi.Core` + `ZaloAi.Infrastructure`: Options có validate, Serilog có redact, crypto AES-256-GCM, exception chung, `ITenantContext`.
+- [x] EF Core: DbContext + migration đầu tiên (bảng bên dưới), global query filter tenant, repository có tenant, seed 2 tenant.
+- [x] `ZaloAi.Api`: `/health`, auth (đăng nhập, đăng xuất, cookie httpOnly), gắn `tenantId` + `role`, rate limit, OpenAPI, endpoint cài đặt tenant.
+- [x] `ZaloAi.Worker`: Hangfire server, 1 job mẫu, retry backoff, job lỗi hết lượt → cảnh báo.
+- [x] Repo FE `zalo-ai-portal`: Next.js, trang đăng nhập, layout, trang cài đặt tenant (tên, ngành, tên bot, xưng hô, link chính sách bảo mật); rewrite `/api/*` → BE; `pnpm gen:api`.
+- [x] Sentry cho api + worker. Script backup database.
+- [x] Tách skills ra `.claude/skills/`. Tạo `docs/PROGRESS.md`, `docs/DECISIONS.md`, `docs/zalo-api-notes.md`.
 
 Bảng dữ liệu khởi đầu (thêm dần theo module):
 ```

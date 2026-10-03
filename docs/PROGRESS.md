@@ -1,11 +1,11 @@
 # Tiến độ
 
 ## Đang làm
-- Module: M1 — Nền tảng
-- Task: bước 7 xong (BE `feat/m1-sentry-backup-ci`, FE `feat/m1-portal-ci`), chờ chủ dự án đặt DSN, thử + commit; tiếp theo bước 8 (tách skills, zalo-api-notes)
-- Chặn bởi: không
+- Module: M1 — Nền tảng: **XONG** (2026-10-03). Tiếp theo: M2 — Kho kiến thức
+- Task: chờ chủ dự án commit bước 8, rồi lập kế hoạch M2 (cần duyệt: bảng documents/chunks, thư viện parse file PdfPig/OpenXml/ClosedXML, nơi lưu file, model embedding Gemini)
+- Chặn bởi: Gemini API key (việc M0) để embed ở M2
 
-## Kế hoạch M1 (bản .NET, 2026-10-01) — đã duyệt 2026-10-02
+## Kế hoạch M1 (bản .NET, 2026-10-01) — đã duyệt 2026-10-02, hoàn thành 2026-10-03
 Thay kế hoạch pnpm ngày 2026-09-30 (xem DECISIONS.md). 8 bước, mỗi bước 1 commit, dừng sau mỗi bước để chủ dự án chạy thử:
 1. `chore(m1)`: BE solution .NET 10 (`ZaloAi.sln`, 7 project `src/` + 2 project `tests/`), `Directory.Build.props`, `Directory.Packages.props`, `.editorconfig`, docker-compose (pgvector pg16, redis 7), `.env.example`
 2. `feat(m1)`: Core + Infrastructure nền: Options có validate, Serilog có redact, crypto AES-256-GCM (định dạng `v1:iv:tag:ct`), exception chung, `ITenantContext`
@@ -35,7 +35,9 @@ Thay kế hoạch pnpm ngày 2026-09-30 (xem DECISIONS.md). 8 bước, mỗi bư
 - [x] B5: 2 tenant mẫu: "Khoa Học Nguyệt Đạo" (bấm huyệt, massage → slug `spa`, rủi ro Cao) và "Sửa nhà An Phát" (sửa nhà, rủi ro thấp)
 
 ## Đã xong
-- [x] M1 bước 7: Sentry (Sentry.AspNetCore cho Api + Sentry.Serilog cho cả Api và Worker, vùng EU, che SĐT/email và bỏ query/cookie/header trước khi gửi), `POST /dev/errors/test`; `scriptsbackup-db.cmd` + `restore-db.cmd` (đã thử khôi phục vào DB tạm); CI GitHub Actions cả 2 repo; `docs/OPERATIONS.md` (2026-10-03)
+- [x] M1 bước 8: tách 7 skill BE ra `.claude/skills/` (bổ sung đường dẫn code thật), thêm 4 skill FE ở `zalo-ai-portal/.claude/skills/` (portal-page, portal-form, api-client-sync, portal-ui dùng `ui-ux-pro-max` — bản MIT đã rà soát, copy vào repo FE, chạy không cần Python), khung `docs/zalo-api-notes.md` (mọi mục CHƯA KIỂM CHỨNG, làm đầu M4), CLAUDE.md mục 10 thành bảng trỏ tới skill, tick task M1 (2026-10-03)
+- [x] **M1 đạt tiêu chí xong**: docker compose + api + worker + FE chạy, đăng nhập admin, test cô lập tenant pass, CI 2 repo (2026-10-03)
+- [x] M1 bước 7: Sentry (Sentry.AspNetCore cho Api + Sentry.Serilog cho cả Api và Worker, vùng EU, che SĐT/email và bỏ query/cookie/header trước khi gửi), `POST /dev/errors/test`; `scripts/backup-db.cmd` + `restore-db.cmd` (đã thử khôi phục vào DB tạm); CI GitHub Actions cả 2 repo; `docs/OPERATIONS.md` (2026-10-03)
 - [x] M1 bước 6: FE `zalo-ai-portal`: rewrite `/api/*` + `/hangfire` → BE, `proxy.ts` chặn sơ bộ khi chưa có cookie, trang đăng nhập, khung trang (đổi tenant, đăng xuất, link Hangfire cho super admin), trang cài đặt doanh nghiệp (owner sửa, staff xem), `pnpm gen:api` (openapi-typescript + openapi-fetch), shadcn/ui, vitest. BE thêm `GET /industries`, lỗi validate tiếng Việt (2026-10-02)
 - [x] M1 bước 5: Hangfire + Postgres (schema `hangfire`), Api chỉ đẩy job, Worker chạy job; job theo tenant (set tenant context đầu job); retry 5 lần backoff 10s→13.5 phút, hết lượt → Failed + log Error; dashboard `/hangfire` chỉ super admin; `POST /dev/jobs/sample`; tổng 72 test (2026-10-02)
 - [x] M1 bước 4: đăng nhập cookie (login, logout, me, switch-tenant), middleware kiểm membership + trạng thái tenant mỗi request, phân quyền owner/staff, `GET/PUT /tenant/settings` (FluentValidation, audit log), rate limit login 5/phút/IP, `/health` kiểm Postgres, ProblemDetails, OpenAPI `/openapi/v1.json`, khóa cookie lưu Postgres (`data_protection_keys`); tổng 68 test (2026-10-02)
