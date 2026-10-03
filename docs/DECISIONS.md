@@ -101,3 +101,11 @@ Mỗi quyết định: ngày, nội dung, lý do, hệ quả.
 - Đơn giá lưu số nguyên VNĐ; `price = null` + `priceNote` khi không công bố giá (bot phải nói "liên hệ", không đoán).
 
 **Dữ liệu mẫu:** lấy từ website công khai của phòng khám có thật "Khoa Học Huyệt Đạo" (đổi tên tenant mẫu cho đúng), giữ nguyên các câu quảng cáo chữa bệnh/cam kết để test bộ lọc ở M3. Lưu ngoài repo. Phòng khám này quảng cáo trị liệu bệnh → trước khi phục vụ thật: hỏi luật sư, xác minh giấy phép (INDUSTRIES.md "chưa mở").
+
+## 2026-10-03 — Schema kho kiến thức (M2 bước 2)
+
+- **Embedding:** `gemini-embedding-2` (docs chính thức https://ai.google.dev/gemini-api/docs/embeddings, kiểm tra 2026-10-03): đa ngôn ngữ (có tiếng Việt), 768 chiều là mức khuyến nghị, tự chuẩn hóa vector ở số chiều không mặc định; không dùng tham số `task_type` (ghi nhiệm vụ vào nội dung). Tên model đặt trong config `Ai:EmbedModel`. Cột `chunks.embedding` = `vector(768)` cố định → `Ai:EmbedDim` phải bằng 768.
+- **Bảng:** `knowledge_items` (mục có cấu trúc, `data` jsonb, mã không trùng trong tenant), `knowledge_imports` (bản xem trước + lịch sử nhập), `documents` (tài liệu tự do, tên file không trùng trong tenant), `chunks` (đúng một nguồn: mục hoặc tài liệu; xóa nguồn → xóa đoạn).
+- **Không mã hóa** nội dung kiến thức: là thông tin công khai của doanh nghiệp. Dữ liệu cá nhân (tin nhắn khách) vẫn mã hóa từ M3.
+- **Tìm kiếm vector:** SQL thô có `WHERE tenant_id = …` trước `ORDER BY embedding <=> …`, bật `SET LOCAL hnsw.iterative_scan = relaxed_order` (pgvector 0.8.7) để chỉ mục HNSW không trả thiếu kết quả khi nhiều tenant dùng chung bảng; sắp lại theo khoảng cách ở code.
+- Core giữ `float[]` cho embedding (không phụ thuộc thư viện pgvector), Infrastructure chuyển sang kiểu `vector`.
