@@ -166,9 +166,11 @@ Không cần database, chạy trong thư mục repo BE:
 ```
 dotnet run --project src/ZaloAi.Api -- knowledge validate <file.xlsx|file.json>
 dotnet run --project src/ZaloAi.Api -- knowledge convert <vào.json|vào.xlsx> <ra.xlsx|ra.json>
+dotnet run --project src/ZaloAi.Api -- knowledge diff <cũ.xlsx|cũ.json> <mới.xlsx|mới.json>
 ```
 
 - `validate`: in lỗi theo sheet/dòng/cột, hoặc "Hợp lệ. N mục (...)". Mã thoát 0 = hợp lệ, 1 = có lỗi.
 - `convert`: JSON (AI tạo) → Excel (người sửa) và ngược lại. File vào còn lỗi thì không chuyển.
+- `diff`: so sánh hai file đúng như khi nhập file mới lên hệ thống (file cũ đóng vai dữ liệu đang có): thêm mới, thay đổi từng trường, có thể trùng, không còn trong file mới.
 
 Trên giao diện (M2 bước 7): nút **Tải file mẫu** (`GET /knowledge/template`) và **Xuất dữ liệu hiện tại** (`GET /knowledge/export?format=xlsx|json`).
