@@ -33,3 +33,9 @@ Backup gồm cả bảng Hangfire (job đang chờ). File backup chứa dữ li�
 - FE `.github/workflows/ci.yml`: `pnpm lint`, `typecheck`, `test`, `build`.
 - Chạy khi push lên `main`/`dev` và khi mở/cập nhật PR. PR có dấu ❌ thì xem log ở tab **Actions**, sửa rồi mới merge.
 - Nên bật trên GitHub: **Settings → Branches → Add branch protection rule** cho `dev` và `main`: "Require status checks to pass before merging" → chọn job `build-test` (BE) / `check` (FE).
+
+## 4. File tài liệu khách hàng nạp (kho kiến thức)
+
+- Dev: lưu ở `%LOCALAPPDATA%\zaloai\files\{tenant}\{tài liệu}\...` (đổi bằng `Storage:LocalRoot`). **Chưa nằm trong `backup-db.cmd`** — mất thư mục này thì tài liệu tự do phải nạp lại (các mục nhập bằng file mẫu nằm trong database nên vẫn còn).
+- Production (tuần 7–8): object storage (S3-compatible) có bật versioning, backup theo cùng lịch với database; xóa tenant phải xóa cả thư mục của tenant.
+- Chi phí Gemini embedding: gói miễn phí chỉ cho dev (Google có thể dùng dữ liệu để cải thiện sản phẩm); production dùng gói trả phí. Mỗi lần nhập chỉ đánh chỉ mục mục mới/đổi, không làm lại toàn bộ.

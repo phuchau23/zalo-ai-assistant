@@ -1,8 +1,8 @@
 # Tiến độ
 
 ## Đang làm
-- Module: **M2 — Kho kiến thức** (M1 xong 2026-10-03)
-- Task: bước 4 xong (so sánh và gộp), chờ chủ dự án commit; tiếp theo bước 5 (Gemini embedding, đánh chỉ mục, API tìm kiếm)
+- Module: **M2 — Kho kiến thức: XONG phần code** (2026-10-03). Chờ chủ dự án tự nạp dữ liệu qua giao diện để xác nhận, rồi sang M3
+- Task: bước 5–8 xong (embedding Gemini, tài liệu tự do, giao diện Kho kiến thức, chạy thử đầu-cuối), chờ chủ dự án commit + thử trên giao diện; tiếp theo lập kế hoạch M3 (lõi AI + chat thử)
 - Chặn bởi: không (Gemini key đã có, đặt bằng user-secrets `Ai:GeminiApiKey`)
 
 ## Kế hoạch M2 (2026-10-03) — đã duyệt 2026-10-03
@@ -47,6 +47,11 @@ Thay kế hoạch pnpm ngày 2026-09-30 (xem DECISIONS.md). 8 bước, mỗi bư
 - [x] B5: 2 tenant mẫu: "Khoa Học Nguyệt Đạo" (bấm huyệt, massage → slug `spa`, rủi ro Cao) — đổi thành "Khoa Học Huyệt Đạo" (tên thật) ngày 2026-10-03 và "Sửa nhà An Phát" (sửa nhà, rủi ro thấp)
 
 ## Đã xong
+- [x] **M2 đạt tiêu chí xong** (2026-10-03): chạy thử đầu-cuối qua FE với Gemini thật trên dữ liệu mẫu Khoa Học Huyệt Đạo — 6/6 câu hỏi mẫu ra đúng mục ở vị trí đầu (ví dụ "giá massage đông y 60 phút" → DV-MASSAGE-DONG-Y-60), nhập v2 ra đúng bản so sánh mong đợi, tài liệu tự do đọc + tìm được; tenant B không tìm thấy dữ liệu A (test). Còn: chủ dự án tự nạp qua giao diện, và thử với dữ liệu thật của DN dùng thử khi có
+- [x] M2 bước 8: chạy thử đầu-cuối (script qua FE, Gemini thật, tenant An Phát rồi dọn sạch); sửa OpenAPI sinh `number | string` (JSON chỉ nhận số thật) (2026-10-03)
+- [x] M2 bước 7 (FE): trang Kho kiến thức — tab Dữ liệu (lọc, xem chi tiết), Nhập file (tải mẫu, xuất Excel/JSON, lỗi theo dòng, câu lệnh nhờ AI có nút sao chép), Lịch sử nhập, Tài liệu tham khảo (thay thế khi trùng tên, xóa, tự cập nhật trạng thái), Thử tìm kiếm; trang duyệt so sánh `/knowledge/imports/[id]` (chọn từng mục, gộp/giữ cả hai/bỏ qua, khóa "vừa gộp vừa xóa", xác nhận trước khi áp dụng/hủy); 23 test FE (2026-10-03)
+- [x] M2 bước 6: tài liệu tự do PDF/Word/Excel/TXT/MD ≤ 20MB (kiểm nội dung khớp đuôi file, tên file an toàn, lưu local `%LOCALAPPDATA%zaloaiiles`), job đọc + chia đoạn ~1.500 ký tự chồng lấn ~15% theo mục + tạo vector, PDF ảnh scan/file hỏng → "failed" kèm lý do, thay thế khi trùng tên (409 document_exists), xóa (2026-10-03)
+- [x] M2 bước 5: `IEmbeddingProvider` + Gemini `gemini-embedding-2` 768 chiều qua REST (resilience: timeout, retry, circuit breaker; lỗi → AiProviderException → API 503 ai_unavailable), provider giả cho test; đánh chỉ mục sau khi áp dụng + job quét 5 phút/lần; `POST /knowledge/search`, `GET /knowledge/status`, `GET /knowledge/ai-prompt`; tổng 156 test BE (2026-10-03)
 - [x] M2 bước 4: so sánh file nhập với dữ liệu đang có (thêm mới / thay đổi từng trường / có thể trùng — bỏ dấu, số phải khớp / không còn trong file), bản xem trước lưu `knowledge_imports`, áp dụng mục được chọn trong 1 transaction (gộp vào mục cũ hoặc giữ cả hai; chặn vừa gộp vừa xóa; từ chối nếu mục bị sửa trong lúc chờ duyệt), hủy, lịch sử, `GET /knowledge/items`; mục đổi/thêm tạo đoạn chờ đánh chỉ mục; lệnh `knowledge diff`; dữ liệu mẫu v1→v2 cho kết quả đúng README; tổng 123 test (2026-10-03)
 - [x] M2 bước 3: đọc file mẫu Excel (ClosedXML) + JSON, kiểm lỗi từng ô báo theo sheet/dòng/cột (dễ dãi: tiêu đề khác hoa thường, giá "450.000đ", dòng trống), tạo file mẫu trống + xuất dữ liệu (`GET /knowledge/template`, `GET /knowledge/export`), lệnh `knowledge validate|convert`; dữ liệu mẫu có thêm bản .xlsx; tổng 108 test (2026-10-03)
 - [x] M2 bước 2: migration `AddKnowledgeBase` (knowledge_items, knowledge_imports, documents, chunks vector(768) + HNSW cosine, ràng buộc "đúng một nguồn"), 4 repository có tenant, tìm kiếm vector lọc tenant_id + `hnsw.iterative_scan`; 8 test cô lập (kể cả tìm kiếm vector, chuyển dòng sang tenant khác); tổng 85 test (2026-10-03)
@@ -71,7 +76,10 @@ Thay kế hoạch pnpm ngày 2026-09-30 (xem DECISIONS.md). 8 bước, mỗi bư
 - FE chưa có test giao diện (chỉ test hàm thuần bằng vitest). Cân nhắc Playwright cho luồng đăng nhập ở tuần 7–8 (thư viện mới, cần duyệt)
 - `pnpm gen:api` cần BE đang chạy. Có thể cho BE xuất file openapi lúc build (thêm gói Microsoft.Extensions.ApiDescription.Server) nếu bất tiện
 - Cảnh báo job lỗi: đã gửi Sentry (bước 7), thêm Telegram ở M5
+- File gốc tài liệu lưu local (`Storage:LocalRoot`), chưa nằm trong `scriptsbackup-db.cmd`; production cần object storage + backup riêng (chốt khi deploy)
+- Chưa ghi chi phí gọi embedding (`usage_records` làm ở M3); gói Gemini miễn phí chỉ dùng cho dev
 - Log console: message của exception (ví dụ lỗi từ Zalo/AI trả về) chưa được che PII (Sentry thì đã che từ bước 7) — xử lý khi viết ZaloClient (M4) và AI provider (M3)
+- Chưa có form thêm/sửa từng mục (FAQ, dịch vụ) trên giao diện — hiện sửa qua xuất → sửa file → nhập. Làm nếu DN dùng thử thấy bất tiện
 - Cân nhắc Postgres Row Level Security làm lớp phòng thủ thứ 3 (sau M1)
 - Next.js 16 có thay đổi lớn so với bản cũ: đọc `node_modules/next/dist/docs/` trước khi code FE
 - Khoa Học Huyệt Đạo (phòng khám có thật, khoahochuyetdao.com): website quảng cáo trị liệu bệnh (u xơ tử cung, nang ngực, tim, tuyến giáp, liệt dây VII...), châm cứu, "không tác dụng phụ", "giảm đau buổi đầu hoặc hoàn tiền" → trước khi chạy thật với khách của họ: hỏi luật sư, xác minh giấy phép; hiện chỉ dùng làm dữ liệu test. Nguyên tắc chung: nếu DN quảng cáo chữa bệnh (châm cứu, trị liệu YHCT) → thường cần giấy phép, thành ngành "chưa mở", hỏi luật sư. Chỉ massage/bấm huyệt thư giãn thì xếp `spa`

@@ -352,12 +352,13 @@ Tiêu chí xong: `docker compose up` + `dotnet run` (api, worker) + `pnpm dev` (
 
 ### M2 — Kho kiến thức (tuần 2)
 Task:
-- [ ] API upload file (pdf, docx, xlsx, txt, md) ≤ 20MB → lưu file (local dev / object storage prod) → tạo `documents` pending → enqueue `ingest`.
-- [ ] Worker ingest: parse → làm sạch → chia chunk (~500–800 token, overlap ~15%, giữ tiêu đề mục trong meta) → embed theo batch → lưu `chunks`. Cập nhật status, lỗi thì ghi `error`.
-- [ ] CRUD FAQ (câu hỏi + trả lời) → mỗi FAQ là một document nhỏ, sửa là re-embed.
-- [ ] Xóa document → xóa chunks.
-- [ ] Index HNSW trên `embedding`; hàm `searchChunks(tenantId, query, k)` lọc tenant trước.
-- [ ] Admin: trang Kho kiến thức (danh sách, trạng thái, upload, FAQ, xóa), ô "thử tìm kiếm".
+- [x] API upload file (pdf, docx, xlsx, txt, md) ≤ 20MB → lưu file (local dev / object storage prod) → tạo `documents` pending → enqueue `ingest`.
+- [x] Worker ingest: parse → làm sạch → chia chunk (~500–800 token, overlap ~15%, giữ tiêu đề mục trong meta) → embed theo batch → lưu `chunks`. Cập nhật status, lỗi thì ghi `error`.
+- [x] CRUD FAQ (câu hỏi + trả lời) → mỗi FAQ là một document nhỏ, sửa là re-embed. — Làm qua mẫu dữ liệu (sheet "Câu hỏi thường gặp"; sửa = xuất → sửa → nhập, chỉ mục đổi được đánh chỉ mục lại). Chưa có form sửa từng câu trên giao diện (để sau nếu DN cần).
+- [x] Xóa document → xóa chunks.
+- [x] Index HNSW trên `embedding`; hàm `searchChunks(tenantId, query, k)` lọc tenant trước.
+- [x] Admin: trang Kho kiến thức (danh sách, trạng thái, upload, FAQ, xóa), ô "thử tìm kiếm".
+- [x] (Mở rộng, chủ dự án duyệt 2026-10-03) Mẫu dữ liệu chuẩn có Mã + so sánh/gộp kiểu review pull request khi nhập bản mới — `docs/KNOWLEDGE-FORMAT.md`.
 
 Tiêu chí xong: upload bảng giá thật của DN dùng thử, tìm "giá sơn lại phòng 20m2" (ví dụ) ra đúng chunk; tenant B không tìm thấy dữ liệu tenant A (có test).
 
