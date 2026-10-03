@@ -38,5 +38,5 @@ public sealed class InvalidInputException(string message)
     : AppException("invalid_input", message);
 
 /// <summary>409. Xung đột trạng thái, ví dụ email đã tồn tại.</summary>
-public sealed class ConflictException(string message)
-    : AppException("conflict", message);
+public sealed class ConflictException(string message, string code = "conflict")
+    : AppException(code, message);

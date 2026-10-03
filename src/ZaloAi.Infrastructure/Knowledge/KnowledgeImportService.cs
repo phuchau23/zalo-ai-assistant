@@ -1,9 +1,11 @@
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Hangfire;
 using Microsoft.EntityFrameworkCore;
 using ZaloAi.Core.Entities;
 using ZaloAi.Core.Errors;
+using ZaloAi.Infrastructure.Jobs;
 using ZaloAi.Infrastructure.Persistence;
 using ZaloAi.Infrastructure.Repositories;
 
@@ -35,7 +37,8 @@ public sealed class KnowledgeImportService(
     KnowledgeItemRepository items,
     KnowledgeImportRepository imports,
     ChunkRepository chunks,
-    AuditLogRepository audit)
+    AuditLogRepository audit,
+    IBackgroundJobClient jobs)
 {
     public const long MaxFileBytes = 5 * 1024 * 1024;
 
@@ -168,6 +171,11 @@ public sealed class KnowledgeImportService(
 
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+
+        if (toIndex.Count > 0)
+        {
+            jobs.Enqueue<IndexKnowledgeJob>(job => job.RunAsync(tenantId, CancellationToken.None));
+        }
 
         return new KnowledgeApplyResult(added, updated, merged, deleted);
     }

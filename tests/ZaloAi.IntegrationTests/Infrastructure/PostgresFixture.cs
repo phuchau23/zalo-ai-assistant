@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Testcontainers.PostgreSql;
+using ZaloAi.Ai;
 using ZaloAi.Core.Entities;
 using ZaloAi.Core.Tenancy;
 using ZaloAi.Infrastructure;
@@ -77,12 +78,15 @@ public sealed class PostgresFixture : IAsyncLifetime
                 ["App:ApiUrl"] = "http://localhost:4000",
                 ["Security:EncryptionKey"] = ApiFactory.NewEncryptionKey(),
                 ["ConnectionStrings:Postgres"] = ConnectionString,
+                ["Ai:EmbedProvider"] = "fake",
+                ["Storage:LocalRoot"] = ApiFactory.TestStorageRoot,
             })
             .Build();
 
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddZaloAiInfrastructure(configuration);
+        services.AddZaloAiAi();
         return services.BuildServiceProvider(validateScopes: true);
     }
 

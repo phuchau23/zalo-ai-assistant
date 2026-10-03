@@ -6,12 +6,14 @@ using Microsoft.Extensions.Options;
 using ZaloAi.Core.Entities;
 using ZaloAi.Core.Options;
 using ZaloAi.Core.Security;
+using ZaloAi.Core.Storage;
 using ZaloAi.Core.Tenancy;
 using ZaloAi.Infrastructure.Jobs;
 using ZaloAi.Infrastructure.Knowledge;
 using ZaloAi.Infrastructure.Persistence;
 using ZaloAi.Infrastructure.Repositories;
 using ZaloAi.Infrastructure.Security;
+using ZaloAi.Infrastructure.Storage;
 using ZaloAi.Infrastructure.Tenancy;
 
 namespace ZaloAi.Infrastructure;
@@ -28,6 +30,7 @@ public static class DependencyInjection
         services.AddValidatedOptions<DatabaseOptions>(configuration, DatabaseOptions.SectionName);
         services.AddValidatedOptions<JobsOptions>(configuration, JobsOptions.SectionName);
         services.AddValidatedOptions<AiOptions>(configuration, AiOptions.SectionName);
+        services.AddValidatedOptions<StorageOptions>(configuration, StorageOptions.SectionName);
         services.AddValidatedOptions<ZaloOptions>(configuration, ZaloOptions.SectionName);
 
         services.AddSingleton<IFieldEncryptor, AesGcmFieldEncryptor>();
@@ -49,6 +52,12 @@ public static class DependencyInjection
         services.AddScoped<KnowledgeDocumentRepository>();
         services.AddScoped<ChunkRepository>();
         services.AddScoped<KnowledgeImportService>();
+        services.AddScoped<KnowledgeIndexer>();
+        services.AddScoped<IndexKnowledgeJob>();
+        services.AddScoped<IndexSweepJob>();
+        services.AddScoped<KnowledgeDocumentService>();
+        services.AddScoped<IngestDocumentJob>();
+        services.AddSingleton<IFileStorage, LocalFileStorage>();
 
         services.AddZaloAiHangfire();
         services.AddScoped<SampleTenantJob>();

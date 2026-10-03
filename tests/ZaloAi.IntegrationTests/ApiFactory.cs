@@ -13,6 +13,9 @@ public class ApiFactory(string connectionString = "Host=localhost;Database=unuse
 {
     public static string NewEncryptionKey() => Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
 
+    /// <summary>Thư mục file tạm dùng chung cho các test (không đụng thư mục dev thật).</summary>
+    public static string TestStorageRoot { get; } = Path.Combine(Path.GetTempPath(), "zaloai-tests", Guid.NewGuid().ToString("N"));
+
     protected virtual Dictionary<string, string?> Settings => new()
     {
         ["App:AdminUrl"] = "http://localhost:3000",
@@ -20,6 +23,8 @@ public class ApiFactory(string connectionString = "Host=localhost;Database=unuse
         ["Security:EncryptionKey"] = NewEncryptionKey(),
         ["ConnectionStrings:Postgres"] = connectionString,
         ["RateLimit:LoginPermitPerMinute"] = loginPermitPerMinute.ToString(System.Globalization.CultureInfo.InvariantCulture),
+        ["Ai:EmbedProvider"] = "fake",
+        ["Storage:LocalRoot"] = TestStorageRoot,
     };
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
