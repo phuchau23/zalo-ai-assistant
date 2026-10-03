@@ -23,7 +23,7 @@ public static class DevSeeder
 
     public static readonly IReadOnlyList<SampleTenant> SampleTenants =
     [
-        new(Guid.Parse("0199a000-0000-7000-8000-000000000001"), "Khoa Học Nguyệt Đạo", "spa", "Nguyệt Đạo", "em", "owner@nguyetdao.local"),
+        new(Guid.Parse("0199a000-0000-7000-8000-000000000001"), "Khoa Học Huyệt Đạo", "spa", "Huyệt Đạo", "em", "owner@khoahochuyetdao.local"),
         new(Guid.Parse("0199a000-0000-7000-8000-000000000002"), "Sửa nhà An Phát", "sua-nha", "An Phát", "em", "owner@anphat.local"),
     ];
 

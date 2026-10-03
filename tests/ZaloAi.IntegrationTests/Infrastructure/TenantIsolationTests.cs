@@ -145,12 +145,12 @@ public sealed class TenantIsolationTests(PostgresFixture db)
         {
             var repo = new TenantRepository(asA, contextA);
             var tenant = (await repo.GetAsync(tenantA, CancellationToken.None)).ShouldNotBeNull();
-            tenant.BotName = "Nguyệt";
+            tenant.BotName = "Huyệt Đạo";
             await repo.SaveChangesAsync(CancellationToken.None);
         }
 
         await using var check = db.CreateDbContext(tenantA);
-        (await check.Tenants.SingleAsync()).BotName.ShouldBe("Nguyệt");
+        (await check.Tenants.SingleAsync()).BotName.ShouldBe("Huyệt Đạo");
         (await new MembershipRepository(check, contextA).ListAsync(tenantA, CancellationToken.None))
             .ShouldHaveSingleItem().UserId.ShouldBe(ownerA);
     }
