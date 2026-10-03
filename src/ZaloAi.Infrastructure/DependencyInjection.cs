@@ -43,6 +43,10 @@ public static class DependencyInjection
         services.AddScoped<AuditLogRepository>();
         services.AddScoped<UserRepository>();
         services.AddScoped<AccessQueries>();
+        services.AddScoped<KnowledgeItemRepository>();
+        services.AddScoped<KnowledgeImportRepository>();
+        services.AddScoped<KnowledgeDocumentRepository>();
+        services.AddScoped<ChunkRepository>();
 
         services.AddZaloAiHangfire();
         services.AddScoped<SampleTenantJob>();
