@@ -18,4 +18,6 @@ dotnet run --project src/ZaloAi.Worker
 docker compose down                         # tắt (dữ liệu vẫn giữ trong volume)
 ```
 
+Backup database dev: `scriptsbackup-db.cmd`, khôi phục: `scriptsestore-db.cmd <file>` (xem `docs/OPERATIONS.md`).
+
 Tài liệu dự án: `CLAUDE.md`, `docs/`.
