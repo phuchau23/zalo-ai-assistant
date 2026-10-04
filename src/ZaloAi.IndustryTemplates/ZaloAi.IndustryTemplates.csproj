@@ -2,4 +2,8 @@
   <ItemGroup>
     <ProjectReference Include="..\ZaloAi.Core\ZaloAi.Core.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- Mẫu ngành nhúng vào dll; tên resource = ZaloAi.IndustryTemplates.Templates/<slug>/<file> -->
+    <EmbeddedResource Include="Templates\**\*" LogicalName="Templates/%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
 </Project>

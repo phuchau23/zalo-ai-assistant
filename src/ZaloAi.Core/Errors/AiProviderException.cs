@@ -1,7 +1,7 @@
 namespace ZaloAi.Core.Errors;
 
 /// <summary>
-/// Lỗi khi gọi nhà cung cấp AI (Gemini, Claude...). Message an toàn để hiện (không chứa key, không chứa nội dung khách).
+/// Lỗi khi gọi nhà cung cấp AI (Gemini). Message an toàn để hiện (không chứa key, không chứa nội dung khách).
 /// Job Hangfire gặp lỗi này sẽ tự thử lại; API trả 503 "ai_unavailable".
 /// </summary>
 public class AiProviderException(string message, Exception? innerException = null) : Exception(message, innerException);
@@ -13,3 +13,7 @@ public sealed class AiRateLimitedException(Exception? innerException = null)
 /// <summary>Quá thời gian chờ phản hồi.</summary>
 public sealed class AiTimeoutException(Exception? innerException = null)
     : AiProviderException("Dịch vụ AI phản hồi quá chậm, vui lòng thử lại.", innerException);
+
+/// <summary>Model đang quá tải (HTTP 503) — thử model dự phòng hoặc thử lại sau.</summary>
+public sealed class AiOverloadedException(Exception? innerException = null)
+    : AiProviderException("Dịch vụ AI đang quá tải, vui lòng thử lại sau.", innerException);

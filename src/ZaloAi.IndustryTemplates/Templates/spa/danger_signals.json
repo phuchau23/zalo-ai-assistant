@@ -1,0 +1,21 @@
+{
+  "_comment": "Kiểm tra TRƯỚC khi gọi AI, so khớp bỏ dấu + chữ thường, theo cụm từ nguyên vẹn. Chọn cụm đủ cụ thể để ít báo nhầm; AI còn tự đánh giá urgency (lớp 2). Biến: {bot} {khach} {ten_doanh_nghiep}.",
+  "urgentReply": "Dạ {khach} ơi, những dấu hiệu {khach} mô tả cần được nhân viên y tế kiểm tra ngay. {khach} vui lòng đến cơ sở y tế gần nhất, hoặc gọi cấp cứu 115 nếu tình trạng nặng hoặc tiến triển nhanh. {bot} đã báo ngay cho người phụ trách của {ten_doanh_nghiep} để liên hệ {khach} ạ.",
+  "signals": [
+    { "name": "kho_tho", "keywords": ["khó thở", "thở không được", "ngạt thở", "tức thở", "thở dốc"] },
+    { "name": "dau_nguc", "keywords": ["đau ngực", "tức ngực", "đau thắt ngực", "nhói ngực"] },
+    { "name": "ngat", "keywords": ["bị ngất", "ngất xỉu", "ngất đi", "muốn ngất", "bất tỉnh", "bị xỉu", "xỉu xuống", "lịm đi", "mất ý thức"] },
+    { "name": "dot_quy", "keywords": ["yếu nửa người", "tê nửa người", "liệt nửa người", "méo miệng", "liệt mặt", "méo mặt", "nói ngọng đột ngột", "đột nhiên không nói được", "đột quỵ"] },
+    { "name": "dau_du_doi", "keywords": ["đau dữ dội", "đau không chịu nổi", "đau quá trời", "đau kinh khủng", "đau dữ lắm"] },
+    { "name": "sot_cao", "keywords": ["sốt cao", "bị sốt sau", "sốt từ hôm", "sốt rét run", "co giật"] },
+    { "name": "sung_bam", "keywords": ["sưng to", "sưng nhiều", "sưng nề", "sưng lan", "bầm tím lan", "bầm tím nhiều", "tím tái", "trắng bệch"] },
+    { "name": "nhiem_trung", "keywords": ["chảy mủ", "có mủ", "mưng mủ", "lở loét", "rỉ dịch"] },
+    { "name": "di_ung", "keywords": ["dị ứng lan", "nổi mẩn khắp", "mẩn đỏ khắp người", "phù mặt", "sưng môi", "sưng mắt", "nổi mề đay khắp"] },
+    { "name": "mat", "keywords": ["nhìn mờ", "mờ mắt đột ngột", "không nhìn thấy", "mất thị lực"] },
+    { "name": "thai_ky", "keywords": ["ra máu khi mang thai", "bầu bị ra máu", "bị ra máu", "đang mang thai bị đau bụng", "động thai"] },
+    { "name": "chay_mau", "keywords": ["chảy máu không cầm", "chảy máu nhiều", "ói ra máu", "nôn ra máu"] },
+    { "name": "huyet_ap", "keywords": ["huyết áp tăng vọt", "huyết áp lên 180", "huyết áp lên 200", "tụt huyết áp"] },
+    { "name": "chan_thuong", "keywords": ["gãy xương", "trật khớp", "không cử động được", "tê liệt"] },
+    { "name": "tu_hai", "keywords": ["muốn chết", "tự tử", "tự sát", "không muốn sống"] }
+  ]
+}

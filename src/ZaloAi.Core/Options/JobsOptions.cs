@@ -8,7 +8,7 @@ public sealed class JobsOptions
 
     /// <summary>Worker hỏi hàng đợi bao lâu một lần. Nhỏ = tin nhắn được xử lý sớm hơn, nhưng truy vấn DB nhiều hơn.</summary>
     [Range(1, 60)]
-    public int QueuePollSeconds { get; set; } = 5;
+    public int QueuePollSeconds { get; set; } = 1;
 
     /// <summary>Số job chạy song song trên một Worker.</summary>
     [Range(1, 100)]

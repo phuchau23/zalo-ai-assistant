@@ -1,0 +1,12 @@
+{
+  "_comment": "Thông tin bot thu thập dần (không hỏi dồn). pii = dữ liệu cá nhân, mã hóa khi lưu. Không bao giờ hỏi CCCD, tài khoản ngân hàng, mật khẩu, OTP.",
+  "fields": [
+    { "key": "name", "label": "Tên khách", "pii": true },
+    { "key": "phone", "label": "Số điện thoại", "pii": true },
+    { "key": "service_interest", "label": "Dịch vụ quan tâm", "pii": false },
+    { "key": "concern_area", "label": "Vùng cơ thể / mong muốn (khách tự nói)", "pii": false },
+    { "key": "visited_before", "label": "Đã từng làm ở đây chưa", "pii": false },
+    { "key": "preferred_time", "label": "Thời gian muốn đến", "pii": false },
+    { "key": "branch", "label": "Chi nhánh", "pii": false }
+  ]
+}

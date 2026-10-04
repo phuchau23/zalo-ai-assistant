@@ -149,7 +149,14 @@ public sealed class GeminiEmbeddingProviderTests
     [Fact]
     public void Fake_provider_does_not_need_a_key()
     {
-        var options = new AiOptions { EmbedProvider = "fake" };
+        var options = new AiOptions { EmbedProvider = "fake", ChatProvider = "fake" };
         Validator.TryValidateObject(options, new ValidationContext(options), [], validateAllProperties: true).ShouldBeTrue();
+    }
+
+    [Fact]
+    public void Gemini_chat_requires_key_even_when_embedding_is_fake()
+    {
+        var options = new AiOptions { EmbedProvider = "fake", ChatProvider = "gemini" };
+        Validator.TryValidateObject(options, new ValidationContext(options), [], validateAllProperties: true).ShouldBeFalse();
     }
 }
