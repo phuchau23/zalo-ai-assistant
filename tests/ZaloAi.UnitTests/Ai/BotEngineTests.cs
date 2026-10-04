@@ -55,7 +55,8 @@ public sealed class BotEngineTests
         string urgency = "none",
         bool health = false,
         string? reason = null,
-        object[]? leads = null) =>
+        object[]? leads = null,
+        string sentiment = "neutral") =>
         JsonSerializer.Serialize(new
         {
             reply,
@@ -65,7 +66,7 @@ public sealed class BotEngineTests
             handoff_reason = reason,
             urgency,
             health_topic = health,
-            sentiment = "neutral",
+            sentiment,
             lead_fields = leads ?? [],
         });
 
@@ -247,6 +248,16 @@ public sealed class BotEngineTests
         search.Queries.ShouldHaveSingleItem().ShouldBe("giá massage body\ncòn 90p?");
         var turns = chat.Requests[0].Turns;
         turns.Select(t => t.Role).ShouldBe([ChatRole.User, ChatRole.Assistant, ChatRole.User]);
+    }
+
+    [Fact]
+    public async Task Negative_sentiment_hands_off_even_when_ai_answers()
+    {
+        var chat = new ScriptedChat(_ => Json("Dạ em xin lỗi chị vì trải nghiệm chưa tốt ạ.", sentiment: "negative"));
+        var result = await Engine(chat, new StaticSearch()).ReplyAsync(Turn("dịch vụ tệ quá, chờ cả tiếng"), CancellationToken.None);
+
+        result.NeedsHuman.ShouldBeTrue();
+        result.HandoffReason.ShouldBe("negative_sentiment");
     }
 
     [Fact]
