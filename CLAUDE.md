@@ -398,22 +398,22 @@ Tiêu chí xong: nhắn vào OA test từ Zalo cá nhân → nhận câu trả l
 
 ### M5 — Inbox + tiếp quản (tuần 5)
 Task:
-- [ ] API danh sách hội thoại (lọc: cần xử lý, đang bot, đang người, theo nhãn), chi tiết tin nhắn.
-- [ ] Realtime bằng SSE (đơn giản hơn websocket) cho admin.
-- [ ] Nút "Tiếp quản" (mode=human, gán nhân viên) và "Trả lại cho bot".
-- [ ] Nhân viên gửi tin từ admin → đi qua adapter kênh.
-- [ ] Tự chuyển người khi: `needs_human`, khách đòi gặp người, sentiment tiêu cực, low confidence liên tiếp, dấu hiệu khẩn cấp. Câu chuyển tiếp cho 4 tình huống + chữ ký nhân viên + giờ làm việc, cấu hình theo tenant (`docs/FEATURE-SPECS.md` mục 1).
-- [ ] Hội thoại ở mode human quá X phút không ai trả lời → nhắc lại / cảnh báo.
-- [ ] Thông báo nhân viên qua Telegram (GĐ1), mỗi tenant cấu hình chat id.
-- [ ] Phân quyền owner/staff cơ bản; audit log khi xem/xuất dữ liệu.
+- [x] API danh sách hội thoại (lọc: cần xử lý, đang bot, đang người, theo nhãn), chi tiết tin nhắn.
+- [x] Realtime bằng SSE (đơn giản hơn websocket) cho admin.
+- [x] Nút "Tiếp quản" (mode=human, gán nhân viên) và "Trả lại cho bot".
+- [x] Nhân viên gửi tin từ admin → đi qua adapter kênh.
+- [x] Tự chuyển người khi: `needs_human`, khách đòi gặp người, sentiment tiêu cực, low confidence (chuyển ngay từ lần đầu, chặt hơn "liên tiếp"), dấu hiệu khẩn cấp. Câu chuyển tiếp cho 4 tình huống + chữ ký nhân viên + giờ làm việc, cấu hình theo tenant (`docs/FEATURE-SPECS.md` mục 1).
+- [x] Hội thoại ở mode human quá X phút không ai trả lời → nhắc lại / cảnh báo.
+- [x] Thông báo nhân viên qua Telegram (GĐ1), mỗi tenant cấu hình chat id.
+- [x] Phân quyền owner/staff cơ bản; audit log khi xem/xuất dữ liệu. — Xem hội thoại có audit; xuất dữ liệu ở M6.
 
 Tiêu chí xong: nhân viên thấy tin mới realtime, tiếp quản và trả lời từ admin tới được Zalo của khách; bot không chen vào khi đang human.
 
 ### M6 — Khách tiềm năng, báo cáo, quản trị (tuần 6)
 Task:
-- [ ] Gộp `lead_fields` từ AI vào `contacts` (theo template ngành), lead_status tự động + sửa tay.
-- [ ] Trang Khách tiềm năng: lọc, xem hội thoại, xuất Excel (ghi audit log).
-- [ ] Trang "Cần chăm sóc": AI gợi ý khách nhân viên nên chủ động nhắn (mức độ, lý do, tin nháp, hạn nhắn OA, gán nhân viên), bảng `care_suggestions` (`docs/FEATURE-SPECS.md` mục 2).
+- [x] Gộp `lead_fields` từ AI vào `contacts` (theo template ngành), lead_status tự động + sửa tay. — 5 tầng Mới → Quan tâm → Nóng → Đã chốt → Không tiềm năng (chủ dự án chốt 2026-10-04), nhãn, nhật ký chăm sóc của nhân viên.
+- [x] Trang Khách tiềm năng: lọc, xem hội thoại, xuất Excel (ghi audit log). — trang "Khách hàng" + hồ sơ khách.
+- [x] Trang "Cần chăm sóc": AI gợi ý khách nhân viên nên chủ động nhắn (mức độ, lý do, tin nháp, hạn nhắn OA, gán nhân viên), bảng `care_suggestions` (`docs/FEATURE-SPECS.md` mục 2).
 - [ ] Dashboard: hội thoại/ngày, khách tiềm năng mới, tỷ lệ bot tự xử lý, danh sách câu bot không trả lời được.
 - [ ] Xóa/xuất dữ liệu một khách cuối; xóa toàn bộ dữ liệu tenant.
 - [ ] Super admin (chỉ chủ dự án): danh sách tenant, gói, hạn, trạng thái, chi phí AI theo tháng, khóa/mở tenant.
