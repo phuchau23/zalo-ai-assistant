@@ -1,8 +1,27 @@
 # Tiến độ
 
 ## Đang làm
-- Module: **M4 — Kết nối Zalo: XONG phần code** (2026-10-04, bước 1–7). Còn bước 8: chạy thật với OA test (cần tên miền trên Cloudflare + cấu hình Zalo)
-- Chặn bởi: chủ dự án chuyển DNS `haulp.io.vn` sang Cloudflare, lấy OA Secret Key, lưu user-secrets Zalo
+- **Bot tự chăm sóc khách (2026-10-05, chủ dự án duyệt "làm ngay, trước đợt B")**: XONG code — migration `ProactiveCare` (đã áp DB dev). BE 225 unit + 115 integration test; FE 46 test. Chờ chủ dự án test (ghi chú "5 phút nữa" → bot tự nhắn trong Chat thử)
+- Module: **M6 — đợt A XONG phần code** (2026-10-04): Khách hàng (5 tầng tiềm năng, nhãn, hồ sơ, nhật ký chăm sóc, xuất Excel), "Cần chăm sóc" (AI gợi ý + tin nháp, nhân viên sửa rồi gửi), kết nối Telegram tự phục vụ. Chờ chủ dự án test trên web (nhất là kết nối Telegram)
+- Tiếp theo: M6 đợt B (dashboard chủ DN, xóa/xuất dữ liệu 1 khách, super admin + chi phí AI, hạn mức gói) → GĐ2 chăm sóc tự động. Song song: M4 bước 8 (chạy thật Zalo) chờ DNS Cloudflare + khóa Zalo
+
+## Kế hoạch M6 (2026-10-04) — đã duyệt ("làm đợt A trước"; tầng Mới → Quan tâm → Nóng → Đã chốt → Không tiềm năng)
+Đợt A (xong code):
+1. Schema `AddCustomerCare`: contacts (`lead_status`, `lead_status_manual`, `tags`, `last_customer_message_at`), `contact_notes` (mã hóa, lúc chăm sóc lại — ngày + giờ, migration `NoteFollowUpTime`), `care_suggestions` (mã hóa, tối đa 1 gợi ý mở/khách), `conversations.care_analyzed_at`, cài đặt chăm sóc trong `handoff_settings`
+2. Trang Khách hàng: lọc theo tầng/nhãn, tìm tên/SĐT, xuất Excel (owner, audit); hồ sơ khách: tầng (tự động/đặt tay), nhãn, thông tin khách, hội thoại, nhật ký chăm sóc
+3. "Cần chăm sóc": job 15 phút quét khách im lặng ≥ X giờ (mặc định 6) + ghi chú tới giờ hẹn (quét mỗi phút) → AI gợi ý (mức độ, lý do, việc nên làm, tin nháp, hạn nhắn Zalo 7 ngày / miễn phí 48 giờ, giao người); nhân viên sửa rồi gửi; khách nhắn lại → tự xong; quá hạn → hết hạn
+4. Kết nối Telegram tự phục vụ: mã 6 ký tự 10 phút → `/ketnoi@bot MÃ` trong nhóm hoặc link "thêm vào nhóm" → Worker đọc tin bot (long polling, khóa Redis) → lưu nhóm + tin chào
+Đợt B (chưa làm): dashboard chủ DN, xóa/xuất dữ liệu 1 khách + xóa dữ liệu tenant, super admin (tenant, gói, chi phí AI, khóa/mở), hạn mức hội thoại theo gói
+
+## Kế hoạch M5 (2026-10-04) — đã duyệt ("làm liền", Telegram, nhắc sau 10 phút)
+1. Schema `AddInbox`: hội thoại (người phụ trách, chờ người từ lúc, tin cuối, lần nhắc), tin (người gửi là nhân viên, loại "system"), bảng `handoff_settings`
+2. API hộp thư: danh sách (cần bạn / nhân viên / bot / của tôi / tất cả, kèm chat thử), chi tiết (audit khi xem), thành viên
+3. Realtime SSE `/inbox/stream` qua Redis pub/sub (chỉ id, không nội dung) + FE tự tải lại 20 giây/lần dự phòng
+4. Tiếp quản / trả lại bot / gán người / nhân viên gửi tin (chữ ký) qua đúng kênh, job gửi có thử lại
+5. Tự chuyển người: AI báo cần người, khách bực bội (sentiment âm), không chắc, khẩn cấp; câu chuyển tiếp trong/ngoài giờ
+6. Nhắc khi chờ quá X phút (job mỗi phút) + Telegram (chỉ loại sự việc + link, không nội dung khách)
+7. FE: trang Hộp thư (3 cột, nổi bật ca cần người, số ca chờ trên tab), Cài đặt → Chuyển tiếp & giờ làm việc, nhân viên vào thẳng Hộp thư
+8. Test: luồng chuyển người → tiếp quản → nhắn → trả lại, cô lập tenant, quyền owner/staff, nhắc
 
 ## Kế hoạch M4 (2026-10-04) — đã duyệt 2026-10-04 ("làm liền", đường hầm Cloudflare + haulp.io.vn)
 1. `feat(m4)`: Redis (`StackExchange.Redis`, `Testcontainers.Redis`) — `IDistributedStore`: khóa, state, chống trùng, bộ đếm
@@ -69,6 +88,8 @@ Thay kế hoạch pnpm ngày 2026-09-30 (xem DECISIONS.md). 8 bước, mỗi bư
 - [x] B5: 2 tenant mẫu: "Khoa Học Nguyệt Đạo" (bấm huyệt, massage → slug `spa`, rủi ro Cao) — đổi thành "Khoa Học Huyệt Đạo" (tên thật) ngày 2026-10-03 và "Sửa nhà An Phát" (sửa nhà, rủi ro thấp)
 
 ## Đã xong
+- [x] **M6 đợt A code xong** (2026-10-04): migration `AddCustomerCare` (đã áp DB dev). BE 209 unit + 112 integration test (có test cô lập tenant cho khách/ghi chú/gợi ý); FE 43 test, lint + typecheck sạch (chưa chạy `pnpm build` vì `pnpm dev` đang chạy)
+- [x] **M5 code xong** (2026-10-04): migration `AddInbox` (đã áp DB dev). BE 187 unit + 105 integration test; FE 35 test. Test trọn luồng trên web được bằng Chat thử (tab khách) + Hộp thư (tab nhân viên)
 - [x] M4 bước 1–7 (2026-10-04): Redis, `channel_connections` (migration `AddChannelConnections`, đã áp DB dev), ZaloClient, kết nối OA, webhook, adapter + job làm mới token, trang Kết nối kênh. BE 186 unit + 100 integration test (Zalo giả lập: OAuth/PKCE/state 1 lần, chữ ký sai 401, webhook trùng, tin bot dội về, nhân viên trả lời trong app OA, token hết hạn tự làm mới, khách quá 7 ngày, ảnh). FE 32 test (sau M3 là 28 — báo cáo M3 ghi nhầm 33)
 - [x] **M3 code xong** (2026-10-04): 10 bước theo kế hoạch. Eval spa trên dữ liệu thật Khoa Học Huyệt Đạo, model `gemini-3.5-flash-lite` (model chính `gemini-3.8-flash` hết quota gói free 20 request/ngày): câu thường + ngoài phạm vi **30/30 = 100%**, bịa giá **0**, an toàn **24/24 = 100%** (lần chạy cuối, sau khi thêm câu cấm "hoàn toàn an toàn" và sửa quy tắc khẩn cấp chỉ cho dấu hiệu cấp tính). Chi phí ≈ $0.06 cho 54 câu. 163 unit + 78 integration test BE; 33 test FE. Còn: chủ dự án tự chat thử trên giao diện và đánh giá; chạy lại eval với `gemini-3.8-flash` khi có quota/gói trả phí
 - [x] **M2 đạt tiêu chí xong** (2026-10-03): chạy thử đầu-cuối qua FE với Gemini thật trên dữ liệu mẫu Khoa Học Huyệt Đạo — 6/6 câu hỏi mẫu ra đúng mục ở vị trí đầu (ví dụ "giá massage đông y 60 phút" → DV-MASSAGE-DONG-Y-60), nhập v2 ra đúng bản so sánh mong đợi, tài liệu tự do đọc + tìm được; tenant B không tìm thấy dữ liệu A (test). Còn: chủ dự án tự nạp qua giao diện, và thử với dữ liệu thật của DN dùng thử khi có
@@ -94,6 +115,13 @@ Thay kế hoạch pnpm ngày 2026-09-30 (xem DECISIONS.md). 8 bước, mỗi bư
 - [x] Viết ROADMAP.md (10 phase đến phát hành), FEATURE-SPECS.md (chuyển tiếp, "Cần chăm sóc", tình huống chăm sóc), INDUSTRIES.md (mẫu ngành, bộ an toàn y tế) (2026-10-01)
 
 ## Vấn đề mở / nợ kỹ thuật
+- Kết nối Telegram tự phục vụ đã làm (M6): **chủ dự án cần test** — chỉ chạy khi Worker chạy và có `Telegram:BotToken`. Bot ở chế độ riêng tư (mặc định) chỉ nhận lệnh có @tên_bot → giao diện hiện lệnh `/ketnoi@tên_bot MÃ`
+- Tìm khách theo tên/SĐT làm trong bộ nhớ (dữ liệu mã hóa), tối đa 5.000 khách/lần tải — đủ cho DN nhỏ; DN lớn cần chỉ mục tìm kiếm riêng (hash SĐT)
+- Gợi ý "Cần chăm sóc" gửi ghi chú nhân viên (đã che PII) cho Gemini → cùng ràng buộc gói trả phí như tin khách
+- Gợi ý mang tính quảng cáo (kéo khách cũ, ưu đãi) chưa lọc theo "đồng ý nhận tin" (FEATURE-SPECS mục 2) — chưa có dữ liệu đồng ý, làm cùng GĐ2
+- Realtime SSE đi qua rewrite của Next.js: chưa thử thực tế (FE có dự phòng tải lại 20 giây). Production: kiểm tra proxy không buffer SSE
+- Telegram: chưa có bot (chủ dự án tạo bằng @BotFather, lưu `Telegram:BotToken` user-secrets); thông báo chỉ gửi loại sự việc + link
+- Câu chuyển tiếp hệ thống có thể lặp ý với câu bot vừa nói ("em chuyển nhân viên") — cân nhắc chỉnh prompt sau khi DN dùng thử
 - Zalo: chưa kiểm bằng request thật: định dạng header chữ ký (`mac=`?), `timeStamp` có phải trường `timestamp`, PKCE Base64 chuẩn hay base64url, định dạng lỗi của endpoint OAuth → kiểm ở bước 8 (log định dạng header khi chữ ký sai)
 - Zalo: chưa có payload quan tâm/bỏ quan tâm (đang bỏ qua), chưa lấy tên OA / tên khách (cần docs API thông tin OA/người dùng)
 - Gửi tin: Zalo nhận tin nhưng mất phản hồi → job gửi lại 1 lần (rủi ro trùng nhỏ); tin dài cắt nhiều phần lỗi giữa chừng → phần đầu có thể gửi lại

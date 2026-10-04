@@ -104,8 +104,9 @@ public sealed class ChatTestEndpointsTests(PostgresFixture db)
         after.Urgency.ShouldBe("urgent");
         after.Messages[1].Text.ShouldContain("115");
 
-        using var blocked = await client.PostAsJsonAsync(new Uri($"/chat-test/conversations/{conversation.Id}/messages", UriKind.Relative), new { text = "alo" });
-        await blocked.ShouldBeProblemAsync(409, "conversation_human");
+        // Đang do nhân viên xử lý: khách vẫn nhắn được, bot không trả lời (job bỏ qua).
+        using var whileHuman = await client.PostAsJsonAsync(new Uri($"/chat-test/conversations/{conversation.Id}/messages", UriKind.Relative), new { text = "alo" });
+        whileHuman.StatusCode.ShouldBe(HttpStatusCode.Accepted);
 
         using var back = await client.PostAsync(new Uri($"/chat-test/conversations/{conversation.Id}/return-to-bot", UriKind.Relative), null);
         (await back.Content.ReadFromJsonAsync<ChatTestConversationResponse>())!.Mode.ShouldBe("bot");

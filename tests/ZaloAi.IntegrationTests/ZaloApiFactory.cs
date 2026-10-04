@@ -13,9 +13,17 @@ public sealed class FakeZaloServer : HttpMessageHandler
 {
     public ConcurrentQueue<(string Url, string Body, Dictionary<string, string> Headers)> Calls { get; } = new();
 
-    /// <summary>Phản hồi cho endpoint gửi tin; mặc định thành công.</summary>
-    public Func<string, string> SendResponse { get; set; } =
-        _ => """{"data":{"message_id":"zalo-msg-1","user_id":"u","sent_time":"1","quota":{"quota_type":"reply"}},"error":0,"message":"Success"}""";
+    private int _messageCounter;
+
+    /// <summary>Phản hồi cho endpoint gửi tin; mặc định thành công, mỗi tin một message_id như Zalo thật (zalo-msg-1, -2...).</summary>
+    public Func<string, string> SendResponse { get; set; }
+
+    public FakeZaloServer()
+    {
+        SendResponse = _ =>
+            "{\"data\":{\"message_id\":\"zalo-msg-" + Interlocked.Increment(ref _messageCounter).ToString(System.Globalization.CultureInfo.InvariantCulture)
+            + "\",\"user_id\":\"u\",\"sent_time\":\"1\",\"quota\":{\"quota_type\":\"reply\"}},\"error\":0,\"message\":\"Success\"}";
+    }
 
     private int _tokenCounter;
 

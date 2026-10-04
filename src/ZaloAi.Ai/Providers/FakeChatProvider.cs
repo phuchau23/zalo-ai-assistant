@@ -22,6 +22,24 @@ public sealed partial class FakeChatProvider : IChatProvider
         {
             text = $"Tóm tắt (giả lập): {Truncate(last, 120)}";
         }
+        else if (request.JsonSchema.Contains("ask_human", StringComparison.Ordinal))
+        {
+            // Phân tích chăm sóc: khách nói "không cần" → none; có "phàn nàn"/"đau" → cần nhân viên; tới giờ hẹn → follow_up; còn lại → nhắn.
+            var followUp = request.System.Contains("hẹn chăm sóc lại khách", StringComparison.Ordinal);
+            var declined = last.Contains("không cần", StringComparison.OrdinalIgnoreCase);
+            var sensitive = last.Contains("phàn nàn", StringComparison.OrdinalIgnoreCase) || last.Contains("đau", StringComparison.OrdinalIgnoreCase);
+            text = JsonSerializer.Serialize(new
+            {
+                action = declined ? "none" : sensitive ? "ask_human" : "send",
+                human_reason = sensitive && !declined ? "sensitive" : null,
+                promotional = false,
+                temperature = declined ? "cold" : "hot",
+                trigger = followUp ? "follow_up" : "thinking",
+                reason = declined ? "Khách đã từ chối." : "Khách hỏi dịch vụ nhưng chưa đặt lịch (giả lập).",
+                suggested_action = "Hỏi lại nhu cầu và mời đặt lịch.",
+                draft_message = declined ? "" : "Dạ em chào anh/chị, em nhắn hỏi thăm mình còn quan tâm dịch vụ bên em không ạ?",
+            });
+        }
         else
         {
             var chunk = ChunkHeader().Match(request.System);

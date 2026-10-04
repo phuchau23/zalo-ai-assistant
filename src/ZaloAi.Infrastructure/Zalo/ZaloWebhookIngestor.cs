@@ -8,6 +8,7 @@ using ZaloAi.Core.Channels;
 using ZaloAi.Core.Coordination;
 using ZaloAi.Core.Entities;
 using ZaloAi.Core.Options;
+using ZaloAi.Core.Realtime;
 using ZaloAi.Core.Security;
 using ZaloAi.Infrastructure.Jobs;
 using ZaloAi.Infrastructure.Repositories;
@@ -40,6 +41,7 @@ public sealed partial class ZaloWebhookIngestor(
     ConversationRepository conversations,
     IFieldEncryptor encryptor,
     IBackgroundJobClient jobs,
+    IInboxNotifier notifier,
     TimeProvider time,
     ILogger<ZaloWebhookIngestor> logger)
 {
@@ -101,7 +103,11 @@ public sealed partial class ZaloWebhookIngestor(
             ContentEnc = encryptor.Encrypt(ContentOf(e)),
             ExternalMessageId = e.MessageId,
         });
-        conversation.LastCustomerMessageAt = time.GetUtcNow();
+        conversation.LastCustomerMessageAt = conversation.LastMessageAt = time.GetUtcNow();
+        if (conversation.Mode == ConversationMode.Human)
+        {
+            conversation.NeedsAttentionSince ??= time.GetUtcNow(); // nhân viên đang xử lý: khách chờ người trả lời
+        }
 
         if (!await TrySaveAsync(cancellationToken))
         {
@@ -110,6 +116,7 @@ public sealed partial class ZaloWebhookIngestor(
 
         var messageId = message.Id;
         jobs.Enqueue<ProcessIncomingMessageJob>(job => job.RunAsync(tenantId, messageId, CancellationToken.None));
+        await notifier.PublishAsync(tenantId, new InboxEvent(conversation.Mode == ConversationMode.Human ? "attention" : "message", conversation.Id), cancellationToken);
         return WebhookOutcome.Accepted;
     }
 
@@ -128,8 +135,17 @@ public sealed partial class ZaloWebhookIngestor(
         });
         conversation.Mode = ConversationMode.Human;
         conversation.HandoffReason = "staff_replied_in_oa";
+        conversation.NeedsAttentionSince = null; // nhân viên đã trả lời
+        conversation.LastReminderAt = null;
+        conversation.LastMessageAt = time.GetUtcNow();
 
-        return await TrySaveAsync(cancellationToken) ? WebhookOutcome.Accepted : WebhookOutcome.Ignored;
+        if (!await TrySaveAsync(cancellationToken))
+        {
+            return WebhookOutcome.Ignored;
+        }
+
+        await notifier.PublishAsync(route.TenantId, new InboxEvent("message", conversation.Id), cancellationToken);
+        return WebhookOutcome.Accepted;
     }
 
     private async Task<Conversation> GetConversationAsync(ConnectionRoute route, string userId, CancellationToken cancellationToken)

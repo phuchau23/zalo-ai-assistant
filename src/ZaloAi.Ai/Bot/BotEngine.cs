@@ -269,6 +269,14 @@ public sealed partial class BotEngine(
             reason ??= "low_confidence";
         }
 
+        // Khách bực bội / không hài lòng → chuyển người (CLAUDE.md M5), dù AI vẫn trả lời được.
+        if (answer.Sentiment == "negative" && !needsHuman)
+        {
+            trace.Guards.Add("negative_sentiment_handoff");
+            needsHuman = true;
+            reason ??= "negative_sentiment";
+        }
+
         if (template.MedicalSafety && answer.HealthTopic && !VietText.Fold(reply).Contains(" tham kham truc tiep ", StringComparison.Ordinal))
         {
             trace.Guards.Add("medical_disclaimer_added");
