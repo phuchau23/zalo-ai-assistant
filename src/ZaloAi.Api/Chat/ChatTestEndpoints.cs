@@ -6,8 +6,10 @@ using ZaloAi.Api.Auth;
 using ZaloAi.Api.Common;
 using ZaloAi.Core.Entities;
 using ZaloAi.Core.Errors;
+using ZaloAi.Core.Realtime;
 using ZaloAi.Core.Security;
 using ZaloAi.Core.Tenancy;
+using ZaloAi.Infrastructure.Inbox;
 using ZaloAi.Infrastructure.Jobs;
 using ZaloAi.Infrastructure.Repositories;
 
@@ -47,7 +49,7 @@ public sealed record ChatTraceResponse(
     int PiiMasked,
     bool FirstReply);
 
-/// <param name="Sender">customer | bot | staff</param>
+/// <param name="Sender">customer | bot | staff | system</param>
 public sealed record ChatMessageResponse(Guid Id, string Sender, string Text, DateTimeOffset CreatedAt, ChatTraceResponse? Trace);
 
 /// <param name="Mode">bot | human</param>
@@ -159,15 +161,12 @@ internal static class ChatTestEndpoints
         ConversationRepository conversations,
         IFieldEncryptor encryptor,
         IBackgroundJobClient jobs,
+        InboxService inbox,
+        IInboxNotifier notifier,
         CancellationToken cancellationToken)
     {
         var tenantId = tenant.RequireTenantId();
         var conversation = await RequireTestAsync(tenantId, conversationId, conversations, cancellationToken);
-        if (conversation.Mode == ConversationMode.Human)
-        {
-            throw new ConflictException("Hội thoại đang được chuyển cho nhân viên, bot không trả lời. Bấm \"Trả lại cho bot\" để thử tiếp.", "conversation_human");
-        }
-
         var text = request.Text.Trim();
         var message = conversations.AddMessage(tenantId, new Message
         {
@@ -176,11 +175,18 @@ internal static class ChatTestEndpoints
             Sender = MessageSender.Customer,
             ContentEnc = encryptor.Encrypt(text),
         });
-        conversation.LastCustomerMessageAt = DateTimeOffset.UtcNow;
+        conversation.LastCustomerMessageAt = conversation.LastMessageAt = DateTimeOffset.UtcNow;
+        var human = conversation.Mode == ConversationMode.Human;
+        if (human)
+        {
+            inbox.MarkNeedsAttention(conversation); // nhân viên đang xử lý: tin hiện nổi bật ở Hộp thư, bot không trả lời
+        }
+
         await conversations.SaveChangesAsync(cancellationToken);
 
         var messageId = message.Id;
         jobs.Enqueue<ProcessIncomingMessageJob>(job => job.RunAsync(tenantId, messageId, CancellationToken.None));
+        await notifier.PublishAsync(tenantId, new InboxEvent(human ? "attention" : "message", conversation.Id), cancellationToken);
 
         return TypedResults.Accepted((string?)null, new ChatMessageResponse(message.Id, "customer", text, message.CreatedAt, null));
     }
@@ -190,14 +196,13 @@ internal static class ChatTestEndpoints
         ITenantContext tenant,
         ConversationRepository conversations,
         IFieldEncryptor encryptor,
+        InboxService inbox,
         CancellationToken cancellationToken)
     {
         var tenantId = tenant.RequireTenantId();
+        await RequireTestAsync(tenantId, conversationId, conversations, cancellationToken);
+        await inbox.ReturnToBotAsync(tenantId, conversationId, tenant.UserId, cancellationToken);
         var conversation = await RequireTestAsync(tenantId, conversationId, conversations, cancellationToken);
-        conversation.Mode = ConversationMode.Bot;
-        conversation.HandoffReason = null;
-        conversation.Urgency = Urgency.None;
-        await conversations.SaveChangesAsync(cancellationToken);
         return TypedResults.Ok(await ToResponseAsync(tenantId, conversation, conversations, encryptor, cancellationToken));
     }
 

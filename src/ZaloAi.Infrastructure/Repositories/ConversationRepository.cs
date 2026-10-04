@@ -142,6 +142,17 @@ public sealed class ConversationRepository(AppDbContext db, ITenantContext tenan
             .FirstOrDefaultAsync(cancellationToken);
     }
 
+    /// <summary>Tin ra còn chờ gửi của hội thoại (được track), cũ trước.</summary>
+    public async Task<IReadOnlyList<Message>> ListPendingOutgoingAsync(Guid tenantId, Guid conversationId, CancellationToken cancellationToken)
+    {
+        EnsureTenant(tenantId);
+        return await Db.Messages
+            .Where(m => m.TenantId == tenantId && m.ConversationId == conversationId
+                        && m.Direction == MessageDirection.Out && m.DeliveryStatus == DeliveryStatus.Pending)
+            .OrderBy(m => m.CreatedAt).ThenBy(m => m.Id)
+            .ToListAsync(cancellationToken);
+    }
+
     public Task<bool> HasBotReplyAsync(Guid tenantId, Guid conversationId, CancellationToken cancellationToken)
     {
         EnsureTenant(tenantId);
@@ -159,6 +170,57 @@ public sealed class ConversationRepository(AppDbContext db, ITenantContext tenan
             .OrderByDescending(c => c.UpdatedAt)
             .Take(Math.Clamp(limit, 1, 100))
             .ToListAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Danh sách hộp thư: ca đang chờ người lên đầu (chờ lâu nhất trước), rồi theo tin mới nhất. Kèm khách và tin cuối.
+    /// </summary>
+    /// <param name="filter">attention | bot | human | mine | all</param>
+    public async Task<IReadOnlyList<InboxRow>> ListInboxAsync(
+        Guid tenantId,
+        string filter,
+        Guid? userId,
+        bool includeTest,
+        int limit,
+        CancellationToken cancellationToken)
+    {
+        EnsureTenant(tenantId);
+        var query = Db.Conversations.AsNoTracking().Where(c => c.TenantId == tenantId && c.Status == ConversationStatus.Open);
+        if (!includeTest)
+        {
+            query = query.Where(c => !c.IsTest);
+        }
+
+        query = filter switch
+        {
+            "attention" => query.Where(c => c.NeedsAttentionSince != null),
+            "bot" => query.Where(c => c.Mode == ConversationMode.Bot),
+            "human" => query.Where(c => c.Mode == ConversationMode.Human),
+            "mine" => query.Where(c => c.AssignedUserId == userId),
+            _ => query,
+        };
+
+        var conversations = await query
+            .OrderBy(c => c.NeedsAttentionSince == null)
+            .ThenBy(c => c.NeedsAttentionSince)
+            .ThenByDescending(c => c.LastMessageAt ?? c.UpdatedAt)
+            .Take(Math.Clamp(limit, 1, 200))
+            .ToListAsync(cancellationToken);
+
+        var ids = conversations.Select(c => c.Id).ToList();
+        var contactIds = conversations.Select(c => c.ContactId).Distinct().ToList();
+        var contacts = await Db.Contacts.AsNoTracking()
+            .Where(c => c.TenantId == tenantId && contactIds.Contains(c.Id))
+            .ToDictionaryAsync(c => c.Id, cancellationToken);
+        var lastMessages = await Db.Messages.AsNoTracking()
+            .Where(m => m.TenantId == tenantId && ids.Contains(m.ConversationId))
+            .GroupBy(m => m.ConversationId)
+            .Select(g => g.OrderByDescending(m => m.CreatedAt).ThenByDescending(m => m.Id).First())
+            .ToDictionaryAsync(m => m.ConversationId, cancellationToken);
+
+        return conversations
+            .Select(c => new InboxRow(c, contacts[c.ContactId], lastMessages.GetValueOrDefault(c.Id)))
+            .ToList();
     }
 
     /// <summary>Tổng chi phí AI (USD) và số lần gọi của một hội thoại.</summary>
@@ -198,3 +260,6 @@ public sealed class ConversationRepository(AppDbContext db, ITenantContext tenan
         Db.Conversations.Remove(conversation);
     }
 }
+
+/// <summary>Một dòng hộp thư: hội thoại + khách + tin cuối (có thể chưa có tin).</summary>
+public sealed record InboxRow(Conversation Conversation, Contact Contact, Message? LastMessage);
