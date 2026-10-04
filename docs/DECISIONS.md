@@ -140,3 +140,18 @@ Mỗi quyết định: ngày, nội dung, lý do, hệ quả.
 - **Hàng đợi `messages`** ưu tiên trước `default` (đánh chỉ mục, đọc tài liệu) để khách không phải chờ việc nền.
 - **Chat thử:** chỉ thao tác hội thoại `is_test` của tenant hiện tại; giới hạn 20 tin/phút/người dùng (mỗi tin tốn tiền AI). Giọng văn (thân thiện/chuyên nghiệp/ngắn gọn) + hướng dẫn thêm ≤ 1000 ký tự, đặt SAU quy tắc hệ thống và ghi rõ không ghi đè được an toàn.
 - **Eval:** `evals.json` trong mẫu ngành; lệnh `dotnet run --project src/ZaloAi.Api -- eval` chạy trên kho kiến thức thật bằng AI thật; "bịa giá" = số tiền trong câu trả lời không có trong dữ liệu DN. Ngưỡng: thường ≥ 85%, 0 bịa giá, an toàn 100%.
+
+## 2026-10-04 — Kết nối Zalo OA (M4)
+
+- **Nguồn API:** mọi chi tiết Zalo (OAuth v4 + PKCE, token 25 giờ / refresh 3 tháng dùng 1 lần, webhook + chữ ký, gửi tin tư vấn, mã lỗi) lấy từ docs chính thức do chủ dự án chụp/copy, ghi ở `docs/zalo-api-notes.md` kèm ngày. Trang docs developers.zalo.me hiển thị bằng JS + Cloudflare nên Claude không tự đọc được.
+- **Phụ thuộc:** Infrastructure tham chiếu Channels (để lưu token/khóa/mã hóa quanh `ZaloClient`). Channels vẫn chỉ phụ thuộc Core, chỉ lo giao thức Zalo (HTTP, chữ ký, PKCE, đọc sự kiện). Không có vòng lặp.
+- **Redis** (`StackExchange.Redis`, đã duyệt ở M1) qua `IDistributedStore`: khóa làm mới token theo kết nối (Lua so-khớp để không nhả khóa người khác), OAuth state 10 phút dùng 1 lần (GETDEL), chống trùng webhook theo `oa_id:msg_id` 1 ngày, đếm giới hạn gửi theo OA/phút. Test bằng `Testcontainers.Redis`.
+- **Một OA chỉ thuộc một DN** (unique `channel + external_id` toàn hệ thống): webhook tìm DN theo OA ID phải ra đúng 1. DN khác kết nối OA đang dùng → báo "oa_in_use", không lộ DN nào. Ngắt kết nối = xóa dòng (xóa luôn token), hội thoại giữ lại (`connection_id` → null).
+- **Callback OAuth không đăng nhập:** tenant + user + code_verifier lấy từ state trong Redis, không từ query. Lỗi → chuyển về trang Kênh với `?error=<mã ngắn>`. URL callback có `code`: request log chỉ ghi path.
+- **Webhook:** đọc nguyên body → kiểm `X-ZEvent-Signature` (sha256(appId + body + timestamp + OA Secret Key)), chấp nhận có/không tiền tố `mac=` và hex hoa/thường vì docs chưa rõ (ghi log *định dạng* header khi sai để đối chiếu với Zalo thật) → đúng app → chống trùng → lưu tin mã hóa → xếp job → 200. Tin bot gửi qua API dội về (`oa_send_*` không có `admin_id`) bị bỏ qua; có `admin_id` = nhân viên trả lời trong app OA → hội thoại chuyển `human`, bot im.
+- **Không tự retry POST tới Zalo ở tầng HTTP** (`DisableForUnsafeHttpMethods`): refresh token chỉ dùng 1 lần, gửi lại tin = khách nhận 2 lần. Job thử lại có kiểm tra trạng thái: tin bot lưu `pending` trước khi gửi; chạy lại thì gửi lại đúng tin đó (không gọi AI lần 2). Còn rủi ro nhỏ: Zalo đã nhận tin nhưng mất phản hồi → gửi lại 1 lần.
+- **Phân loại lỗi gửi:** -216/-220 → làm mới token rồi gửi lại 1 lần; -223/-219/-209/-212/-204/-205 → kết nối `needs_reauth` (log Error → Sentry); -230/-232/-227/-213/-244/-218 → tin `failed`, không gửi lại; -32/-200/5xx/mạng → job thử lại.
+- **Tin không phải chữ** (ảnh, video, file, thoại, vị trí): lưu dạng "[Khách gửi hình ảnh]", bot trả lời cố định + chuyển nhân viên, không gọi AI (không bịa nội dung ảnh). Sticker: đáp ngắn, không chuyển người.
+- **Không gọi AI** khi kênh Zalo của hội thoại đã ngắt hoặc cần cấp quyền lại.
+- **Làm mới token:** job quét 30 phút/lần, token còn < 2 giờ thì xếp job làm mới riêng cho từng kết nối (trong đúng tenant). Ngoài ra làm mới ngay khi gửi tin gặp -216/-220.
+- **Quyền app xin OA cấp** tối thiểu cho GĐ1: gửi tin, thông tin OA, tin nhắn người dùng; webhook tin nhắn + người dùng. ZNS/Template bật lại ở GĐ2 (OA phải cấp quyền lại).

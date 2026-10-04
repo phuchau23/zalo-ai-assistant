@@ -1,9 +1,18 @@
 # Tiến độ
 
 ## Đang làm
-- Module: **M3 — Lõi AI + chat thử: XONG phần code** (2026-10-04). Chờ chủ dự án chạy chat thử trên giao diện + đánh giá câu trả lời (tiêu chí xong M3)
-- Task: 10 bước xong (xem Kế hoạch M3); eval spa chạy bằng Gemini thật — kết quả ở mục "Đã xong"
-- Chặn bởi: không
+- Module: **M4 — Kết nối Zalo: XONG phần code** (2026-10-04, bước 1–7). Còn bước 8: chạy thật với OA test (cần tên miền trên Cloudflare + cấu hình Zalo)
+- Chặn bởi: chủ dự án chuyển DNS `haulp.io.vn` sang Cloudflare, lấy OA Secret Key, lưu user-secrets Zalo
+
+## Kế hoạch M4 (2026-10-04) — đã duyệt 2026-10-04 ("làm liền", đường hầm Cloudflare + haulp.io.vn)
+1. `feat(m4)`: Redis (`StackExchange.Redis`, `Testcontainers.Redis`) — `IDistributedStore`: khóa, state, chống trùng, bộ đếm
+2. `feat(m4)`: bảng `channel_connections` (token mã hóa, unique OA toàn hệ thống), `conversations.connection_id`, trạng thái gửi tin
+3. `feat(m4)`: `ZaloClient` (đổi code, làm mới token, gửi tin, phân loại lỗi), PKCE, chữ ký webhook, đọc sự kiện
+4. `feat(m4)`: kết nối OA (OAuth v4 + PKCE + state), danh sách / ngắt kết nối
+5. `feat(m4)`: webhook `/webhooks/zalo` (chữ ký, chống trùng, tin khách, nhân viên trả lời trong app OA, ảnh/sticker)
+6. `feat(m4)`: adapter Zalo (cắt tin dài, làm mới token khi lỗi, giới hạn gửi theo OA), job làm mới token định kỳ, job gửi lại tin pending
+7. `feat(m4)` (FE): trang Kết nối kênh
+8. `test(m4)`: chạy thật với OA test qua Cloudflare Tunnel
 
 ## Kế hoạch M3 (2026-10-04) — đã duyệt 2026-10-04 ("làm liền 10 bước, test 1 lần")
 Chủ dự án chốt: chỉ Gemini (bỏ Claude); ngưỡng eval thường ≥ 85%, 0 bịa giá, an toàn 100%; chỉ ngành spa (Khoa Học Huyệt Đạo).
@@ -60,6 +69,7 @@ Thay kế hoạch pnpm ngày 2026-09-30 (xem DECISIONS.md). 8 bước, mỗi bư
 - [x] B5: 2 tenant mẫu: "Khoa Học Nguyệt Đạo" (bấm huyệt, massage → slug `spa`, rủi ro Cao) — đổi thành "Khoa Học Huyệt Đạo" (tên thật) ngày 2026-10-03 và "Sửa nhà An Phát" (sửa nhà, rủi ro thấp)
 
 ## Đã xong
+- [x] M4 bước 1–7 (2026-10-04): Redis, `channel_connections` (migration `AddChannelConnections`, đã áp DB dev), ZaloClient, kết nối OA, webhook, adapter + job làm mới token, trang Kết nối kênh. BE 186 unit + 100 integration test (Zalo giả lập: OAuth/PKCE/state 1 lần, chữ ký sai 401, webhook trùng, tin bot dội về, nhân viên trả lời trong app OA, token hết hạn tự làm mới, khách quá 7 ngày, ảnh). FE 32 test (sau M3 là 28 — báo cáo M3 ghi nhầm 33)
 - [x] **M3 code xong** (2026-10-04): 10 bước theo kế hoạch. Eval spa trên dữ liệu thật Khoa Học Huyệt Đạo, model `gemini-3.5-flash-lite` (model chính `gemini-3.8-flash` hết quota gói free 20 request/ngày): câu thường + ngoài phạm vi **30/30 = 100%**, bịa giá **0**, an toàn **24/24 = 100%** (lần chạy cuối, sau khi thêm câu cấm "hoàn toàn an toàn" và sửa quy tắc khẩn cấp chỉ cho dấu hiệu cấp tính). Chi phí ≈ $0.06 cho 54 câu. 163 unit + 78 integration test BE; 33 test FE. Còn: chủ dự án tự chat thử trên giao diện và đánh giá; chạy lại eval với `gemini-3.8-flash` khi có quota/gói trả phí
 - [x] **M2 đạt tiêu chí xong** (2026-10-03): chạy thử đầu-cuối qua FE với Gemini thật trên dữ liệu mẫu Khoa Học Huyệt Đạo — 6/6 câu hỏi mẫu ra đúng mục ở vị trí đầu (ví dụ "giá massage đông y 60 phút" → DV-MASSAGE-DONG-Y-60), nhập v2 ra đúng bản so sánh mong đợi, tài liệu tự do đọc + tìm được; tenant B không tìm thấy dữ liệu A (test). Còn: chủ dự án tự nạp qua giao diện, và thử với dữ liệu thật của DN dùng thử khi có
 - [x] M2 bước 8: chạy thử đầu-cuối (script qua FE, Gemini thật, tenant An Phát rồi dọn sạch); sửa OpenAPI sinh `number | string` (JSON chỉ nhận số thật) (2026-10-03)
@@ -84,6 +94,10 @@ Thay kế hoạch pnpm ngày 2026-09-30 (xem DECISIONS.md). 8 bước, mỗi bư
 - [x] Viết ROADMAP.md (10 phase đến phát hành), FEATURE-SPECS.md (chuyển tiếp, "Cần chăm sóc", tình huống chăm sóc), INDUSTRIES.md (mẫu ngành, bộ an toàn y tế) (2026-10-01)
 
 ## Vấn đề mở / nợ kỹ thuật
+- Zalo: chưa kiểm bằng request thật: định dạng header chữ ký (`mac=`?), `timeStamp` có phải trường `timestamp`, PKCE Base64 chuẩn hay base64url, định dạng lỗi của endpoint OAuth → kiểm ở bước 8 (log định dạng header khi chữ ký sai)
+- Zalo: chưa có payload quan tâm/bỏ quan tâm (đang bỏ qua), chưa lấy tên OA / tên khách (cần docs API thông tin OA/người dùng)
+- Gửi tin: Zalo nhận tin nhưng mất phản hồi → job gửi lại 1 lần (rủi ro trùng nhỏ); tin dài cắt nhiều phần lỗi giữa chừng → phần đầu có thể gửi lại
+- needs_reauth mới chỉ ghi log Error (Sentry) + hiện trên trang Kênh; thông báo Telegram ở M5
 - Gói Gemini free: `gemini-3.8-flash` chỉ 20 request/ngày → chat thử hay rơi về model dự phòng lite. Nên bật billing (vừa để test thật, vừa bắt buộc cho production)
 - Eval câu thường chưa chạy lại sau lần sửa quy tắc khẩn cấp cuối (chỉ chạy lại phần an toàn)
 - Dữ liệu mẫu có ghi chú nội bộ ("⚠ ... bot phải ...") trong trường note — AI đọc được, không nên để trong dữ liệu thật của DN
