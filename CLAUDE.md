@@ -384,15 +384,15 @@ Tiêu chí xong: chủ DN dùng thử tự chat trên khung chat thử và đán
 ### M4 — Kết nối Zalo (tuần 4)
 Trước khi code: dùng skill `zalo-api-work`, cập nhật `docs/zalo-api-notes.md` (OAuth cho OA, đổi/làm mới token, thời hạn token, chữ ký webhook, API gửi tin tư vấn, các loại sự kiện, giới hạn tốc độ).
 Task:
-- [ ] Adapter `zalo`: `ZaloClient` (timeout, retry, redact), parse sự kiện webhook → định dạng chung.
-- [ ] OAuth: `/connect/zalo/start` (tạo state, PKCE nếu cần) → `/connect/zalo/callback` → lưu connection mã hóa. Hỗ trợ nhiều OA/tenant.
-- [ ] Webhook `/webhooks/zalo`: xác thực chữ ký → dedupe `external_msg_id` → tìm connection theo OA ID → enqueue `incoming-message` → 200.
-- [ ] Worker dùng chung luồng với webchat; gửi trả lời qua Zalo API.
-- [ ] Job `token-refresh` chạy định kỳ, refresh trước hạn, Redis lock theo OA; lỗi → `needs_reauth` + thông báo.
-- [ ] Xử lý sự kiện: tin text, ảnh (GĐ1 chỉ ghi nhận + chuyển người hoặc trả lời chung), follow/unfollow.
-- [ ] Rate limit gửi theo OA; retry với backoff.
-- [ ] Admin: trang Kết nối kênh (kết nối, trạng thái, ngắt kết nối).
-- [ ] Hướng dẫn chạy local với ngrok/cloudflared trong README.
+- [x] Adapter `zalo`: `ZaloClient` (timeout, retry, redact), parse sự kiện webhook → định dạng chung.
+- [x] OAuth: `/connect/zalo/start` (tạo state, PKCE nếu cần) → `/connect/zalo/callback` → lưu connection mã hóa. Hỗ trợ nhiều OA/tenant.
+- [x] Webhook `/webhooks/zalo`: xác thực chữ ký → dedupe `external_msg_id` → tìm connection theo OA ID → enqueue `incoming-message` → 200.
+- [x] Worker dùng chung luồng với webchat; gửi trả lời qua Zalo API.
+- [x] Job `token-refresh` chạy định kỳ, refresh trước hạn, Redis lock theo OA; lỗi → `needs_reauth` + thông báo.
+- [ ] Xử lý sự kiện: tin text, ảnh (GĐ1 chỉ ghi nhận + chuyển người hoặc trả lời chung), follow/unfollow. — Text, ảnh/file/sticker, OA gửi tin (nhân viên trả lời trong app OA) xong; follow/unfollow chờ docs payload (hiện bỏ qua).
+- [x] Rate limit gửi theo OA; retry với backoff.
+- [x] Admin: trang Kết nối kênh (kết nối, trạng thái, ngắt kết nối).
+- [x] Hướng dẫn chạy local với ngrok/cloudflared trong README.
 
 Tiêu chí xong: nhắn vào OA test từ Zalo cá nhân → nhận câu trả lời đúng trong vài giây; ngắt kết nối → dừng trả lời; giả lập token hết hạn → tự refresh; gửi webhook trùng → chỉ trả lời 1 lần; chữ ký sai → 401.
 

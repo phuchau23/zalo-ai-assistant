@@ -129,7 +129,7 @@ public sealed class AuthEndpointsTests(PostgresFixture db)
     [Fact]
     public async Task Sixth_login_attempt_in_a_minute_is_rate_limited()
     {
-        await using var api = new ApiFactory(db.ConnectionString, loginPermitPerMinute: 5);
+        await using var api = new ApiFactory(db.ConnectionString, loginPermitPerMinute: 5, redisConnectionString: db.RedisConnectionString);
         using var client = api.CreateClient();
 
         for (var i = 0; i < 5; i++)

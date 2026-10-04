@@ -63,6 +63,9 @@ public sealed class Conversation : ITenantOwned
 
     public ChannelKind Channel { get; set; }
 
+    /// <summary>Kênh đã kết nối nhận tin (Zalo OA). null với webchat, hoặc khi DN đã ngắt kết nối kênh.</summary>
+    public Guid? ConnectionId { get; set; }
+
     public ConversationMode Mode { get; set; } = ConversationMode.Bot;
 
     public ConversationStatus Status { get; set; } = ConversationStatus.Open;
@@ -92,6 +95,18 @@ public enum MessageDirection
 {
     In = 0,
     Out = 1,
+}
+
+/// <summary>Trạng thái gửi tin ra kênh (chỉ tin Out). Job chạy lại: Pending → gửi lại đúng tin đó, không sinh câu trả lời mới.</summary>
+public enum DeliveryStatus
+{
+    /// <summary>Tin vào, hoặc kênh không cần gửi.</summary>
+    None = 0,
+    Pending = 1,
+    Sent = 2,
+
+    /// <summary>Lỗi vĩnh viễn (khách không còn nhận được, token hỏng...) — không gửi lại.</summary>
+    Failed = 3,
 }
 
 public enum MessageSender
@@ -127,6 +142,11 @@ public sealed class Message : ITenantOwned
     /// KHÔNG chứa nội dung tin hay dữ liệu cá nhân (nội dung nằm ở ContentEnc).
     /// </summary>
     public string? AiTraceJson { get; set; }
+
+    public DeliveryStatus DeliveryStatus { get; set; }
+
+    /// <summary>Mã lỗi gửi gần nhất (ví dụ "zalo:-230"), không chứa nội dung.</summary>
+    public string? DeliveryError { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }
 }

@@ -6,6 +6,7 @@ using Microsoft.Extensions.Options;
 using ZaloAi.Ai.Privacy;
 using ZaloAi.Ai.Safety;
 using ZaloAi.Core.Ai;
+using ZaloAi.Core.Channels;
 using ZaloAi.Core.Entities;
 using ZaloAi.Core.Errors;
 using ZaloAi.Core.Options;
@@ -53,6 +54,19 @@ public sealed partial class BotEngine(
             trace.DangerSignal = danger;
             trace.Guards.Add("danger_keyword");
             return Finish(request, texts, trace, vault, usage, new Decision(texts.Urgent, true, "urgent", Urgency.Urgent, "high", null, []));
+        }
+
+        // Tin không phải chữ (ảnh, video, file...): bot chưa xem được → trả lời cố định, không gọi AI (không bịa nội dung ảnh).
+        if (InboundText.IsMedia(request.CustomerMessage))
+        {
+            trace.Guards.Add("media_handoff");
+            return Finish(request, texts, trace, vault, usage, new Decision(texts.Media, true, "media", Urgency.None, "high", null, []));
+        }
+
+        if (request.CustomerMessage == InboundText.Sticker)
+        {
+            trace.Guards.Add("sticker_reply");
+            return Finish(request, texts, trace, vault, usage, new Decision(texts.Sticker, false, null, Urgency.None, "high", null, []));
         }
 
         // 2. Tìm kiến thức (câu đã che — không gửi dữ liệu cá nhân cho dịch vụ tạo vector).
@@ -442,6 +456,10 @@ internal sealed class BotTexts(IndustryTemplate template, BotProfile profile)
     public string Urgent => Fill(template.UrgentReply);
 
     public string Handoff => Fill("Dạ {bot} xin phép chuyển {khach} sang nhân viên của {ten_doanh_nghiep} để hỗ trợ chính xác hơn ạ. Nhân viên sẽ phản hồi {khach} sớm nhất có thể.");
+
+    public string Media => Fill("Dạ {bot} đã nhận được tin của {khach}. Hiện {bot} chưa xem được hình ảnh, âm thanh hay tệp đính kèm, {khach} mô tả giúp {bot} bằng chữ nhé. {bot} cũng đã báo nhân viên của {ten_doanh_nghiep} hỗ trợ {khach} ạ.");
+
+    public string Sticker => Fill("Dạ, {bot} có thể hỗ trợ gì thêm cho {khach} ạ?");
 
     public string MedicalDisclaimer => Fill("Để xác định chính xác tình trạng, {khach} cần bác sĩ/chuyên viên thăm khám trực tiếp ạ.");
 

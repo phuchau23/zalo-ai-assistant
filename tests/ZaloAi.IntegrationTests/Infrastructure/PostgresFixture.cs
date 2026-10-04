@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Testcontainers.PostgreSql;
+using Testcontainers.Redis;
 using ZaloAi.Ai;
 using ZaloAi.Channels;
 using ZaloAi.Core.Entities;
@@ -19,6 +20,7 @@ namespace ZaloAi.IntegrationTests.Infrastructure;
 public sealed class PostgresFixture : IAsyncLifetime
 {
     private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("pgvector/pgvector:pg16").Build();
+    private readonly RedisContainer _redis = new RedisBuilder("redis:7-alpine").Build();
 
     public const string TestPassword = "Test@123456";
 
@@ -26,14 +28,16 @@ public sealed class PostgresFixture : IAsyncLifetime
 
     public string ConnectionString => _container.GetConnectionString();
 
+    public string RedisConnectionString => _redis.GetConnectionString();
+
     /// <summary>API dùng chung cho các test (rate limit login nới rộng). Test rate limit tự tạo factory riêng.</summary>
-    public ApiFactory Api => _api ??= new ApiFactory(ConnectionString);
+    public ApiFactory Api => _api ??= new ApiFactory(ConnectionString, redisConnectionString: RedisConnectionString);
 
     public static string OwnerEmail(Guid tenantId) => $"owner-{tenantId:N}@test.local";
 
     public async Task InitializeAsync()
     {
-        await _container.StartAsync();
+        await Task.WhenAll(_container.StartAsync(), _redis.StartAsync());
         await using var db = CreateDbContext(tenantId: null);
         await db.Database.MigrateAsync();
         await ZaloAi.Infrastructure.Jobs.HangfireSetup.EnsureSchemaAsync(ConnectionString, CancellationToken.None);
@@ -47,6 +51,7 @@ public sealed class PostgresFixture : IAsyncLifetime
         }
 
         await _container.DisposeAsync();
+        await _redis.DisposeAsync();
     }
 
     public AppDbContext CreateDbContext(Guid? tenantId) => CreateDbContext(CreateTenantContext(tenantId));
@@ -79,6 +84,7 @@ public sealed class PostgresFixture : IAsyncLifetime
                 ["App:ApiUrl"] = "http://localhost:4000",
                 ["Security:EncryptionKey"] = ApiFactory.NewEncryptionKey(),
                 ["ConnectionStrings:Postgres"] = ConnectionString,
+                ["ConnectionStrings:Redis"] = RedisConnectionString,
                 ["Ai:EmbedProvider"] = "fake",
                 ["Ai:ChatProvider"] = "fake",
                 ["Storage:LocalRoot"] = ApiFactory.TestStorageRoot,

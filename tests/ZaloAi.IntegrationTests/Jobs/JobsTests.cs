@@ -29,6 +29,7 @@ public sealed class JobsTests(PostgresFixture db)
             ["App:ApiUrl"] = "http://localhost:4000",
             ["Security:EncryptionKey"] = ApiFactory.NewEncryptionKey(),
             ["ConnectionStrings:Postgres"] = db.ConnectionString,
+            ["ConnectionStrings:Redis"] = db.RedisConnectionString,
             ["Jobs:QueuePollSeconds"] = "1",
             ["Jobs:WorkerCount"] = "2",
             ["Ai:EmbedProvider"] = "fake",

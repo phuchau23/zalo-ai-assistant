@@ -88,6 +88,94 @@ namespace ZaloAi.Infrastructure.Persistence.Migrations
                     b.ToTable("audit_logs", (string)null);
                 });
 
+            modelBuilder.Entity("ZaloAi.Core.Entities.ChannelConnection", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("AccessTokenEnc")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("access_token_enc");
+
+                    b.Property<DateTimeOffset>("AccessTokenExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("access_token_expires_at");
+
+                    b.Property<string>("Channel")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("channel");
+
+                    b.Property<Guid?>("ConnectedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("connected_by_user_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("ExternalId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("external_id");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("last_error");
+
+                    b.Property<DateTimeOffset?>("LastRefreshedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_refreshed_at");
+
+                    b.Property<string>("Name")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("RefreshTokenEnc")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("refresh_token_enc");
+
+                    b.Property<DateTimeOffset>("RefreshTokenExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("refresh_token_expires_at");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_channel_connections");
+
+                    b.HasIndex("Channel", "ExternalId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_channel_connections_channel_external_id");
+
+                    b.HasIndex("Status", "AccessTokenExpiresAt")
+                        .HasDatabaseName("ix_channel_connections_status_access_token_expires_at");
+
+                    b.HasIndex("TenantId", "Channel")
+                        .HasDatabaseName("ix_channel_connections_tenant_id_channel");
+
+                    b.ToTable("channel_connections", (string)null);
+                });
+
             modelBuilder.Entity("ZaloAi.Core.Entities.Chunk", b =>
                 {
                     b.Property<Guid>("Id")
@@ -218,6 +306,10 @@ namespace ZaloAi.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(20)")
                         .HasColumnName("channel");
 
+                    b.Property<Guid?>("ConnectionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("connection_id");
+
                     b.Property<Guid>("ContactId")
                         .HasColumnType("uuid")
                         .HasColumnName("contact_id");
@@ -276,6 +368,9 @@ namespace ZaloAi.Infrastructure.Persistence.Migrations
                     b.HasKey("Id")
                         .HasName("pk_conversations");
 
+                    b.HasIndex("ConnectionId")
+                        .HasDatabaseName("ix_conversations_connection_id");
+
                     b.HasIndex("ContactId")
                         .HasDatabaseName("ix_conversations_contact_id");
 
@@ -284,6 +379,9 @@ namespace ZaloAi.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("TenantId", "UpdatedAt")
                         .HasDatabaseName("ix_conversations_tenant_id_updated_at");
+
+                    b.HasIndex("TenantId", "ConnectionId", "ContactId")
+                        .HasDatabaseName("ix_conversations_tenant_id_connection_id_contact_id");
 
                     b.ToTable("conversations", (string)null);
                 });
@@ -566,6 +664,19 @@ namespace ZaloAi.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<string>("DeliveryError")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("delivery_error");
+
+                    b.Property<string>("DeliveryStatus")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("none")
+                        .HasColumnName("delivery_status");
+
                     b.Property<string>("Direction")
                         .IsRequired()
                         .HasMaxLength(10)
@@ -812,6 +923,16 @@ namespace ZaloAi.Infrastructure.Persistence.Migrations
                         .HasConstraintName("fk_audit_logs_users_user_id");
                 });
 
+            modelBuilder.Entity("ZaloAi.Core.Entities.ChannelConnection", b =>
+                {
+                    b.HasOne("ZaloAi.Core.Entities.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_channel_connections_tenants_tenant_id");
+                });
+
             modelBuilder.Entity("ZaloAi.Core.Entities.Chunk", b =>
                 {
                     b.HasOne("ZaloAi.Core.Entities.KnowledgeDocument", null)
@@ -846,6 +967,12 @@ namespace ZaloAi.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("ZaloAi.Core.Entities.Conversation", b =>
                 {
+                    b.HasOne("ZaloAi.Core.Entities.ChannelConnection", null)
+                        .WithMany()
+                        .HasForeignKey("ConnectionId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_conversations_channel_connections_connection_id");
+
                     b.HasOne("ZaloAi.Core.Entities.Contact", null)
                         .WithMany()
                         .HasForeignKey("ContactId")

@@ -10,6 +10,7 @@ using Microsoft.Extensions.Options;
 using ZaloAi.Api.Auth;
 using ZaloAi.Api.Chat;
 using ZaloAi.Api.Common;
+using ZaloAi.Api.Connections;
 using ZaloAi.Api.Jobs;
 using ZaloAi.Api.Knowledge;
 using ZaloAi.Api.Tenants;
@@ -82,6 +83,18 @@ internal static class ApiSetup
                     _ => new FixedWindowRateLimiterOptions { PermitLimit = permit, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 });
             });
 
+            options.AddPolicy(RateLimitSettings.WebhookPolicy, http =>
+            {
+                var permit = http.RequestServices.GetRequiredService<IOptions<RateLimitSettings>>().Value.WebhookPermitPerMinute;
+                return RateLimitPartition.GetFixedWindowLimiter(
+                    http.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                    _ => new FixedWindowRateLimiterOptions { PermitLimit = permit, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 });
+            });
+
+            options.AddPolicy(RateLimitSettings.OAuthCallbackPolicy, http => RateLimitPartition.GetFixedWindowLimiter(
+                http.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                _ => new FixedWindowRateLimiterOptions { PermitLimit = 20, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+
             options.AddPolicy(RateLimitSettings.ChatTestPolicy, http =>
             {
                 var permit = http.RequestServices.GetRequiredService<IOptions<RateLimitSettings>>().Value.ChatTestPermitPerMinute;
@@ -119,6 +132,8 @@ internal static class ApiSetup
         app.MapKnowledgeImportEndpoints();
         app.MapKnowledgeSearchEndpoints();
         app.MapChatTestEndpoints();
+        app.MapChannelEndpoints();
+        app.MapZaloWebhookEndpoints();
 
         app.MapHangfireDashboard("/hangfire", new DashboardOptions
         {

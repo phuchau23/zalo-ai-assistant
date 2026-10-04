@@ -8,7 +8,10 @@ namespace ZaloAi.IntegrationTests;
 /// <summary>
 /// Chạy API trong môi trường "Testing" (không đọc user-secrets của máy dev), cấu hình hoàn toàn từ test.
 /// </summary>
-public class ApiFactory(string connectionString = "Host=localhost;Database=unused", int loginPermitPerMinute = 1000)
+public class ApiFactory(
+    string connectionString = "Host=localhost;Database=unused",
+    int loginPermitPerMinute = 1000,
+    string redisConnectionString = "localhost:1")
     : WebApplicationFactory<Program>
 {
     public static string NewEncryptionKey() => Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
@@ -22,6 +25,7 @@ public class ApiFactory(string connectionString = "Host=localhost;Database=unuse
         ["App:ApiUrl"] = "http://localhost:4000",
         ["Security:EncryptionKey"] = NewEncryptionKey(),
         ["ConnectionStrings:Postgres"] = connectionString,
+        ["ConnectionStrings:Redis"] = redisConnectionString,
         ["RateLimit:LoginPermitPerMinute"] = loginPermitPerMinute.ToString(System.Globalization.CultureInfo.InvariantCulture),
         ["Ai:EmbedProvider"] = "fake",
         ["Ai:ChatProvider"] = "fake",

@@ -41,6 +41,31 @@ internal sealed class ConversationConfiguration : IEntityTypeConfiguration<Conve
 
         builder.HasOne<Tenant>().WithMany().HasForeignKey(c => c.TenantId).OnDelete(DeleteBehavior.Cascade);
         builder.HasOne<Contact>().WithMany().HasForeignKey(c => c.ContactId).OnDelete(DeleteBehavior.Cascade);
+        builder.HasOne<ChannelConnection>().WithMany().HasForeignKey(c => c.ConnectionId).OnDelete(DeleteBehavior.SetNull);
+        builder.HasIndex(c => new { c.TenantId, c.ConnectionId, c.ContactId });
+    }
+}
+
+internal sealed class ChannelConnectionConfiguration : IEntityTypeConfiguration<ChannelConnection>
+{
+    public void Configure(EntityTypeBuilder<ChannelConnection> builder)
+    {
+        builder.ToTable("channel_connections");
+        builder.HasKey(c => c.Id);
+        builder.Property(c => c.Id).ValueGeneratedNever();
+
+        builder.Property(c => c.Channel).HasMaxLength(20).HasConversion<LowercaseEnumConverter<ChannelKind>>();
+        builder.Property(c => c.ExternalId).HasMaxLength(100);
+        builder.Property(c => c.Name).HasMaxLength(200);
+        builder.Property(c => c.Status).HasMaxLength(20).HasConversion<LowercaseEnumConverter<ConnectionStatus>>();
+        builder.Property(c => c.LastError).HasMaxLength(100);
+
+        // Một OA chỉ thuộc một DN: webhook tìm DN theo OA ID phải ra đúng 1 kết quả.
+        builder.HasIndex(c => new { c.Channel, c.ExternalId }).IsUnique();
+        builder.HasIndex(c => new { c.TenantId, c.Channel });
+        builder.HasIndex(c => new { c.Status, c.AccessTokenExpiresAt });
+
+        builder.HasOne<Tenant>().WithMany().HasForeignKey(c => c.TenantId).OnDelete(DeleteBehavior.Cascade);
     }
 }
 
@@ -56,6 +81,9 @@ internal sealed class MessageConfiguration : IEntityTypeConfiguration<Message>
         builder.Property(m => m.Sender).HasMaxLength(20).HasConversion<LowercaseEnumConverter<MessageSender>>();
         builder.Property(m => m.ExternalMessageId).HasMaxLength(100);
         builder.Property(m => m.AiTraceJson).HasColumnName("ai_trace").HasColumnType("jsonb");
+        builder.Property(m => m.DeliveryStatus).HasMaxLength(20).HasConversion<LowercaseEnumConverter<DeliveryStatus>>()
+            .HasDefaultValue(DeliveryStatus.None).HasSentinel((DeliveryStatus)(-1));
+        builder.Property(m => m.DeliveryError).HasMaxLength(100);
 
         builder.HasIndex(m => new { m.TenantId, m.ConversationId, m.CreatedAt });
 
