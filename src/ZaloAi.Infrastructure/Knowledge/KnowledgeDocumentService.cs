@@ -86,6 +86,7 @@ public sealed class KnowledgeDocumentService(
         document.Status = DocumentStatus.Pending;
         document.Error = null;
         document.ChunkCount = 0;
+        document.MedicallyReviewed = false; // file mới → phải duyệt chuyên môn lại
 
         buffer.Position = 0;
         await storage.SaveAsync(document.StorageKey, buffer, cancellationToken);

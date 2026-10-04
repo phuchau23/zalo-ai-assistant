@@ -35,6 +35,12 @@ public sealed class KnowledgeItem : ITenantOwned
     /// <summary>SHA-256 (hex) của nội dung đã chuẩn hóa: so sánh nhanh có thay đổi không.</summary>
     public required string ContentHash { get; set; }
 
+    /// <summary>
+    /// Nội dung đã được người có chuyên môn duyệt (INDUSTRIES.md mục 3). Ngành có bộ an toàn y tế chỉ dùng mục đã duyệt
+    /// để nói về bệnh/tình trạng cơ thể. Nội dung đổi khi nhập file → tự bỏ duyệt.
+    /// </summary>
+    public bool MedicallyReviewed { get; set; }
+
     public Guid? UpdatedBy { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }

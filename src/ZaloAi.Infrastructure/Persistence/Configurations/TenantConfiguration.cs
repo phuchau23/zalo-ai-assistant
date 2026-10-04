@@ -19,5 +19,7 @@ internal sealed class TenantConfiguration : IEntityTypeConfiguration<Tenant>
         builder.Property(t => t.PrivacyUrl).HasMaxLength(500);
         builder.Property(t => t.Plan).HasMaxLength(30);
         builder.Property(t => t.Status).HasMaxLength(20).HasConversion<LowercaseEnumConverter<TenantStatus>>();
+        builder.Property(t => t.BotTone).HasMaxLength(20).HasConversion<LowercaseEnumConverter<BotTone>>().HasDefaultValue(BotTone.Friendly).HasSentinel((BotTone)(-1));
+        builder.Property(t => t.BotInstructions).HasMaxLength(1000);
     }
 }
