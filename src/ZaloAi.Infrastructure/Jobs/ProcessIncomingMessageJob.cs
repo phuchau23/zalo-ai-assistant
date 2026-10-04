@@ -10,6 +10,8 @@ using ZaloAi.Core.Entities;
 using ZaloAi.Core.Errors;
 using ZaloAi.Core.Options;
 using ZaloAi.Core.Security;
+using ZaloAi.Infrastructure.Customers;
+using ZaloAi.Infrastructure.Inbox;
 using ZaloAi.Infrastructure.Repositories;
 using ZaloAi.Infrastructure.Tenancy;
 
@@ -25,16 +27,22 @@ namespace ZaloAi.Infrastructure.Jobs;
 public sealed partial class ProcessIncomingMessageJob(
     TenantContext tenantContext,
     ConversationRepository conversations,
+    ContactRepository contacts,
     TenantRepository tenants,
     ChannelConnectionRepository connectionRepository,
     IBotEngine bot,
-    IEnumerable<IChannelAdapter> channels,
+    MessageDeliveryService delivery,
+    InboxService inbox,
     IFieldEncryptor encryptor,
     IOptions<AiOptions> options,
+    TimeProvider time,
     ILogger<ProcessIncomingMessageJob> logger)
 {
     /// <summary>Số tin chưa tóm tắt vượt (cửa sổ lịch sử + mức này) thì tóm tắt phần cũ.</summary>
     private const int SummarizeSlack = 6;
+
+    public const string OptOutReply =
+        "Dạ em đã ghi nhận, bên em sẽ không chủ động nhắn tin cho mình nữa ạ. Khi cần, mình cứ nhắn em nhé. (Nếu ý mình là hủy lịch hẹn, mình nhắn rõ giúp em để nhân viên hỗ trợ ạ.)";
 
     public async Task RunAsync(Guid tenantId, Guid messageId, CancellationToken cancellationToken)
     {
@@ -47,19 +55,20 @@ public sealed partial class ProcessIncomingMessageJob(
         }
 
         var conversation = await conversations.GetConversationAsync(tenantId, message.ConversationId, cancellationToken);
-        if (conversation is null)
+        var contact = conversation is null ? null : await conversations.GetContactAsync(tenantId, conversation.ContactId, cancellationToken);
+        if (conversation is null || contact is null)
         {
             return;
         }
 
-        if (await conversations.FindReplyAsync(tenantId, messageId, cancellationToken) is { } existing)
+        await TrackCustomerActivityAsync(tenantId, contact, message, cancellationToken);
+
+        if (await conversations.FindReplyAsync(tenantId, messageId, cancellationToken) is not null)
         {
-            // Đã soạn ở lần chạy trước: gửi lại ĐÚNG tin đó nếu chưa gửi được (không sinh câu trả lời mới, không tốn AI).
-            if (existing.DeliveryStatus == DeliveryStatus.Pending
-                && await conversations.GetMessageAsync(tenantId, existing.Id, cancellationToken) is { } pending
-                && await conversations.GetContactAsync(tenantId, conversation.ContactId, cancellationToken) is { } owner)
+            // Đã soạn ở lần chạy trước: gửi nốt các tin ra còn pending (câu trả lời bot, câu chuyển tiếp) — không gọi AI lần 2.
+            foreach (var pending in await conversations.ListPendingOutgoingAsync(tenantId, conversation.Id, cancellationToken))
             {
-                await DeliverAsync(tenantId, conversation, owner, pending, encryptor.Decrypt(pending.ContentEnc), cancellationToken);
+                await delivery.DeliverAsync(tenantId, conversation, contact, pending, cancellationToken);
             }
 
             return;
@@ -83,10 +92,25 @@ public sealed partial class ProcessIncomingMessageJob(
             return; // có tin mới hơn, job của tin đó sẽ trả lời gộp
         }
 
+        // Tin chỉ có lệnh từ chối ("hủy", "dừng"...): xác nhận cố định, không gọi AI. Nhắc khách nói rõ nếu ý là hủy lịch hẹn.
+        if (CareDecision.IsOptOutCommand(encryptor.Decrypt(message.ContentEnc)))
+        {
+            var ack = delivery.AddOutgoing(tenantId, conversation, MessageSender.Bot, OptOutReply, replyToMessageId: message.Id);
+            try
+            {
+                await conversations.SaveChangesAsync(cancellationToken);
+            }
+            catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+            {
+                return;
+            }
+
+            await delivery.DeliverAsync(tenantId, conversation, contact, ack, cancellationToken);
+            return;
+        }
+
         var tenant = await tenants.GetAsync(tenantId, cancellationToken)
             ?? throw new InvalidOperationException("Tenant không tồn tại.");
-        var contact = await conversations.GetContactAsync(tenantId, conversation.ContactId, cancellationToken)
-            ?? throw new InvalidOperationException("Hội thoại không có khách.");
 
         var unsummarized = await conversations.ListMessagesAsync(tenantId, conversation.Id, conversation.SummarizedUntil, cancellationToken);
         var history = unsummarized
@@ -105,16 +129,7 @@ public sealed partial class ProcessIncomingMessageJob(
                 CustomerName: contact.DisplayName),
             cancellationToken);
 
-        var reply = conversations.AddMessage(tenantId, new Message
-        {
-            ConversationId = conversation.Id,
-            Direction = MessageDirection.Out,
-            Sender = MessageSender.Bot,
-            ContentEnc = encryptor.Encrypt(result.Reply),
-            ReplyToMessageId = message.Id,
-            AiTraceJson = result.TraceJson,
-            DeliveryStatus = DeliveryStatus.Pending,
-        });
+        var reply = delivery.AddOutgoing(tenantId, conversation, MessageSender.Bot, result.Reply, replyToMessageId: message.Id, traceJson: result.TraceJson);
         AddUsage(tenantId, conversation.Id, result.Usage);
 
         if (result.NeedsHuman)
@@ -128,7 +143,9 @@ public sealed partial class ProcessIncomingMessageJob(
             conversation.Urgency = result.Urgency;
         }
 
-        MergeLeadFields(contact, result.LeadFields);
+        var leadFields = MergeLeadFields(contact, result.LeadFields);
+        var customerMessages = history.Count(t => t.Sender == MessageSender.Customer) + 1 + (conversation.SummaryEnc is null ? 0 : 3);
+        LeadRules.Promote(contact, LeadRules.FromBotTurn(leadFields, result.HandoffReason, customerMessages), time.GetUtcNow());
 
         try
         {
@@ -139,35 +156,18 @@ public sealed partial class ProcessIncomingMessageJob(
             return; // job khác vừa trả lời cùng tin này
         }
 
-        await DeliverAsync(tenantId, conversation, contact, reply, result.Reply, cancellationToken);
+        // Chuyển người: câu chuyển tiếp (trong/ngoài giờ) + chờ người + Telegram + báo hộp thư.
+        var notice = result.NeedsHuman
+            ? await inbox.AfterBotHandoffAsync(tenantId, conversation, result.Urgency, cancellationToken)
+            : null;
+
+        await delivery.DeliverAsync(tenantId, conversation, contact, reply, cancellationToken);
+        if (notice is not null)
+        {
+            await delivery.DeliverAsync(tenantId, conversation, contact, notice, cancellationToken);
+        }
+
         await SummarizeIfLongAsync(tenantId, conversation, unsummarized, cancellationToken);
-    }
-
-    /// <summary>
-    /// Gửi tin bot ra kênh rồi ghi trạng thái. Lỗi tạm → ném để Hangfire thử lại (lần sau đi nhánh "gửi lại tin Pending").
-    /// Lỗi vĩnh viễn → Failed, không thử lại.
-    /// </summary>
-    private async Task DeliverAsync(Guid tenantId, Conversation conversation, Contact contact, Message reply, string text, CancellationToken cancellationToken)
-    {
-        var channel = channels.FirstOrDefault(c => c.Channel == conversation.Channel)
-            ?? throw new InvalidOperationException($"Chưa có adapter cho kênh {conversation.Channel}.");
-        try
-        {
-            var sent = await channel.SendAsync(
-                new OutgoingMessage(tenantId, conversation.Id, reply.Id, contact.ExternalUserId, text, conversation.ConnectionId),
-                cancellationToken);
-            reply.DeliveryStatus = DeliveryStatus.Sent;
-            reply.ExternalMessageId ??= sent.ExternalMessageId;
-            reply.DeliveryError = null;
-        }
-        catch (ChannelPermanentException ex)
-        {
-            reply.DeliveryStatus = DeliveryStatus.Failed;
-            reply.DeliveryError = ex.Code;
-            LogDeliveryFailed(logger, reply.Id, ex.Code);
-        }
-
-        await conversations.SaveChangesAsync(cancellationToken);
     }
 
     private void AddUsage(Guid tenantId, Guid conversationId, IEnumerable<BotUsage> usage)
@@ -187,23 +187,65 @@ public sealed partial class ProcessIncomingMessageJob(
         }
     }
 
-    /// <summary>Gộp thông tin khách tự cung cấp vào hồ sơ khách (mã hóa cả khối, vì có tên/SĐT).</summary>
-    private void MergeLeadFields(Contact contact, IReadOnlyDictionary<string, string> leadFields)
+    /// <summary>
+    /// Mỗi tin khách: cập nhật mốc tương tác của khách; khách đã nhắn lại → gợi ý "Cần chăm sóc" đang mở tự xong (không cần nhắn nữa).
+    /// Chạy lại an toàn (chỉ tiến mốc thời gian, gợi ý đã đóng thì thôi).
+    /// </summary>
+    private async Task TrackCustomerActivityAsync(Guid tenantId, Contact contact, Message message, CancellationToken cancellationToken)
     {
-        if (leadFields.Count == 0)
+        var changed = false;
+        if (contact.LastCustomerMessageAt is null || contact.LastCustomerMessageAt < message.CreatedAt)
         {
-            return;
+            contact.LastCustomerMessageAt = message.CreatedAt;
+            changed = true;
         }
 
+        if (contact.ProactiveAwaitingReply && (contact.LastProactiveAt is null || contact.LastProactiveAt < message.CreatedAt))
+        {
+            contact.ProactiveAwaitingReply = false; // khách đã trả lời tin bot chủ động nhắn
+            changed = true;
+        }
+
+        if (contact.ProactiveOptOutAt is null && CareDecision.IsOptOutCommand(encryptor.Decrypt(message.ContentEnc)))
+        {
+            // Khách từ chối nhận tin chủ động (CLAUDE.md mục 7). Khách tự nhắn tới vẫn được trả lời bình thường.
+            contact.ProactiveOptOutAt = time.GetUtcNow();
+            contact.ProactiveOptOutSource = "customer";
+            changed = true;
+        }
+
+        if (await contacts.GetOpenSuggestionAsync(tenantId, contact.Id, cancellationToken) is { } open && open.CreatedAt < message.CreatedAt)
+        {
+            open.Status = CareSuggestionStatus.Done;
+            open.Outcome = "customer_replied";
+            open.ResolvedAt = time.GetUtcNow();
+            changed = true;
+        }
+
+        if (changed)
+        {
+            await conversations.SaveChangesAsync(cancellationToken);
+        }
+    }
+
+    /// <summary>Gộp thông tin khách tự cung cấp vào hồ sơ khách (mã hóa cả khối, vì có tên/SĐT). Trả toàn bộ thông tin sau khi gộp.</summary>
+    private Dictionary<string, string> MergeLeadFields(Contact contact, IReadOnlyDictionary<string, string> leadFields)
+    {
         var current = contact.LeadFieldsEnc is null
             ? new Dictionary<string, string>(StringComparer.Ordinal)
             : JsonSerializer.Deserialize<Dictionary<string, string>>(encryptor.Decrypt(contact.LeadFieldsEnc)) ?? [];
+        if (leadFields.Count == 0)
+        {
+            return current;
+        }
+
         foreach (var (key, value) in leadFields)
         {
             current[key] = value;
         }
 
         contact.LeadFieldsEnc = encryptor.Encrypt(JsonSerializer.Serialize(current));
+        return current;
     }
 
     /// <summary>
@@ -236,9 +278,6 @@ public sealed partial class ProcessIncomingMessageJob(
             LogSummaryFailed(logger, ex.GetType().Name);
         }
     }
-
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Không gửi được tin {MessageId}: {Code}")]
-    private static partial void LogDeliveryFailed(ILogger logger, Guid messageId, string code);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Tóm tắt hội thoại lỗi ({ErrorType}), sẽ thử ở tin sau")]
     private static partial void LogSummaryFailed(ILogger logger, string errorType);

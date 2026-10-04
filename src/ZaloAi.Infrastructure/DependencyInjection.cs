@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Http.Resilience;
 using Microsoft.Extensions.Options;
 using StackExchange.Redis;
 using ZaloAi.Core.Ai;
@@ -10,10 +11,12 @@ using ZaloAi.Core.Channels;
 using ZaloAi.Core.Coordination;
 using ZaloAi.Core.Entities;
 using ZaloAi.Core.Options;
+using ZaloAi.Core.Realtime;
 using ZaloAi.Core.Security;
 using ZaloAi.Core.Storage;
 using ZaloAi.Core.Tenancy;
 using ZaloAi.Infrastructure.Coordination;
+using ZaloAi.Infrastructure.Inbox;
 using ZaloAi.Infrastructure.Jobs;
 using ZaloAi.Infrastructure.Knowledge;
 using ZaloAi.Infrastructure.Persistence;
@@ -39,6 +42,7 @@ public static class DependencyInjection
         services.AddValidatedOptions<AiOptions>(configuration, AiOptions.SectionName);
         services.AddValidatedOptions<StorageOptions>(configuration, StorageOptions.SectionName);
         services.AddValidatedOptions<ZaloOptions>(configuration, ZaloOptions.SectionName);
+        services.AddValidatedOptions<TelegramOptions>(configuration, TelegramOptions.SectionName);
 
         services.AddSingleton<IFieldEncryptor, AesGcmFieldEncryptor>();
         services.AddSingleton<IPasswordHasher<User>, PasswordHasher<User>>();
@@ -76,6 +80,33 @@ public static class DependencyInjection
         services.AddScoped<IChannelAdapter, ZaloAdapter>();
         services.AddScoped<ZaloTokenSweepJob>();
         services.AddScoped<ZaloTokenRefreshJob>();
+
+        // Hộp thư (M5)
+        services.AddSingleton<IInboxNotifier, RedisInboxNotifier>();
+        services.AddScoped<HandoffSettingsRepository>();
+        services.AddScoped<MessageDeliveryService>();
+        services.AddScoped<InboxService>();
+        services.AddScoped<SendOutgoingMessageJob>();
+        services.AddScoped<AttentionNotifyJob>();
+        services.AddScoped<AttentionReminderSweepJob>();
+        services.AddScoped<AttentionReminderJob>();
+        services.AddHttpClient<TelegramClient>(http => http.Timeout = Timeout.InfiniteTimeSpan)
+            .AddStandardResilienceHandler(resilience =>
+            {
+                resilience.AttemptTimeout.Timeout = TimeSpan.FromSeconds(10);
+                resilience.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(20);
+                resilience.Retry.DisableForUnsafeHttpMethods(); // không gửi trùng thông báo
+            });
+
+        // Khách hàng + Cần chăm sóc + kết nối Telegram tự phục vụ (M6)
+        services.AddScoped<ContactRepository>();
+        services.AddScoped<CareAnalysisJob>();
+        services.AddScoped<CareSweepJob>();
+        services.AddScoped<CareFollowUpSweepJob>();
+        services.AddScoped<ProactiveSendJob>();
+        services.AddScoped<TelegramLinkService>();
+        services.AddHttpClient<TelegramUpdatesClient>(http => http.Timeout = TimeSpan.FromSeconds(TelegramUpdatesClient.PollSeconds + 15));
+
         services.AddScoped<KnowledgeImportService>();
         services.AddScoped<KnowledgeIndexer>();
         services.AddScoped<IKnowledgeSearch, KnowledgeSearchService>();
@@ -89,6 +120,13 @@ public static class DependencyInjection
         services.AddZaloAiHangfire();
         services.AddScoped<SampleTenantJob>();
 
+        return services;
+    }
+
+    /// <summary>Chỉ Worker: đọc lệnh "/ketnoi MÃ" gửi cho bot Telegram.</summary>
+    public static IServiceCollection AddZaloAiTelegramPolling(this IServiceCollection services)
+    {
+        services.AddHostedService<TelegramPollingService>();
         return services;
     }
 

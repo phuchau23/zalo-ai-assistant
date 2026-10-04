@@ -11,6 +11,8 @@ using ZaloAi.Api.Auth;
 using ZaloAi.Api.Chat;
 using ZaloAi.Api.Common;
 using ZaloAi.Api.Connections;
+using ZaloAi.Api.Customers;
+using ZaloAi.Api.Inbox;
 using ZaloAi.Api.Jobs;
 using ZaloAi.Api.Knowledge;
 using ZaloAi.Api.Tenants;
@@ -134,6 +136,10 @@ internal static class ApiSetup
         app.MapChatTestEndpoints();
         app.MapChannelEndpoints();
         app.MapZaloWebhookEndpoints();
+        app.MapInboxEndpoints();
+        app.MapHandoffSettingsEndpoints();
+        app.MapCustomerEndpoints();
+        app.MapCareEndpoints();
 
         app.MapHangfireDashboard("/hangfire", new DashboardOptions
         {

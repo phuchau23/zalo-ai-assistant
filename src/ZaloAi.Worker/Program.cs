@@ -21,6 +21,7 @@ try
 
     // Worker là nơi duy nhất chạy job; Api chỉ đẩy job vào hàng đợi.
     builder.Services.AddZaloAiJobServer();
+    builder.Services.AddZaloAiTelegramPolling();
 
     var host = builder.Build();
     HangfireSetup.RegisterRecurringJobs(host.Services);

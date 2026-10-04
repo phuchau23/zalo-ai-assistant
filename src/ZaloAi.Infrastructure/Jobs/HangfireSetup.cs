@@ -69,6 +69,18 @@ public static class HangfireSetup
             ZaloTokenSweepJob.RecurringId,
             job => job.RunAsync(CancellationToken.None),
             "*/30 * * * *");
+        recurring.AddOrUpdate<AttentionReminderSweepJob>(
+            AttentionReminderSweepJob.RecurringId,
+            job => job.RunAsync(CancellationToken.None),
+            "* * * * *");
+        recurring.AddOrUpdate<CareSweepJob>(
+            CareSweepJob.RecurringId,
+            job => job.RunAsync(CancellationToken.None),
+            "*/15 * * * *");
+        recurring.AddOrUpdate<CareFollowUpSweepJob>(
+            CareFollowUpSweepJob.RecurringId,
+            job => job.RunAsync(CancellationToken.None),
+            "* * * * *");
     }
 
     /// <summary>Tạo/nâng cấp bảng Hangfire (dùng cho lệnh seed và test, để Api dùng được hàng đợi khi Worker chưa chạy lần nào).</summary>

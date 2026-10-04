@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Http.Resilience;
 using Microsoft.Extensions.Options;
 using ZaloAi.Ai.Bot;
+using ZaloAi.Ai.Care;
 using ZaloAi.Ai.Providers;
 using ZaloAi.Core.Ai;
 using ZaloAi.Core.Options;
@@ -36,6 +37,7 @@ public static class DependencyInjection
 
         services.TryAddSingleton(TimeProvider.System);
         services.AddScoped<IBotEngine, BotEngine>();
+        services.AddScoped<ICareAdvisor, CareAdvisor>();
 
         return services;
     }
