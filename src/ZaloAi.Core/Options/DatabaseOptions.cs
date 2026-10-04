@@ -10,6 +10,7 @@ public sealed class DatabaseOptions
     [Required]
     public string Postgres { get; set; } = "";
 
-    /// <summary>Bắt buộc từ khi dùng Redis (bước 4).</summary>
-    public string? Redis { get; set; }
+    /// <summary>Redis: khóa khi làm mới token Zalo, OAuth state, chống trùng webhook, giới hạn tốc độ gửi (M4).</summary>
+    [Required]
+    public string Redis { get; set; } = "";
 }

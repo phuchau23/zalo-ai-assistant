@@ -16,6 +16,7 @@
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
     <PackageReference Include="Pgvector.EntityFrameworkCore" />
     <PackageReference Include="Serilog" />
+    <PackageReference Include="StackExchange.Redis" />
     <PackageReference Include="Serilog.Extensions.Hosting" />
     <PackageReference Include="Serilog.Formatting.Compact" />
     <PackageReference Include="Serilog.Settings.Configuration" />
@@ -24,5 +25,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\ZaloAi.Core\ZaloAi.Core.csproj" />
+    <ProjectReference Include="..\ZaloAi.Channels\ZaloAi.Channels.csproj" />
   </ItemGroup>
 </Project>
