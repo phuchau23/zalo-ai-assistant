@@ -82,8 +82,8 @@ Kết nối OA:
 | Auth | Email + mật khẩu (`PasswordHasher` của ASP.NET Core Identity), cookie authentication httpOnly | |
 | Rate limit | Middleware rate limiting có sẵn của ASP.NET Core | |
 | Gọi HTTP ra ngoài | `HttpClientFactory` + `Microsoft.Extensions.Http.Resilience` (Polly) | Timeout, retry, circuit breaker |
-| AI chat | `IAiProvider`: Gemini (dev, free) và Anthropic Claude (prod) | Model đặt trong config, không hardcode. SDK chính thức nếu ổn định, không thì gọi REST qua HttpClient (chốt ở M3) |
-| Embedding | Qua `IAiProvider.EmbedAsync` (Gemini embedding lúc đầu) | Số chiều vector đặt trong config. Đổi model = tạo lại toàn bộ vector |
+| AI chat | `IChatProvider`: chỉ Gemini (chốt 2026-10-04), gọi REST qua HttpClient | Model đặt trong config, không hardcode. Dev có thể dùng gói free; **production bắt buộc gói trả phí** (gói free cho Google dùng dữ liệu) |
+| Embedding | Qua `IEmbeddingProvider` (Gemini embedding) | Số chiều vector đặt trong config. Đổi model = tạo lại toàn bộ vector |
 | Parse file | PdfPig (pdf), DocumentFormat.OpenXml (docx), ClosedXML (xlsx) | Chạy trong worker |
 | Logging | Serilog (JSON) | Không log token, không log PII; có destructuring policy để redact |
 | Lỗi | Sentry (`Sentry.AspNetCore`) | |
@@ -170,13 +170,12 @@ ConnectionStrings__Redis=localhost:6379
 
 Security__EncryptionKey=                     # 32 bytes base64, dùng AES-256-GCM cho token và dữ liệu nhạy cảm
 
-Ai__ChatProvider=gemini                      # gemini | anthropic
+Ai__ChatProvider=gemini                      # gemini | fake (test)
 Ai__ChatModel=
 Ai__EmbedProvider=gemini
 Ai__EmbedModel=
 Ai__EmbedDim=
 Ai__GeminiApiKey=
-Ai__AnthropicApiKey=
 
 Zalo__AppId=
 Zalo__AppSecret=
@@ -364,21 +363,21 @@ Tiêu chí xong: upload bảng giá thật của DN dùng thử, tìm "giá sơn
 
 ### M3 — Lõi AI + chat thử (tuần 3)
 Task:
-- [ ] `aiProvider` với 2 implementation: gemini, anthropic (skill 10.4).
-- [ ] PII masking: nhận diện SĐT VN, email, số CCCD, (tên/địa chỉ nếu khách tự khai trong form thu thập) → thay bằng placeholder trước khi gửi AI; ghép lại khi cần.
-- [ ] Prompt builder: persona + rules ngành + cài đặt tenant + chunks (có id) + tóm tắt hội thoại + N tin gần nhất.
-- [ ] Output JSON có cấu trúc:
+- [x] `IChatProvider`: Gemini (+ `fake` cho test). Bỏ Claude — chủ dự án chốt 2026-10-04 (skill add-ai-provider).
+- [x] PII masking: nhận diện SĐT VN, email, số CCCD, (tên/địa chỉ nếu khách tự khai trong form thu thập) → thay bằng placeholder trước khi gửi AI; ghép lại khi cần.
+- [x] Prompt builder: persona + rules ngành + cài đặt tenant + chunks (có id) + tóm tắt hội thoại + N tin gần nhất.
+- [x] Output JSON có cấu trúc:
   `{ reply, used_chunk_ids[], confidence: high|medium|low, needs_human, handoff_reason, lead_fields{}, sentiment }`
   Parse lỗi → retry 1 lần → vẫn lỗi thì trả câu mặc định và chuyển người.
-- [ ] Quy tắc: không có chunk liên quan hoặc confidence low → không trả lời bừa, xin thông tin liên hệ và chuyển người.
-- [ ] Bộ lọc câu cấm theo ngành chạy trên `reply` trước khi gửi.
-- [ ] Khung mẫu ngành theo `docs/INDUSTRIES.md`; gợi ý gói khi khách hỏi; ngành rủi ro cao: bộ an toàn y tế (cờ `medically_reviewed`, dấu hiệu nguy hiểm, `urgency`, chuyển khẩn cấp).
-- [ ] Tin chào đầu tiên có câu báo trợ lý AI + link chính sách.
-- [ ] Tóm tắt hội thoại dài định kỳ để tiết kiệm token.
-- [ ] Ghi `ai_trace` và `usage_records` cho mọi lần gọi.
-- [ ] `ChannelAdapter` interface + adapter `webchat` (dùng cho khung chat thử trong admin, cùng luồng hàng đợi/worker với Zalo sau này).
-- [ ] Admin: trang "Chat thử" và trang cài đặt giọng văn.
-- [ ] `src/ZaloAi.Ai/Evals/`: 20–30 câu hỏi mẫu của ngành đầu tiên + đáp án mong đợi, script chạy eval.
+- [x] Quy tắc: không có chunk liên quan hoặc confidence low → không trả lời bừa, xin thông tin liên hệ và chuyển người.
+- [x] Bộ lọc câu cấm theo ngành chạy trên `reply` trước khi gửi.
+- [x] Khung mẫu ngành theo `docs/INDUSTRIES.md`; gợi ý gói khi khách hỏi; ngành rủi ro cao: bộ an toàn y tế (cờ `medically_reviewed`, dấu hiệu nguy hiểm, `urgency`, chuyển khẩn cấp).
+- [x] Tin chào đầu tiên có câu báo trợ lý AI + link chính sách.
+- [x] Tóm tắt hội thoại dài định kỳ để tiết kiệm token.
+- [x] Ghi `ai_trace` và `usage_records` cho mọi lần gọi.
+- [x] `ChannelAdapter` interface + adapter `webchat` (dùng cho khung chat thử trong admin, cùng luồng hàng đợi/worker với Zalo sau này).
+- [x] Admin: trang "Chat thử" và trang cài đặt giọng văn.
+- [x] `src/ZaloAi.Ai/Evals/`: 20–30 câu hỏi mẫu của ngành đầu tiên + đáp án mong đợi, script chạy eval.
 
 Tiêu chí xong: chủ DN dùng thử tự chat trên khung chat thử và đánh giá câu trả lời đạt; eval pass ≥ mức chủ dự án chốt; câu hỏi ngoài dữ liệu được chuyển người, không bịa. **Chưa đạt thì chưa sang M4.**
 
