@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Options;
 using ZaloAi.Api.Auth;
+using ZaloAi.Api.Chat;
 using ZaloAi.Api.Common;
 using ZaloAi.Api.Jobs;
 using ZaloAi.Api.Knowledge;
@@ -80,6 +81,14 @@ internal static class ApiSetup
                     http.Connection.RemoteIpAddress?.ToString() ?? "unknown",
                     _ => new FixedWindowRateLimiterOptions { PermitLimit = permit, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 });
             });
+
+            options.AddPolicy(RateLimitSettings.ChatTestPolicy, http =>
+            {
+                var permit = http.RequestServices.GetRequiredService<IOptions<RateLimitSettings>>().Value.ChatTestPermitPerMinute;
+                return RateLimitPartition.GetFixedWindowLimiter(
+                    AuthClaims.GetUserId(http.User)?.ToString() ?? http.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                    _ => new FixedWindowRateLimiterOptions { PermitLimit = permit, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 });
+            });
         });
 
         services.AddHealthChecks().AddCheck<PostgresHealthCheck>("postgres");
@@ -109,6 +118,7 @@ internal static class ApiSetup
         app.MapKnowledgeEndpoints();
         app.MapKnowledgeImportEndpoints();
         app.MapKnowledgeSearchEndpoints();
+        app.MapChatTestEndpoints();
 
         app.MapHangfireDashboard("/hangfire", new DashboardOptions
         {

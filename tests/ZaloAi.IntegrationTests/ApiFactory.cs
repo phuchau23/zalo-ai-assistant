@@ -24,6 +24,7 @@ public class ApiFactory(string connectionString = "Host=localhost;Database=unuse
         ["ConnectionStrings:Postgres"] = connectionString,
         ["RateLimit:LoginPermitPerMinute"] = loginPermitPerMinute.ToString(System.Globalization.CultureInfo.InvariantCulture),
         ["Ai:EmbedProvider"] = "fake",
+        ["Ai:ChatProvider"] = "fake",
         ["Storage:LocalRoot"] = TestStorageRoot,
     };
 

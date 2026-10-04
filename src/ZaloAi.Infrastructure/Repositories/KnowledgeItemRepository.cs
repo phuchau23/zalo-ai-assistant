@@ -20,6 +20,13 @@ public sealed class KnowledgeItemRepository(AppDbContext db, ITenantContext tena
         return await query.OrderBy(i => i.Kind).ThenBy(i => i.Code).ToListAsync(cancellationToken);
     }
 
+    /// <summary>Được track. Không thuộc tenant → null.</summary>
+    public Task<KnowledgeItem?> GetAsync(Guid tenantId, Guid itemId, CancellationToken cancellationToken)
+    {
+        EnsureTenant(tenantId);
+        return Db.KnowledgeItems.Where(i => i.TenantId == tenantId && i.Id == itemId).FirstOrDefaultAsync(cancellationToken);
+    }
+
     /// <summary>Các mục theo mã, được track để sửa/xóa rồi gọi SaveChangesAsync.</summary>
     public async Task<IReadOnlyList<KnowledgeItem>> GetByCodesAsync(
         Guid tenantId,
