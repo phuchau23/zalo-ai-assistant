@@ -40,6 +40,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
 
     public DbSet<Conversation> Conversations => Set<Conversation>();
 
+    public DbSet<ChannelConnection> ChannelConnections => Set<ChannelConnection>();
+
     public DbSet<Message> Messages => Set<Message>();
 
     public DbSet<UsageRecord> UsageRecords => Set<UsageRecord>();

@@ -66,6 +66,24 @@ public sealed class ConversationRepository(AppDbContext db, ITenantContext tenan
             .FirstOrDefaultAsync(cancellationToken);
     }
 
+    /// <summary>Hội thoại đang mở (không phải chat thử) của khách trên một kênh đã kết nối — được track.</summary>
+    public Task<Conversation?> FindOpenConversationAsync(Guid tenantId, Guid contactId, Guid connectionId, CancellationToken cancellationToken)
+    {
+        EnsureTenant(tenantId);
+        return Db.Conversations
+            .Where(c => c.TenantId == tenantId && c.ContactId == contactId && c.ConnectionId == connectionId
+                        && c.Status == ConversationStatus.Open && !c.IsTest)
+            .OrderByDescending(c => c.CreatedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    /// <summary>Tin theo mã của kênh (Zalo msg_id) — kênh gửi lại sự kiện cũ thì bỏ qua.</summary>
+    public Task<bool> ExternalMessageExistsAsync(Guid tenantId, string externalMessageId, CancellationToken cancellationToken)
+    {
+        EnsureTenant(tenantId);
+        return Db.Messages.AnyAsync(m => m.TenantId == tenantId && m.ExternalMessageId == externalMessageId, cancellationToken);
+    }
+
     public Message AddMessage(Guid tenantId, Message message)
     {
         EnsureTenant(tenantId);
