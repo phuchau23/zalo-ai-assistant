@@ -26,6 +26,7 @@ public sealed partial class ProcessIncomingMessageJob(
     TenantContext tenantContext,
     ConversationRepository conversations,
     TenantRepository tenants,
+    ChannelConnectionRepository connectionRepository,
     IBotEngine bot,
     IEnumerable<IChannelAdapter> channels,
     IFieldEncryptor encryptor,
@@ -45,13 +46,34 @@ public sealed partial class ProcessIncomingMessageJob(
             return;
         }
 
-        if (await conversations.FindReplyAsync(tenantId, messageId, cancellationToken) is not null)
+        var conversation = await conversations.GetConversationAsync(tenantId, message.ConversationId, cancellationToken);
+        if (conversation is null)
         {
-            return; // đã trả lời ở lần chạy trước
+            return;
         }
 
-        var conversation = await conversations.GetConversationAsync(tenantId, message.ConversationId, cancellationToken);
-        if (conversation is null || conversation.Mode == ConversationMode.Human || conversation.Status == ConversationStatus.Closed)
+        if (await conversations.FindReplyAsync(tenantId, messageId, cancellationToken) is { } existing)
+        {
+            // Đã soạn ở lần chạy trước: gửi lại ĐÚNG tin đó nếu chưa gửi được (không sinh câu trả lời mới, không tốn AI).
+            if (existing.DeliveryStatus == DeliveryStatus.Pending
+                && await conversations.GetMessageAsync(tenantId, existing.Id, cancellationToken) is { } pending
+                && await conversations.GetContactAsync(tenantId, conversation.ContactId, cancellationToken) is { } owner)
+            {
+                await DeliverAsync(tenantId, conversation, owner, pending, encryptor.Decrypt(pending.ContentEnc), cancellationToken);
+            }
+
+            return;
+        }
+
+        if (conversation.Mode == ConversationMode.Human || conversation.Status == ConversationStatus.Closed)
+        {
+            return;
+        }
+
+        // Kênh Zalo đã ngắt/mất quyền: không gọi AI (tốn tiền) cho tin không gửi được.
+        if (conversation.Channel == ChannelKind.Zalo
+            && (conversation.ConnectionId is not { } connectionId
+                || await connectionRepository.GetAsync(tenantId, connectionId, cancellationToken) is not { Status: ConnectionStatus.Active }))
         {
             return;
         }
@@ -91,6 +113,7 @@ public sealed partial class ProcessIncomingMessageJob(
             ContentEnc = encryptor.Encrypt(result.Reply),
             ReplyToMessageId = message.Id,
             AiTraceJson = result.TraceJson,
+            DeliveryStatus = DeliveryStatus.Pending,
         });
         AddUsage(tenantId, conversation.Id, result.Usage);
 
@@ -116,11 +139,35 @@ public sealed partial class ProcessIncomingMessageJob(
             return; // job khác vừa trả lời cùng tin này
         }
 
+        await DeliverAsync(tenantId, conversation, contact, reply, result.Reply, cancellationToken);
+        await SummarizeIfLongAsync(tenantId, conversation, unsummarized, cancellationToken);
+    }
+
+    /// <summary>
+    /// Gửi tin bot ra kênh rồi ghi trạng thái. Lỗi tạm → ném để Hangfire thử lại (lần sau đi nhánh "gửi lại tin Pending").
+    /// Lỗi vĩnh viễn → Failed, không thử lại.
+    /// </summary>
+    private async Task DeliverAsync(Guid tenantId, Conversation conversation, Contact contact, Message reply, string text, CancellationToken cancellationToken)
+    {
         var channel = channels.FirstOrDefault(c => c.Channel == conversation.Channel)
             ?? throw new InvalidOperationException($"Chưa có adapter cho kênh {conversation.Channel}.");
-        await channel.SendAsync(new OutgoingMessage(tenantId, conversation.Id, reply.Id, contact.ExternalUserId, result.Reply), cancellationToken);
+        try
+        {
+            var sent = await channel.SendAsync(
+                new OutgoingMessage(tenantId, conversation.Id, reply.Id, contact.ExternalUserId, text, conversation.ConnectionId),
+                cancellationToken);
+            reply.DeliveryStatus = DeliveryStatus.Sent;
+            reply.ExternalMessageId ??= sent.ExternalMessageId;
+            reply.DeliveryError = null;
+        }
+        catch (ChannelPermanentException ex)
+        {
+            reply.DeliveryStatus = DeliveryStatus.Failed;
+            reply.DeliveryError = ex.Code;
+            LogDeliveryFailed(logger, reply.Id, ex.Code);
+        }
 
-        await SummarizeIfLongAsync(tenantId, conversation, unsummarized, cancellationToken);
+        await conversations.SaveChangesAsync(cancellationToken);
     }
 
     private void AddUsage(Guid tenantId, Guid conversationId, IEnumerable<BotUsage> usage)
@@ -189,6 +236,9 @@ public sealed partial class ProcessIncomingMessageJob(
             LogSummaryFailed(logger, ex.GetType().Name);
         }
     }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Không gửi được tin {MessageId}: {Code}")]
+    private static partial void LogDeliveryFailed(ILogger logger, Guid messageId, string code);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Tóm tắt hội thoại lỗi ({ErrorType}), sẽ thử ở tin sau")]
     private static partial void LogSummaryFailed(ILogger logger, string errorType);

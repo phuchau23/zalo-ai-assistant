@@ -2,13 +2,18 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
+using StackExchange.Redis;
 using ZaloAi.Core.Ai;
+using ZaloAi.Core.Channels;
+using ZaloAi.Core.Coordination;
 using ZaloAi.Core.Entities;
 using ZaloAi.Core.Options;
 using ZaloAi.Core.Security;
 using ZaloAi.Core.Storage;
 using ZaloAi.Core.Tenancy;
+using ZaloAi.Infrastructure.Coordination;
 using ZaloAi.Infrastructure.Jobs;
 using ZaloAi.Infrastructure.Knowledge;
 using ZaloAi.Infrastructure.Persistence;
@@ -16,6 +21,7 @@ using ZaloAi.Infrastructure.Repositories;
 using ZaloAi.Infrastructure.Security;
 using ZaloAi.Infrastructure.Storage;
 using ZaloAi.Infrastructure.Tenancy;
+using ZaloAi.Infrastructure.Zalo;
 
 namespace ZaloAi.Infrastructure;
 
@@ -43,6 +49,16 @@ public static class DependencyInjection
         services.AddDbContext<AppDbContext>((sp, options) =>
             options.UseZaloAiPostgres(sp.GetRequiredService<IOptions<DatabaseOptions>>().Value.Postgres));
 
+        // Redis: kết nối lười, không chặn khởi động khi Redis tạm chưa sẵn (abortConnect=false), tự nối lại.
+        services.AddSingleton<IConnectionMultiplexer>(sp =>
+        {
+            var config = ConfigurationOptions.Parse(sp.GetRequiredService<IOptions<DatabaseOptions>>().Value.Redis);
+            config.AbortOnConnectFail = false;
+            return ConnectionMultiplexer.Connect(config);
+        });
+        services.AddSingleton<IDistributedStore, RedisDistributedStore>();
+        services.TryAddSingleton(TimeProvider.System);
+
         services.AddScoped<TenantRepository>();
         services.AddScoped<MembershipRepository>();
         services.AddScoped<AuditLogRepository>();
@@ -53,6 +69,13 @@ public static class DependencyInjection
         services.AddScoped<KnowledgeDocumentRepository>();
         services.AddScoped<ChunkRepository>();
         services.AddScoped<ConversationRepository>();
+        services.AddScoped<ChannelConnectionRepository>();
+        services.AddScoped<ChannelConnectionLookup>();
+        services.AddScoped<ZaloConnectionService>();
+        services.AddScoped<ZaloWebhookIngestor>();
+        services.AddScoped<IChannelAdapter, ZaloAdapter>();
+        services.AddScoped<ZaloTokenSweepJob>();
+        services.AddScoped<ZaloTokenRefreshJob>();
         services.AddScoped<KnowledgeImportService>();
         services.AddScoped<KnowledgeIndexer>();
         services.AddScoped<IKnowledgeSearch, KnowledgeSearchService>();

@@ -250,6 +250,28 @@ public sealed class BotEngineTests
     }
 
     [Fact]
+    public async Task Media_message_hands_off_without_calling_ai()
+    {
+        var chat = new ScriptedChat(_ => Json("không được gọi"));
+        var result = await Engine(chat, new StaticSearch(Massage)).ReplyAsync(Turn(ZaloAi.Core.Channels.InboundText.ForAttachment("image")!), CancellationToken.None);
+
+        chat.Requests.ShouldBeEmpty();
+        result.NeedsHuman.ShouldBeTrue();
+        result.HandoffReason.ShouldBe("media");
+        result.Reply.ShouldContain("chưa xem được hình ảnh");
+    }
+
+    [Fact]
+    public async Task Sticker_gets_short_reply_without_ai()
+    {
+        var chat = new ScriptedChat(_ => Json("không được gọi"));
+        var result = await Engine(chat, new StaticSearch()).ReplyAsync(Turn(ZaloAi.Core.Channels.InboundText.Sticker), CancellationToken.None);
+
+        chat.Requests.ShouldBeEmpty();
+        result.NeedsHuman.ShouldBeFalse();
+    }
+
+    [Fact]
     public async Task Summary_masks_and_restores_pii()
     {
         var chat = new ScriptedChat(r => r.Turns[0].Text.Contains("[PHONE_1]", StringComparison.Ordinal) ? "- Khách để số [PHONE_1]" : "lộ số");
