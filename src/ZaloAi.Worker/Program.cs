@@ -1,5 +1,6 @@
 using Serilog;
 using ZaloAi.Ai;
+using ZaloAi.Channels;
 using ZaloAi.Infrastructure;
 using ZaloAi.Infrastructure.Jobs;
 using ZaloAi.Infrastructure.Logging;
@@ -16,6 +17,7 @@ try
 
     builder.Services.AddZaloAiInfrastructure(builder.Configuration);
     builder.Services.AddZaloAiAi();
+    builder.Services.AddZaloAiChannels();
 
     // Worker là nơi duy nhất chạy job; Api chỉ đẩy job vào hàng đợi.
     builder.Services.AddZaloAiJobServer();

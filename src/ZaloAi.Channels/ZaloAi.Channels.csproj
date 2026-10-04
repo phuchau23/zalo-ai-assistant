@@ -1,5 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\ZaloAi.Core\ZaloAi.Core.csproj" />
   </ItemGroup>
 </Project>

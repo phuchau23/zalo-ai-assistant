@@ -91,6 +91,9 @@ public static class KnowledgeItemMapper
         item.SearchText = ToSearchText(entry);
         item.ContentHash = ContentHash(entry);
         item.UpdatedBy = updatedBy;
+
+        // Nội dung đổi → phải duyệt chuyên môn lại (INDUSTRIES.md mục 3).
+        item.MedicallyReviewed = false;
     }
 
     public static KnowledgeEntry FromItem(KnowledgeItem item)

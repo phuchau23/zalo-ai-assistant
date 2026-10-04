@@ -1,9 +1,22 @@
 # Tiến độ
 
 ## Đang làm
-- Module: **M2 — Kho kiến thức: XONG phần code** (2026-10-03). Chờ chủ dự án tự nạp dữ liệu qua giao diện để xác nhận, rồi sang M3
-- Task: bước 5–8 xong (embedding Gemini, tài liệu tự do, giao diện Kho kiến thức, chạy thử đầu-cuối), chờ chủ dự án commit + thử trên giao diện; tiếp theo lập kế hoạch M3 (lõi AI + chat thử)
-- Chặn bởi: không (Gemini key đã có, đặt bằng user-secrets `Ai:GeminiApiKey`)
+- Module: **M3 — Lõi AI + chat thử: XONG phần code** (2026-10-04). Chờ chủ dự án chạy chat thử trên giao diện + đánh giá câu trả lời (tiêu chí xong M3)
+- Task: 10 bước xong (xem Kế hoạch M3); eval spa chạy bằng Gemini thật — kết quả ở mục "Đã xong"
+- Chặn bởi: không
+
+## Kế hoạch M3 (2026-10-04) — đã duyệt 2026-10-04 ("làm liền 10 bước, test 1 lần")
+Chủ dự án chốt: chỉ Gemini (bỏ Claude); ngưỡng eval thường ≥ 85%, 0 bịa giá, an toàn 100%; chỉ ngành spa (Khoa Học Huyệt Đạo).
+1. `feat(m3)`: bảng contacts, conversations, messages (mã hóa), usage_records; cờ medically_reviewed; giọng văn tenant; migration `AddConversations`; test cô lập
+2. `feat(m3)`: `IChatProvider` Gemini (generateContent + JSON schema, model dự phòng khi 503, chi phí gồm token suy nghĩ) + fake
+3. `feat(m3)`: che dữ liệu cá nhân (SĐT, email, CCCD/CMND, tên) + ghép lại
+4. `feat(m3)`: mẫu ngành nhúng (spa đầy đủ + _default): persona, quy tắc, câu cấm, dấu hiệu nguy hiểm, thông tin thu thập, eval
+5. `feat(m3)`: `BotEngine` (prompt, JSON, thử lại, câu cấm, chặn bịa giá, khẩn cấp, câu báo AI, tóm tắt) + `IKnowledgeSearch`
+6. `feat(m3)`: `IChannelAdapter` + webchat; job `ProcessIncomingMessageJob` (idempotent, hàng đợi messages)
+7. `feat(m3)`: API chat thử, giọng văn, đánh dấu duyệt chuyên môn
+8. `feat(m3)` (FE): trang Chat thử (khung chat + "Vì sao bot trả lời vậy?" + giọng văn), nút duyệt chuyên môn
+9. `feat(m3)`: bộ eval spa 54 câu (24 an toàn) + lệnh `eval`
+10. `test(m3)`: chạy với Gemini thật trên dữ liệu Khoa Học Huyệt Đạo
 
 ## Kế hoạch M2 (2026-10-03) — đã duyệt 2026-10-03
 Mở rộng so với CLAUDE.md M2 theo yêu cầu chủ dự án: kiến thức có cấu trúc theo **mẫu chuẩn có Mã** (`docs/KNOWLEDGE-FORMAT.md`) + **so sánh/gộp kiểu review pull request** khi nhập bản mới; tài liệu tự do vẫn nạp được (không so sánh từng mục). Dữ liệu nạp **từ FE**. Ước lượng ~2 tuần.
@@ -47,6 +60,7 @@ Thay kế hoạch pnpm ngày 2026-09-30 (xem DECISIONS.md). 8 bước, mỗi bư
 - [x] B5: 2 tenant mẫu: "Khoa Học Nguyệt Đạo" (bấm huyệt, massage → slug `spa`, rủi ro Cao) — đổi thành "Khoa Học Huyệt Đạo" (tên thật) ngày 2026-10-03 và "Sửa nhà An Phát" (sửa nhà, rủi ro thấp)
 
 ## Đã xong
+- [x] **M3 code xong** (2026-10-04): 10 bước theo kế hoạch. Eval spa trên dữ liệu thật Khoa Học Huyệt Đạo, model `gemini-3.5-flash-lite` (model chính `gemini-3.8-flash` hết quota gói free 20 request/ngày): câu thường + ngoài phạm vi **30/30 = 100%**, bịa giá **0**, an toàn **24/24 = 100%** (lần chạy cuối, sau khi thêm câu cấm "hoàn toàn an toàn" và sửa quy tắc khẩn cấp chỉ cho dấu hiệu cấp tính). Chi phí ≈ $0.06 cho 54 câu. 163 unit + 78 integration test BE; 33 test FE. Còn: chủ dự án tự chat thử trên giao diện và đánh giá; chạy lại eval với `gemini-3.8-flash` khi có quota/gói trả phí
 - [x] **M2 đạt tiêu chí xong** (2026-10-03): chạy thử đầu-cuối qua FE với Gemini thật trên dữ liệu mẫu Khoa Học Huyệt Đạo — 6/6 câu hỏi mẫu ra đúng mục ở vị trí đầu (ví dụ "giá massage đông y 60 phút" → DV-MASSAGE-DONG-Y-60), nhập v2 ra đúng bản so sánh mong đợi, tài liệu tự do đọc + tìm được; tenant B không tìm thấy dữ liệu A (test). Còn: chủ dự án tự nạp qua giao diện, và thử với dữ liệu thật của DN dùng thử khi có
 - [x] M2 bước 8: chạy thử đầu-cuối (script qua FE, Gemini thật, tenant An Phát rồi dọn sạch); sửa OpenAPI sinh `number | string` (JSON chỉ nhận số thật) (2026-10-03)
 - [x] M2 bước 7 (FE): trang Kho kiến thức — tab Dữ liệu (lọc, xem chi tiết), Nhập file (tải mẫu, xuất Excel/JSON, lỗi theo dòng, câu lệnh nhờ AI có nút sao chép), Lịch sử nhập, Tài liệu tham khảo (thay thế khi trùng tên, xóa, tự cập nhật trạng thái), Thử tìm kiếm; trang duyệt so sánh `/knowledge/imports/[id]` (chọn từng mục, gộp/giữ cả hai/bỏ qua, khóa "vừa gộp vừa xóa", xác nhận trước khi áp dụng/hủy); 23 test FE (2026-10-03)
@@ -70,6 +84,11 @@ Thay kế hoạch pnpm ngày 2026-09-30 (xem DECISIONS.md). 8 bước, mỗi bư
 - [x] Viết ROADMAP.md (10 phase đến phát hành), FEATURE-SPECS.md (chuyển tiếp, "Cần chăm sóc", tình huống chăm sóc), INDUSTRIES.md (mẫu ngành, bộ an toàn y tế) (2026-10-01)
 
 ## Vấn đề mở / nợ kỹ thuật
+- Gói Gemini free: `gemini-3.8-flash` chỉ 20 request/ngày → chat thử hay rơi về model dự phòng lite. Nên bật billing (vừa để test thật, vừa bắt buộc cho production)
+- Eval câu thường chưa chạy lại sau lần sửa quy tắc khẩn cấp cuối (chỉ chạy lại phần an toàn)
+- Dữ liệu mẫu có ghi chú nội bộ ("⚠ ... bot phải ...") trong trường note — AI đọc được, không nên để trong dữ liệu thật của DN
+- Dữ liệu mẫu có 2 giờ đóng cửa khác nhau (21:00 ở chi nhánh, 21:30 ở "Giờ mở cửa")
+- Webchat chưa có câu chuyển tiếp/nhân viên trả lời (M5); hội thoại chuyển người chỉ "Trả lại cho bot" được trong chat thử
 - Deploy: cấu hình ForwardedHeaders sau reverse proxy, nếu không rate limit login tính theo IP của proxy (gộp mọi khách)
 - Đăng xuất chưa thu hồi cookie phía server: cookie bị đánh cắp còn dùng được tới khi hết hạn (12h trượt). Xóa user/membership thì mất quyền ngay. Cân nhắc thêm "security stamp" trên users (đổi mật khẩu, đăng xuất mọi nơi)
 - Super admin xem/chuyển sang tenant bất kỳ: làm ở M6

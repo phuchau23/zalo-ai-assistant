@@ -1,0 +1,8 @@
+{
+  "fields": [
+    { "key": "name", "label": "Tên khách", "pii": true },
+    { "key": "phone", "label": "Số điện thoại", "pii": true },
+    { "key": "need", "label": "Nhu cầu", "pii": false },
+    { "key": "preferred_time", "label": "Thời gian mong muốn", "pii": false }
+  ]
+}

@@ -1,4 +1,3 @@
-using System.Text.Json;
 using FluentValidation;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
@@ -7,6 +6,7 @@ using ZaloAi.Api.Auth;
 using ZaloAi.Api.Common;
 using ZaloAi.Core.Ai;
 using ZaloAi.Core.Entities;
+using ZaloAi.Core.Errors;
 using ZaloAi.Core.Tenancy;
 using ZaloAi.Infrastructure.Knowledge;
 using ZaloAi.Infrastructure.Persistence;
@@ -38,11 +38,12 @@ public sealed record KnowledgeDocumentResponse(
     string Status,
     string? Error,
     int ChunkCount,
+    bool MedicallyReviewed,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt)
 {
     internal static KnowledgeDocumentResponse From(KnowledgeDocument d) =>
-        new(d.Id, d.Title, d.FileName, d.SizeBytes, d.Status.ToString().ToLowerInvariant(), d.Error, d.ChunkCount, d.CreatedAt, d.UpdatedAt);
+        new(d.Id, d.Title, d.FileName, d.SizeBytes, d.Status.ToString().ToLowerInvariant(), d.Error, d.ChunkCount, d.MedicallyReviewed, d.CreatedAt, d.UpdatedAt);
 }
 
 public sealed record KnowledgeAiPromptResponse(string Prompt);
@@ -83,6 +84,14 @@ internal static class KnowledgeSearchEndpoints
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status409Conflict);
 
+        group.MapPut("/documents/{documentId:guid}/medically-reviewed", SetDocumentReviewedAsync)
+            .RequireTenantRole(TenantRole.Owner)
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
+        group.MapPut("/items/{itemId:guid}/medically-reviewed", SetItemReviewedAsync)
+            .RequireTenantRole(TenantRole.Owner)
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
         group.MapDelete("/documents/{documentId:guid}", DeleteDocumentAsync)
             .RequireTenantRole(TenantRole.Owner)
             .ProducesProblem(StatusCodes.Status404NotFound);
@@ -93,27 +102,18 @@ internal static class KnowledgeSearchEndpoints
     private static async Task<Ok<List<KnowledgeSearchResult>>> SearchAsync(
         KnowledgeSearchRequest request,
         ITenantContext tenant,
-        IEmbeddingProvider embeddings,
-        ChunkRepository chunks,
+        IKnowledgeSearch search,
         CancellationToken cancellationToken)
     {
-        var tenantId = tenant.RequireTenantId();
-        var vector = await embeddings.EmbedQueryAsync(request.Query.Trim(), cancellationToken);
-        var hits = await chunks.SearchAsync(tenantId, vector, request.Limit ?? 5, cancellationToken);
-
-        return TypedResults.Ok(hits.Select(h =>
-        {
-            using var meta = JsonDocument.Parse(h.MetaJson);
-            string? Read(string name) => meta.RootElement.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
-            return new KnowledgeSearchResult(
-                h.KnowledgeItemId is null ? "document" : "item",
-                h.KnowledgeItemId,
-                h.DocumentId,
-                Read("code"),
-                Read("title"),
-                h.Content,
-                Math.Round(Math.Clamp(1 - h.Distance, 0, 1), 4));
-        }).ToList());
+        var hits = await search.SearchAsync(tenant.RequireTenantId(), request.Query, request.Limit ?? 5, cancellationToken);
+        return TypedResults.Ok(hits.Select(h => new KnowledgeSearchResult(
+            h.Source,
+            h.Source == "item" ? h.SourceId : null,
+            h.Source == "document" ? h.SourceId : null,
+            h.Code,
+            h.Title,
+            h.Content,
+            h.Score)).ToList());
     }
 
     private static async Task<Ok<KnowledgeStatusResponse>> StatusAsync(ITenantContext tenant, AppDbContext db, CancellationToken cancellationToken)
@@ -159,5 +159,45 @@ internal static class KnowledgeSearchEndpoints
     {
         await service.DeleteAsync(tenant.RequireTenantId(), tenant.UserId, documentId, cancellationToken);
         return TypedResults.NoContent();
+    }
+
+    private static async Task<Ok<KnowledgeDocumentResponse>> SetDocumentReviewedAsync(
+        Guid documentId,
+        SetMedicallyReviewedRequest request,
+        ITenantContext tenant,
+        KnowledgeDocumentRepository documents,
+        AuditLogRepository audit,
+        CancellationToken cancellationToken)
+    {
+        var tenantId = tenant.RequireTenantId();
+        var document = await documents.GetAsync(tenantId, documentId, cancellationToken) ?? throw new NotFoundException();
+        if (document.MedicallyReviewed != request.Reviewed)
+        {
+            document.MedicallyReviewed = request.Reviewed;
+            audit.Add(tenantId, tenant.UserId, request.Reviewed ? "knowledge.medical_review_set" : "knowledge.medical_review_cleared", $"document:{documentId}");
+            await documents.SaveChangesAsync(cancellationToken);
+        }
+
+        return TypedResults.Ok(KnowledgeDocumentResponse.From(document));
+    }
+
+    private static async Task<Ok<KnowledgeItemResponse>> SetItemReviewedAsync(
+        Guid itemId,
+        SetMedicallyReviewedRequest request,
+        ITenantContext tenant,
+        KnowledgeItemRepository items,
+        AuditLogRepository audit,
+        CancellationToken cancellationToken)
+    {
+        var tenantId = tenant.RequireTenantId();
+        var item = await items.GetAsync(tenantId, itemId, cancellationToken) ?? throw new NotFoundException();
+        if (item.MedicallyReviewed != request.Reviewed)
+        {
+            item.MedicallyReviewed = request.Reviewed;
+            audit.Add(tenantId, tenant.UserId, request.Reviewed ? "knowledge.medical_review_set" : "knowledge.medical_review_cleared", $"item:{itemId}");
+            await items.SaveChangesAsync(cancellationToken);
+        }
+
+        return TypedResults.Ok(KnowledgeItemResponse.From(item));
     }
 }

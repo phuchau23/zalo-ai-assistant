@@ -2,6 +2,7 @@ using Serilog;
 using ZaloAi.Ai;
 using ZaloAi.Api;
 using ZaloAi.Api.Cli;
+using ZaloAi.Channels;
 using ZaloAi.Infrastructure;
 using ZaloAi.Infrastructure.Logging;
 using ZaloAi.Infrastructure.Persistence.Seed;
@@ -37,6 +38,7 @@ try
 
     builder.Services.AddZaloAiInfrastructure(builder.Configuration);
     builder.Services.AddZaloAiAi();
+    builder.Services.AddZaloAiChannels();
     builder.Services.AddZaloAiApi(builder.Configuration, builder.Environment);
 
     var app = builder.Build();
@@ -48,6 +50,12 @@ try
         // Console thay vì logger: logger che mọi giá trị có tên chứa "password".
         Console.WriteLine($"Seed xong. Mật khẩu mọi tài khoản mẫu: {DevSeeder.DevPassword}");
         return 0;
+    }
+
+    // `dotnet run --project src/ZaloAi.Api -- eval ...`: chạy bộ eval của mẫu ngành bằng AI thật, rồi thoát.
+    if (EvalCli.IsEvalCommand(args))
+    {
+        return await EvalCli.RunAsync(app.Services, args);
     }
 
     // Chỉ ghi method, path (không có query string), status, thời gian.

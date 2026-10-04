@@ -13,7 +13,8 @@ public sealed record ChunkSearchResult(
     Guid? DocumentId,
     string Content,
     string MetaJson,
-    double Distance);
+    double Distance,
+    bool MedicallyReviewed = false);
 
 public sealed class ChunkRepository(AppDbContext db, ITenantContext tenantContext) : TenantScopedRepository(db, tenantContext)
 {
@@ -81,12 +82,18 @@ public sealed class ChunkRepository(AppDbContext db, ITenantContext tenantContex
         await Db.Database.ExecuteSqlRawAsync("SET LOCAL hnsw.iterative_scan = relaxed_order", cancellationToken);
 
         var rows = await Db.Database.SqlQuery<ChunkSearchRow>($"""
-            SELECT id, knowledge_item_id, document_id, content, meta::text AS meta_json,
-                   (embedding <=> {vector}) AS distance
-            FROM chunks
-            WHERE tenant_id = {tenantId} AND embedding IS NOT NULL
-            ORDER BY embedding <=> {vector}
-            LIMIT {limit}
+            SELECT c.id, c.knowledge_item_id, c.document_id, c.content, c.meta_json, c.distance,
+                   COALESCE(i.medically_reviewed, d.medically_reviewed, FALSE) AS medically_reviewed
+            FROM (
+                SELECT id, knowledge_item_id, document_id, content, meta::text AS meta_json,
+                       (embedding <=> {vector}) AS distance
+                FROM chunks
+                WHERE tenant_id = {tenantId} AND embedding IS NOT NULL
+                ORDER BY embedding <=> {vector}
+                LIMIT {limit}
+            ) c
+            LEFT JOIN knowledge_items i ON i.id = c.knowledge_item_id AND i.tenant_id = {tenantId}
+            LEFT JOIN documents d ON d.id = c.document_id AND d.tenant_id = {tenantId}
             """).ToListAsync(cancellationToken);
 
         await transaction.CommitAsync(cancellationToken);
@@ -94,7 +101,7 @@ public sealed class ChunkRepository(AppDbContext db, ITenantContext tenantContex
         // relaxed_order có thể trả lệch thứ tự chút ít: sắp lại theo khoảng cách.
         return rows
             .OrderBy(r => r.Distance)
-            .Select(r => new ChunkSearchResult(r.Id, r.KnowledgeItemId, r.DocumentId, r.Content, r.MetaJson, r.Distance))
+            .Select(r => new ChunkSearchResult(r.Id, r.KnowledgeItemId, r.DocumentId, r.Content, r.MetaJson, r.Distance, r.MedicallyReviewed))
             .ToList();
     }
 
@@ -111,5 +118,7 @@ public sealed class ChunkRepository(AppDbContext db, ITenantContext tenantContex
         public string MetaJson { get; set; } = "";
 
         public double Distance { get; set; }
+
+        public bool MedicallyReviewed { get; set; }
     }
 }

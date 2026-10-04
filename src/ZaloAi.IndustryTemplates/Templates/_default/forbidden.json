@@ -1,0 +1,9 @@
+{
+  "phrases": [
+    {"phrase": "cam kết lợi nhuận", "strict": true},
+    {"phrase": "100%", "strict": false},
+    {"phrase": "rẻ nhất", "strict": false},
+    {"phrase": "trọn đời", "strict": false},
+    {"phrase": "vĩnh viễn", "strict": false}
+  ]
+}

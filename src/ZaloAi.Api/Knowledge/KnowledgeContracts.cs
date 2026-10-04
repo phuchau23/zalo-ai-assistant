@@ -101,6 +101,7 @@ public sealed record KnowledgeItemResponse(
     string Code,
     string Title,
     IReadOnlyList<KnowledgeFieldValueResponse> Fields,
+    bool MedicallyReviewed,
     DateTimeOffset UpdatedAt)
 {
     internal static KnowledgeItemResponse From(KnowledgeItem item)
@@ -110,7 +111,7 @@ public sealed record KnowledgeItemResponse(
         var fields = KnowledgeDiffer.FieldChanges(null, entry)
             .Select(c => new KnowledgeFieldValueResponse(c.Field, c.Label, c.FieldType, c.New ?? ""))
             .ToList();
-        return new KnowledgeItemResponse(item.Id, KnowledgeImportResponse.Lower(item.Kind), definition.Label, item.Code, entry.Title, fields, item.UpdatedAt);
+        return new KnowledgeItemResponse(item.Id, KnowledgeImportResponse.Lower(item.Kind), definition.Label, item.Code, entry.Title, fields, item.MedicallyReviewed, item.UpdatedAt);
     }
 }
 
@@ -131,3 +132,6 @@ internal sealed class ApplyKnowledgeImportRequestValidator : AbstractValidator<A
         });
     }
 }
+
+/// <summary>Đánh dấu nội dung đã được người có chuyên môn duyệt (docs/INDUSTRIES.md mục 3). Sửa nội dung → tự bỏ đánh dấu.</summary>
+public sealed record SetMedicallyReviewedRequest(bool Reviewed);

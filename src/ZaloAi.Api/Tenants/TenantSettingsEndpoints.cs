@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Http.HttpResults;
 using ZaloAi.Api.Auth;
 using ZaloAi.Api.Common;
+using ZaloAi.Core.Entities;
 using ZaloAi.Core.Errors;
 using ZaloAi.Core.Tenancy;
 using ZaloAi.Infrastructure.Repositories;
@@ -20,6 +21,11 @@ internal static class TenantSettingsEndpoints
         group.MapPut("/settings", UpdateAsync)
             .RequireTenantRole(TenantRole.Owner)
             .Validate<UpdateTenantSettingsRequest>()
+            .ProducesProblem(StatusCodes.Status403Forbidden);
+
+        group.MapPut("/bot-style", UpdateBotStyleAsync)
+            .RequireTenantRole(TenantRole.Owner)
+            .Validate<UpdateBotStyleRequest>()
             .ProducesProblem(StatusCodes.Status403Forbidden);
 
         return app;
@@ -53,6 +59,25 @@ internal static class TenantSettingsEndpoints
         entity.PrivacyUrl = string.IsNullOrWhiteSpace(request.PrivacyUrl) ? null : request.PrivacyUrl.Trim();
 
         audit.Add(tenantId, tenant.UserId, "tenant.settings_updated", tenantId.ToString());
+        await tenants.SaveChangesAsync(cancellationToken);
+
+        return TypedResults.Ok(TenantSettingsResponse.From(entity));
+    }
+
+    private static async Task<Ok<TenantSettingsResponse>> UpdateBotStyleAsync(
+        UpdateBotStyleRequest request,
+        ITenantContext tenant,
+        TenantRepository tenants,
+        AuditLogRepository audit,
+        CancellationToken cancellationToken)
+    {
+        var tenantId = tenant.RequireTenantId();
+        var entity = await tenants.GetAsync(tenantId, cancellationToken) ?? throw new NotFoundException();
+
+        entity.BotTone = Enum.Parse<BotTone>(request.BotTone, ignoreCase: true);
+        entity.BotInstructions = string.IsNullOrWhiteSpace(request.BotInstructions) ? null : request.BotInstructions.Trim();
+
+        audit.Add(tenantId, tenant.UserId, "tenant.bot_style_updated", tenantId.ToString());
         await tenants.SaveChangesAsync(cancellationToken);
 
         return TypedResults.Ok(TenantSettingsResponse.From(entity));

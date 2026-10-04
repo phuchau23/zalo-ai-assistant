@@ -1,5 +1,18 @@
 namespace ZaloAi.Core.Entities;
 
+/// <summary>Phong cách trả lời của bot (trang Giọng văn).</summary>
+public enum BotTone
+{
+    /// <summary>Thân thiện, ấm áp.</summary>
+    Friendly = 0,
+
+    /// <summary>Lịch sự, chuyên nghiệp.</summary>
+    Professional = 1,
+
+    /// <summary>Ngắn gọn, đi thẳng vào ý.</summary>
+    Concise = 2,
+}
+
 public enum TenantStatus
 {
     Active = 0,
@@ -29,6 +42,13 @@ public sealed class Tenant
     public string Plan { get; set; } = "trial";
 
     public TenantStatus Status { get; set; } = TenantStatus.Active;
+
+    public BotTone BotTone { get; set; } = BotTone.Friendly;
+
+    /// <summary>
+    /// Ghi chú thêm của chủ DN cho bot (ví dụ "luôn mời khách đặt lịch"). Không ghi đè được quy tắc an toàn và câu báo trợ lý AI.
+    /// </summary>
+    public string? BotInstructions { get; set; }
 
     public DateTimeOffset? ExpiresAt { get; set; }
 

@@ -39,6 +39,9 @@ public sealed class KnowledgeDocument : ITenantOwned
 
     public int ChunkCount { get; set; }
 
+    /// <summary>Đã được người có chuyên môn duyệt (xem KnowledgeItem.MedicallyReviewed). Thay file → tự bỏ duyệt.</summary>
+    public bool MedicallyReviewed { get; set; }
+
     public Guid? CreatedBy { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }

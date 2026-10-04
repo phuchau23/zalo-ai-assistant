@@ -1,0 +1,6 @@
+{
+  "urgentReply": "Dạ {khach} ơi, {bot} rất lo cho {khach}. Nếu {khach} đang gặp nguy hiểm, vui lòng gọi ngay 115 (cấp cứu) hoặc 113 (công an). {bot} đã báo người phụ trách của {ten_doanh_nghiep} liên hệ {khach} ngay ạ.",
+  "signals": [
+    { "name": "tu_hai", "keywords": ["muốn chết", "tự tử", "tự sát", "không muốn sống"] }
+  ]
+}

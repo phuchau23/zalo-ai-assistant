@@ -8,6 +8,7 @@ using Microsoft.Extensions.Hosting;
 using Shouldly;
 using ZaloAi.Ai;
 using ZaloAi.Api.Jobs;
+using ZaloAi.Channels;
 using ZaloAi.Infrastructure;
 using ZaloAi.Infrastructure.Jobs;
 using ZaloAi.IntegrationTests.Api;
@@ -31,10 +32,12 @@ public sealed class JobsTests(PostgresFixture db)
             ["Jobs:QueuePollSeconds"] = "1",
             ["Jobs:WorkerCount"] = "2",
             ["Ai:EmbedProvider"] = "fake",
+            ["Ai:ChatProvider"] = "fake",
             ["Storage:LocalRoot"] = ApiFactory.TestStorageRoot,
         });
         builder.Services.AddZaloAiInfrastructure(builder.Configuration);
         builder.Services.AddZaloAiAi();
+        builder.Services.AddZaloAiChannels();
         builder.Services.AddZaloAiJobServer();
         var host = builder.Build();
         host.Start();

@@ -157,6 +157,137 @@ namespace ZaloAi.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("ZaloAi.Core.Entities.Contact", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Channel")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("channel");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("DisplayName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("display_name");
+
+                    b.Property<string>("ExternalUserId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("external_user_id");
+
+                    b.Property<string>("LeadFieldsEnc")
+                        .HasColumnType("text")
+                        .HasColumnName("lead_fields_enc");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_contacts");
+
+                    b.HasIndex("TenantId", "Channel", "ExternalUserId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_contacts_tenant_id_channel_external_user_id");
+
+                    b.ToTable("contacts", (string)null);
+                });
+
+            modelBuilder.Entity("ZaloAi.Core.Entities.Conversation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Channel")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("channel");
+
+                    b.Property<Guid>("ContactId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("contact_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("HandoffReason")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("handoff_reason");
+
+                    b.Property<bool>("IsTest")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_test");
+
+                    b.Property<DateTimeOffset?>("LastCustomerMessageAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_customer_message_at");
+
+                    b.Property<string>("Mode")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("mode");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<DateTimeOffset?>("SummarizedUntil")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("summarized_until");
+
+                    b.Property<string>("SummaryEnc")
+                        .HasColumnType("text")
+                        .HasColumnName("summary_enc");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("Urgency")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("urgency");
+
+                    b.HasKey("Id")
+                        .HasName("pk_conversations");
+
+                    b.HasIndex("ContactId")
+                        .HasDatabaseName("ix_conversations_contact_id");
+
+                    b.HasIndex("TenantId", "ContactId")
+                        .HasDatabaseName("ix_conversations_tenant_id_contact_id");
+
+                    b.HasIndex("TenantId", "UpdatedAt")
+                        .HasDatabaseName("ix_conversations_tenant_id_updated_at");
+
+                    b.ToTable("conversations", (string)null);
+                });
+
             modelBuilder.Entity("ZaloAi.Core.Entities.KnowledgeDocument", b =>
                 {
                     b.Property<Guid>("Id")
@@ -191,6 +322,10 @@ namespace ZaloAi.Infrastructure.Persistence.Migrations
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)")
                         .HasColumnName("file_name");
+
+                    b.Property<bool>("MedicallyReviewed")
+                        .HasColumnType("boolean")
+                        .HasColumnName("medically_reviewed");
 
                     b.Property<string>("Sha256")
                         .IsRequired()
@@ -342,6 +477,10 @@ namespace ZaloAi.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(20)")
                         .HasColumnName("kind");
 
+                    b.Property<bool>("MedicallyReviewed")
+                        .HasColumnType("boolean")
+                        .HasColumnName("medically_reviewed");
+
                     b.Property<string>("SearchText")
                         .IsRequired()
                         .HasColumnType("text")
@@ -404,11 +543,89 @@ namespace ZaloAi.Infrastructure.Persistence.Migrations
                     b.ToTable("memberships", (string)null);
                 });
 
+            modelBuilder.Entity("ZaloAi.Core.Entities.Message", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("AiTraceJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("ai_trace");
+
+                    b.Property<string>("ContentEnc")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("content_enc");
+
+                    b.Property<Guid>("ConversationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("conversation_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Direction")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("direction");
+
+                    b.Property<string>("ExternalMessageId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("external_message_id");
+
+                    b.Property<Guid?>("ReplyToMessageId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("reply_to_message_id");
+
+                    b.Property<string>("Sender")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("sender");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_messages");
+
+                    b.HasIndex("ConversationId")
+                        .HasDatabaseName("ix_messages_conversation_id");
+
+                    b.HasIndex("ReplyToMessageId")
+                        .HasDatabaseName("ix_messages_reply_to_message_id");
+
+                    b.HasIndex("TenantId", "ExternalMessageId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_messages_tenant_id_external_message_id")
+                        .HasFilter("external_message_id IS NOT NULL");
+
+                    b.HasIndex("TenantId", "ReplyToMessageId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_messages_tenant_id_reply_to_message_id")
+                        .HasFilter("reply_to_message_id IS NOT NULL");
+
+                    b.HasIndex("TenantId", "ConversationId", "CreatedAt")
+                        .HasDatabaseName("ix_messages_tenant_id_conversation_id_created_at");
+
+                    b.ToTable("messages", (string)null);
+                });
+
             modelBuilder.Entity("ZaloAi.Core.Entities.Tenant", b =>
                 {
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid")
                         .HasColumnName("id");
+
+                    b.Property<string>("BotInstructions")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("bot_instructions");
 
                     b.Property<string>("BotName")
                         .IsRequired()
@@ -421,6 +638,14 @@ namespace ZaloAi.Infrastructure.Persistence.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)")
                         .HasColumnName("bot_pronoun");
+
+                    b.Property<string>("BotTone")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("friendly")
+                        .HasColumnName("bot_tone");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -467,6 +692,67 @@ namespace ZaloAi.Infrastructure.Persistence.Migrations
                         .HasName("pk_tenants");
 
                     b.ToTable("tenants", (string)null);
+                });
+
+            modelBuilder.Entity("ZaloAi.Core.Entities.UsageRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid?>("ConversationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("conversation_id");
+
+                    b.Property<decimal>("CostUsd")
+                        .HasPrecision(14, 8)
+                        .HasColumnType("numeric(14,8)")
+                        .HasColumnName("cost_usd");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<int>("InputTokens")
+                        .HasColumnType("integer")
+                        .HasColumnName("input_tokens");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("Model")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("model");
+
+                    b.Property<int>("OutputTokens")
+                        .HasColumnType("integer")
+                        .HasColumnName("output_tokens");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("provider");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_usage_records");
+
+                    b.HasIndex("ConversationId")
+                        .HasDatabaseName("ix_usage_records_conversation_id");
+
+                    b.HasIndex("TenantId", "CreatedAt")
+                        .HasDatabaseName("ix_usage_records_tenant_id_created_at");
+
+                    b.ToTable("usage_records", (string)null);
                 });
 
             modelBuilder.Entity("ZaloAi.Core.Entities.User", b =>
@@ -548,6 +834,33 @@ namespace ZaloAi.Infrastructure.Persistence.Migrations
                         .HasConstraintName("fk_chunks_tenants_tenant_id");
                 });
 
+            modelBuilder.Entity("ZaloAi.Core.Entities.Contact", b =>
+                {
+                    b.HasOne("ZaloAi.Core.Entities.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_contacts_tenants_tenant_id");
+                });
+
+            modelBuilder.Entity("ZaloAi.Core.Entities.Conversation", b =>
+                {
+                    b.HasOne("ZaloAi.Core.Entities.Contact", null)
+                        .WithMany()
+                        .HasForeignKey("ContactId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_conversations_contacts_contact_id");
+
+                    b.HasOne("ZaloAi.Core.Entities.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_conversations_tenants_tenant_id");
+                });
+
             modelBuilder.Entity("ZaloAi.Core.Entities.KnowledgeDocument", b =>
                 {
                     b.HasOne("ZaloAi.Core.Entities.User", null)
@@ -619,6 +932,45 @@ namespace ZaloAi.Infrastructure.Persistence.Migrations
                         .HasConstraintName("fk_memberships_users_user_id");
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("ZaloAi.Core.Entities.Message", b =>
+                {
+                    b.HasOne("ZaloAi.Core.Entities.Conversation", null)
+                        .WithMany()
+                        .HasForeignKey("ConversationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_messages_conversations_conversation_id");
+
+                    b.HasOne("ZaloAi.Core.Entities.Message", null)
+                        .WithMany()
+                        .HasForeignKey("ReplyToMessageId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_messages_messages_reply_to_message_id");
+
+                    b.HasOne("ZaloAi.Core.Entities.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_messages_tenants_tenant_id");
+                });
+
+            modelBuilder.Entity("ZaloAi.Core.Entities.UsageRecord", b =>
+                {
+                    b.HasOne("ZaloAi.Core.Entities.Conversation", null)
+                        .WithMany()
+                        .HasForeignKey("ConversationId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_usage_records_conversations_conversation_id");
+
+                    b.HasOne("ZaloAi.Core.Entities.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_usage_records_tenants_tenant_id");
                 });
 #pragma warning restore 612, 618
         }
