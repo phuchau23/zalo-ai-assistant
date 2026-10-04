@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Pgvector;
@@ -13,9 +14,11 @@ using ZaloAi.Infrastructure.Persistence;
 namespace ZaloAi.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261004161931_AddCustomerCare")]
+    partial class AddCustomerCare
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -115,11 +118,6 @@ namespace ZaloAi.Infrastructure.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("draft_enc");
 
-                    b.Property<string>("EscalationReason")
-                        .HasMaxLength(40)
-                        .HasColumnType("character varying(40)")
-                        .HasColumnName("escalation_reason");
-
                     b.Property<DateTimeOffset?>("MessagingDeadline")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("messaging_deadline");
@@ -141,14 +139,6 @@ namespace ZaloAi.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("ResolvedByUserId")
                         .HasColumnType("uuid")
                         .HasColumnName("resolved_by_user_id");
-
-                    b.Property<DateTimeOffset?>("ScheduledSendAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("scheduled_send_at");
-
-                    b.Property<Guid?>("SentMessageId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("sent_message_id");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -194,13 +184,6 @@ namespace ZaloAi.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("ResolvedByUserId")
                         .HasDatabaseName("ix_care_suggestions_resolved_by_user_id");
-
-                    b.HasIndex("ScheduledSendAt")
-                        .HasDatabaseName("ix_care_suggestions_scheduled_send_at")
-                        .HasFilter("status = 'open' AND scheduled_send_at IS NOT NULL");
-
-                    b.HasIndex("SentMessageId")
-                        .HasDatabaseName("ix_care_suggestions_sent_message_id");
 
                     b.HasIndex("TenantId", "ContactId")
                         .IsUnique()
@@ -401,10 +384,6 @@ namespace ZaloAi.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("last_customer_message_at");
 
-                    b.Property<DateTimeOffset?>("LastProactiveAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("last_proactive_at");
-
                     b.Property<string>("LeadFieldsEnc")
                         .HasColumnType("text")
                         .HasColumnName("lead_fields_enc");
@@ -424,19 +403,6 @@ namespace ZaloAi.Infrastructure.Persistence.Migrations
                     b.Property<bool>("LeadStatusManual")
                         .HasColumnType("boolean")
                         .HasColumnName("lead_status_manual");
-
-                    b.Property<bool>("ProactiveAwaitingReply")
-                        .HasColumnType("boolean")
-                        .HasColumnName("proactive_awaiting_reply");
-
-                    b.Property<DateTimeOffset?>("ProactiveOptOutAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("proactive_opt_out_at");
-
-                    b.Property<string>("ProactiveOptOutSource")
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasColumnName("proactive_opt_out_source");
 
                     b.PrimitiveCollection<List<string>>("Tags")
                         .IsRequired()
@@ -490,9 +456,9 @@ namespace ZaloAi.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
-                    b.Property<DateTimeOffset?>("FollowUpAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("follow_up_at");
+                    b.Property<DateOnly?>("FollowUpOn")
+                        .HasColumnType("date")
+                        .HasColumnName("follow_up_on");
 
                     b.Property<DateTimeOffset?>("FollowUpQueuedAt")
                         .HasColumnType("timestamp with time zone")
@@ -521,9 +487,9 @@ namespace ZaloAi.Infrastructure.Persistence.Migrations
                     b.HasIndex("ContactId")
                         .HasDatabaseName("ix_contact_notes_contact_id");
 
-                    b.HasIndex("FollowUpAt")
-                        .HasDatabaseName("ix_contact_notes_follow_up_at")
-                        .HasFilter("follow_up_at IS NOT NULL AND follow_up_queued_at IS NULL");
+                    b.HasIndex("FollowUpOn")
+                        .HasDatabaseName("ix_contact_notes_follow_up_on")
+                        .HasFilter("follow_up_on IS NOT NULL AND follow_up_queued_at IS NULL");
 
                     b.HasIndex("TenantId", "ContactId", "HappenedOn")
                         .HasDatabaseName("ix_contact_notes_tenant_id_contact_id_happened_on");
@@ -665,10 +631,6 @@ namespace ZaloAi.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(500)")
                         .HasColumnName("after_hours_message");
 
-                    b.Property<bool>("CareAutoSend")
-                        .HasColumnType("boolean")
-                        .HasColumnName("care_auto_send");
-
                     b.Property<int>("CareColdHours")
                         .HasColumnType("integer")
                         .HasColumnName("care_cold_hours");
@@ -676,18 +638,6 @@ namespace ZaloAi.Infrastructure.Persistence.Migrations
                     b.Property<bool>("CareEnabled")
                         .HasColumnType("boolean")
                         .HasColumnName("care_enabled");
-
-                    b.Property<string>("CareSendEnd")
-                        .IsRequired()
-                        .HasMaxLength(5)
-                        .HasColumnType("character varying(5)")
-                        .HasColumnName("care_send_end");
-
-                    b.Property<string>("CareSendStart")
-                        .IsRequired()
-                        .HasMaxLength(5)
-                        .HasColumnType("character varying(5)")
-                        .HasColumnName("care_send_start");
 
                     b.Property<string>("CloseTime")
                         .IsRequired()
@@ -1066,10 +1016,6 @@ namespace ZaloAi.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(100)")
                         .HasColumnName("external_message_id");
 
-                    b.Property<bool>("Proactive")
-                        .HasColumnType("boolean")
-                        .HasColumnName("proactive");
-
                     b.Property<Guid?>("ReplyToMessageId")
                         .HasColumnType("uuid")
                         .HasColumnName("reply_to_message_id");
@@ -1339,12 +1285,6 @@ namespace ZaloAi.Infrastructure.Persistence.Migrations
                         .HasForeignKey("ResolvedByUserId")
                         .OnDelete(DeleteBehavior.SetNull)
                         .HasConstraintName("fk_care_suggestions_users_resolved_by_user_id");
-
-                    b.HasOne("ZaloAi.Core.Entities.Message", null)
-                        .WithMany()
-                        .HasForeignKey("SentMessageId")
-                        .OnDelete(DeleteBehavior.SetNull)
-                        .HasConstraintName("fk_care_suggestions_messages_sent_message_id");
 
                     b.HasOne("ZaloAi.Core.Entities.Tenant", null)
                         .WithMany()

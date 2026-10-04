@@ -24,9 +24,49 @@ public sealed class Contact : ITenantOwned
     /// <summary>Thông tin khách tự cung cấp (tên, SĐT, nhu cầu...) dạng JSON, MÃ HÓA (dữ liệu cá nhân).</summary>
     public string? LeadFieldsEnc { get; set; }
 
+    /// <summary>Tầng khách tiềm năng. Hệ thống tự nâng (Mới → Quan tâm → Nóng); Đã chốt / Không tiềm năng chỉ nhân viên đặt.</summary>
+    public LeadStatus LeadStatus { get; set; } = LeadStatus.New;
+
+    /// <summary>Nhân viên đã tự đặt trạng thái → hệ thống không tự đổi nữa (cho tới khi chọn lại "tự động").</summary>
+    public bool LeadStatusManual { get; set; }
+
+    public DateTimeOffset? LeadStatusChangedAt { get; set; }
+
+    /// <summary>Nhãn do nhân viên gắn (ví dụ "VIP", "khách cũ").</summary>
+    public List<string> Tags { get; set; } = [];
+
+    /// <summary>Tin gần nhất của khách trên mọi hội thoại (lọc, sắp xếp danh sách khách).</summary>
+    public DateTimeOffset? LastCustomerMessageAt { get; set; }
+
+    /// <summary>Không cho bot chủ động nhắn khách này (khách nhắn "hủy"/"dừng", hoặc nhân viên tắt). null = được nhắn.</summary>
+    public DateTimeOffset? ProactiveOptOutAt { get; set; }
+
+    /// <summary>customer (khách tự từ chối — nhân viên KHÔNG được bật lại) | staff.</summary>
+    public string? ProactiveOptOutSource { get; set; }
+
+    /// <summary>Lần cuối bot chủ động nhắn (cách nhau tối thiểu 24 giờ).</summary>
+    public DateTimeOffset? LastProactiveAt { get; set; }
+
+    /// <summary>Bot đã chủ động nhắn và khách CHƯA trả lời → không nhắn tin chủ động thứ hai.</summary>
+    public bool ProactiveAwaitingReply { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
 
     public DateTimeOffset UpdatedAt { get; set; }
+}
+
+/// <summary>Tầng khách tiềm năng (số lớn hơn = "nóng" hơn khi tự nâng; Won/Lost chỉ nhân viên đặt).</summary>
+public enum LeadStatus
+{
+    New = 0,
+    Interested = 1,
+    Hot = 2,
+
+    /// <summary>Đã mua / đặt lịch.</summary>
+    Won = 3,
+
+    /// <summary>Không tiềm năng.</summary>
+    Lost = 4,
 }
 
 public enum ConversationMode
@@ -86,6 +126,21 @@ public sealed class Conversation : ITenantOwned
 
     public DateTimeOffset? LastCustomerMessageAt { get; set; }
 
+    /// <summary>Tin gần nhất (mọi phía) — sắp xếp hộp thư.</summary>
+    public DateTimeOffset? LastMessageAt { get; set; }
+
+    /// <summary>Nhân viên phụ trách (tự gán khi tiếp quản / trả lời; owner gán lại được).</summary>
+    public Guid? AssignedUserId { get; set; }
+
+    /// <summary>Từ lúc nào khách đang chờ người trả lời (bot đã chuyển, khách nhắn khi đang ở chế độ nhân viên). null = không ai cần làm gì.</summary>
+    public DateTimeOffset? NeedsAttentionSince { get; set; }
+
+    /// <summary>Lần nhắc gần nhất cho ca đang chờ (tránh nhắc liên tục).</summary>
+    public DateTimeOffset? LastReminderAt { get; set; }
+
+    /// <summary>Lần AI phân tích "Cần chăm sóc" gần nhất — chỉ phân tích lại khi khách có tin mới sau mốc này.</summary>
+    public DateTimeOffset? CareAnalyzedAt { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
 
     public DateTimeOffset UpdatedAt { get; set; }
@@ -114,6 +169,9 @@ public enum MessageSender
     Customer = 0,
     Bot = 1,
     Staff = 2,
+
+    /// <summary>Câu chuyển tiếp hệ thống tự gửi (chuyển người, nhân viên tiếp quản, trả lại bot).</summary>
+    System = 3,
 }
 
 public sealed class Message : ITenantOwned
@@ -144,6 +202,12 @@ public sealed class Message : ITenantOwned
     public string? AiTraceJson { get; set; }
 
     public DeliveryStatus DeliveryStatus { get; set; }
+
+    /// <summary>Tin bot CHỦ ĐỘNG nhắn (chăm sóc), không phải trả lời khách.</summary>
+    public bool Proactive { get; set; }
+
+    /// <summary>Nhân viên gửi tin (Sender = Staff, hoặc câu tiếp quản của nhân viên).</summary>
+    public Guid? SenderUserId { get; set; }
 
     /// <summary>Mã lỗi gửi gần nhất (ví dụ "zalo:-230"), không chứa nội dung.</summary>
     public string? DeliveryError { get; set; }

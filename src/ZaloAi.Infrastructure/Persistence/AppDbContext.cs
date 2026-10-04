@@ -42,9 +42,15 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
 
     public DbSet<ChannelConnection> ChannelConnections => Set<ChannelConnection>();
 
+    public DbSet<HandoffSettings> HandoffSettings => Set<HandoffSettings>();
+
     public DbSet<Message> Messages => Set<Message>();
 
     public DbSet<UsageRecord> UsageRecords => Set<UsageRecord>();
+
+    public DbSet<ContactNote> ContactNotes => Set<ContactNote>();
+
+    public DbSet<CareSuggestion> CareSuggestions => Set<CareSuggestion>();
 
     /// <summary>EF đọc lại giá trị này mỗi lần truy vấn (tham số hóa theo instance DbContext).</summary>
     public Guid? CurrentTenantId => tenantContext.TenantId;
