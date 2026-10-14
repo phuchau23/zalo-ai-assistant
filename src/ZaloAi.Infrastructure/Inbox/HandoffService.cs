@@ -37,9 +37,6 @@ public sealed class HandoffSettingsRepository(AppDbContext db, ITenantContext te
 /// <summary>Câu chuyển tiếp (docs/FEATURE-SPECS.md mục 1) và giờ làm việc theo giờ Việt Nam.</summary>
 public static class HandoffTexts
 {
-    /// <summary>Cách gọi khách mặc định (khớp mẫu ngành).</summary>
-    public const string CustomerAddress = "anh/chị";
-
     private static readonly TimeZoneInfo Vietnam = TimeZoneInfo.CreateCustomTimeZone("ICT", TimeSpan.FromHours(7), "ICT", "ICT");
 
     public static bool IsWorkingTime(HandoffSettings settings, DateTimeOffset now)
@@ -87,19 +84,20 @@ public static class HandoffTexts
         return "giờ làm việc tiếp theo";
     }
 
-    public static string Handoff(HandoffSettings settings, string businessName, DateTimeOffset now)
+    public static string Handoff(HandoffSettings settings, string businessName, DateTimeOffset now, string? salutation)
     {
         ArgumentNullException.ThrowIfNull(settings);
         var template = IsWorkingTime(settings, now) ? settings.HandoffMessage : settings.AfterHoursMessage;
-        return Fill(template, businessName, staffName: null, settings, now);
+        return Fill(template, businessName, staffName: null, settings, now, salutation);
     }
 
-    public static string Fill(string template, string businessName, string? staffName, HandoffSettings settings, DateTimeOffset now)
+    /// <param name="salutation">Cách gọi khách đã lưu (<see cref="CustomerSalutation"/>); null/không hợp lệ → "mình".</param>
+    public static string Fill(string template, string businessName, string? staffName, HandoffSettings settings, DateTimeOffset now, string? salutation)
     {
         ArgumentNullException.ThrowIfNull(template);
         ArgumentNullException.ThrowIfNull(settings);
         var text = template
-            .Replace("{xung_ho}", CustomerAddress, StringComparison.Ordinal)
+            .Replace("{xung_ho}", CustomerSalutation.Resolve(salutation), StringComparison.Ordinal)
             .Replace("{ten_doanh_nghiep}", businessName, StringComparison.Ordinal)
             .Replace("{ten_nhan_vien}", string.IsNullOrWhiteSpace(staffName) ? "chuyên viên" : staffName, StringComparison.Ordinal)
             .Replace("{thoi_gian_phan_hoi}", settings.ResponseTime, StringComparison.Ordinal);

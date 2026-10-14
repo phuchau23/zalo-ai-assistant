@@ -13,6 +13,7 @@ namespace ZaloAi.Infrastructure.Inbox;
 /// </summary>
 public sealed class InboxService(
     ConversationRepository conversations,
+    ContactRepository contacts,
     TenantRepository tenants,
     HandoffSettingsRepository handoffSettings,
     MessageDeliveryService delivery,
@@ -32,7 +33,8 @@ public sealed class InboxService(
     /// Sau khi bot trả lời và chuyển người: gửi câu chuyển tiếp (trong/ngoài giờ) trừ ca khẩn cấp (câu khẩn cấp đã báo đủ),
     /// đánh dấu chờ người, thông báo Telegram. Gọi trong job, sau khi đã lưu tin bot.
     /// </summary>
-    public async Task<Message?> AfterBotHandoffAsync(Guid tenantId, Conversation conversation, Urgency urgency, CancellationToken cancellationToken)
+    /// <param name="replyToMessageId">Câu chuyển tiếp là câu trả lời DUY NHẤT cho tin khách này (khi bot không trả lời, ví dụ hết hạn mức) → gắn khóa chống gửi trùng.</param>
+    public async Task<Message?> AfterBotHandoffAsync(Guid tenantId, Conversation conversation, Urgency urgency, string? salutation, Guid? replyToMessageId, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(conversation);
         MarkNeedsAttention(conversation);
@@ -41,7 +43,7 @@ public sealed class InboxService(
         {
             var tenant = await tenants.GetAsync(tenantId, cancellationToken) ?? throw new NotFoundException();
             var settings = await handoffSettings.GetAsync(tenantId, cancellationToken);
-            notice = delivery.AddOutgoing(tenantId, conversation, MessageSender.System, HandoffTexts.Handoff(settings, tenant.Name, time.GetUtcNow()));
+            notice = delivery.AddOutgoing(tenantId, conversation, MessageSender.System, HandoffTexts.Handoff(settings, tenant.Name, time.GetUtcNow(), salutation), replyToMessageId: replyToMessageId);
         }
 
         await conversations.SaveChangesAsync(cancellationToken);
@@ -65,7 +67,7 @@ public sealed class InboxService(
         if (settings.TakeoverMessageEnabled)
         {
             intro = delivery.AddOutgoing(tenantId, conversation, MessageSender.System,
-                HandoffTexts.Fill(settings.TakeoverMessage, tenant.Name, userName, settings, time.GetUtcNow()), senderUserId: userId);
+                HandoffTexts.Fill(settings.TakeoverMessage, tenant.Name, userName, settings, time.GetUtcNow(), await SalutationAsync(tenantId, conversation, cancellationToken)), senderUserId: userId);
             conversation.NeedsAttentionSince = null; // khách đã được phản hồi
             conversation.LastReminderAt = null;
         }
@@ -92,7 +94,7 @@ public sealed class InboxService(
         if (settings.ReturnToBotMessageEnabled && !conversation.IsTest)
         {
             notice = delivery.AddOutgoing(tenantId, conversation, MessageSender.System,
-                HandoffTexts.Fill(settings.ReturnToBotMessage, tenant.Name, null, settings, time.GetUtcNow()));
+                HandoffTexts.Fill(settings.ReturnToBotMessage, tenant.Name, null, settings, time.GetUtcNow(), await SalutationAsync(tenantId, conversation, cancellationToken)));
         }
 
         audit.Add(tenantId, userId, "conversation.returned_to_bot", conversationId.ToString());
@@ -132,6 +134,9 @@ public sealed class InboxService(
 
     private async Task<Conversation> RequireAsync(Guid tenantId, Guid conversationId, CancellationToken cancellationToken) =>
         await conversations.GetConversationAsync(tenantId, conversationId, cancellationToken) ?? throw new NotFoundException();
+
+    private async Task<string?> SalutationAsync(Guid tenantId, Conversation conversation, CancellationToken cancellationToken) =>
+        (await contacts.GetAsync(tenantId, conversation.ContactId, cancellationToken))?.Salutation;
 
     private void EnqueueSend(Guid tenantId, Message? message)
     {
