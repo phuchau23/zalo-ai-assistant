@@ -68,6 +68,10 @@ public sealed class AiOptions : IValidatableObject
     [Range(2, 40)]
     public int BotHistoryTurns { get; set; } = 10;
 
+    /// <summary>Khoảng cách (ms) giữa các tin khi bot trả lời bằng nhiều tin ngắn, cho giống người đang gõ. 0 = gửi liền.</summary>
+    [Range(0, 5000)]
+    public int BotMessageGapMs { get; set; } = 1200;
+
     /// <summary>Bảng giá theo tên model (appsettings.json, section Ai:Pricing). Model không có giá → chi phí ghi 0.</summary>
     public Dictionary<string, ModelPrice> Pricing { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
