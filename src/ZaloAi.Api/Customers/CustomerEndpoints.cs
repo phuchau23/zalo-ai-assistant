@@ -21,6 +21,8 @@ namespace ZaloAi.Api.Customers;
 /// <param name="ProactiveOptOut">null = bot được chủ động nhắn; customer = khách đã nhắn "hủy" (không bật lại được); staff = nhân viên tắt.</param>
 /// <param name="Salutation">Cách bot gọi khách: anh | chị | cô | chú | bác; null = chưa biết (bot gọi "mình").</param>
 /// <param name="SalutationSource">staff (nhân viên đặt) | customer (khách tự xưng khi chat); null khi chưa biết.</param>
+/// <param name="ConsentMarketing">Khách đồng ý nhận tin ưu đãi.</param>
+/// <param name="ConsentSource">import (DN khai khi nhập danh sách) | staff | customer; null = chưa có dữ liệu.</param>
 public sealed record ContactListItem(
     Guid Id,
     string Name,
@@ -36,7 +38,9 @@ public sealed record ContactListItem(
     string? ProactiveOptOut,
     DateTimeOffset? LastProactiveAt,
     string? Salutation,
-    string? SalutationSource);
+    string? SalutationSource,
+    bool ConsentMarketing,
+    string? ConsentSource);
 
 /// <param name="Counts">Số khách theo trạng thái (new, interested, hot, won, lost) — không phụ thuộc bộ lọc.</param>
 /// <param name="Truncated">Có nhiều khách hơn giới hạn tải một lần.</param>
@@ -395,7 +399,9 @@ internal static class CustomerEndpoints
         c.ProactiveOptOutAt is null ? null : c.ProactiveOptOutSource ?? "customer",
         c.LastProactiveAt,
         CustomerSalutation.IsAllowed(c.Salutation) ? c.Salutation : null,
-        CustomerSalutation.IsAllowed(c.Salutation) ? c.SalutationSource : null);
+        CustomerSalutation.IsAllowed(c.Salutation) ? c.SalutationSource : null,
+        c.ConsentMarketing,
+        c.ConsentSource);
 
     private static ContactNoteItem ToNote(ContactNote n, IReadOnlyDictionary<Guid, string> names, IFieldEncryptor encryptor) => new(
         n.Id,
