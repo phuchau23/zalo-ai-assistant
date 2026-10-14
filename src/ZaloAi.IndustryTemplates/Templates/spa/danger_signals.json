@@ -1,6 +1,6 @@
 {
   "_comment": "Kiểm tra TRƯỚC khi gọi AI, so khớp bỏ dấu + chữ thường, theo cụm từ nguyên vẹn. Chọn cụm đủ cụ thể để ít báo nhầm; AI còn tự đánh giá urgency (lớp 2). Biến: {bot} {khach} {ten_doanh_nghiep}.",
-  "urgentReply": "Dạ {khach} ơi, những dấu hiệu {khach} mô tả cần được nhân viên y tế kiểm tra ngay. {khach} vui lòng đến cơ sở y tế gần nhất, hoặc gọi cấp cứu 115 nếu tình trạng nặng hoặc tiến triển nhanh. {bot} đã báo ngay cho người phụ trách của {ten_doanh_nghiep} để liên hệ {khach} ạ.",
+  "urgentReply": "Dạ, những dấu hiệu {khach} mô tả cần được nhân viên y tế kiểm tra ngay. {khach} vui lòng đến cơ sở y tế gần nhất, hoặc gọi cấp cứu 115 nếu tình trạng nặng hoặc tiến triển nhanh. {bot} đã báo ngay cho người phụ trách của {ten_doanh_nghiep} để liên hệ {khach} ạ.",
   "signals": [
     { "name": "kho_tho", "keywords": ["khó thở", "thở không được", "ngạt thở", "tức thở", "thở dốc"] },
     { "name": "dau_nguc", "keywords": ["đau ngực", "tức ngực", "đau thắt ngực", "nhói ngực"] },

@@ -33,7 +33,6 @@ public sealed record IndustryTemplate(
     string Risk,
     bool MedicalSafety,
     string Version,
-    string CustomerAddress,
     string Persona,
     string Rules,
     IReadOnlyList<ForbiddenPhrase> Forbidden,
@@ -114,7 +113,6 @@ public static class IndustryTemplateRegistry
                 meta.Risk,
                 meta.MedicalSafety,
                 meta.Version,
-                meta.CustomerAddress ?? "anh/chị",
                 Require("persona.md").Trim(),
                 Require("rules.md").Trim(),
                 Parse<ForbiddenFile>("forbidden.json").Phrases,
@@ -136,7 +134,7 @@ public static class IndustryTemplateRegistry
         return result.ToFrozenDictionary(StringComparer.Ordinal);
     }
 
-    private sealed record TemplateFile(string Slug, string Name, string Risk, bool MedicalSafety, string Version, string? CustomerAddress);
+    private sealed record TemplateFile(string Slug, string Name, string Risk, bool MedicalSafety, string Version);
 
     private sealed record ForbiddenFile(List<ForbiddenPhrase> Phrases);
 
