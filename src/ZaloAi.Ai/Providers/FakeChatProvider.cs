@@ -7,11 +7,14 @@ namespace ZaloAi.Ai.Providers;
 /// <summary>
 /// AI giả, tính tại chỗ, không gọi mạng — cho test và chạy dev không key (Ai:ChatProvider = fake). KHÔNG dùng ở production.
 /// Có JSON schema: nếu prompt có đoạn kiến thức "[C1] ..." thì trả lời bằng nội dung đoạn đó (confidence high),
-/// không có thì confidence low + cần người. Không schema (tóm tắt): trả câu tóm tắt cố định kèm tin cuối.
+/// không có thì confidence low + cần người. Có đoạn kiến thức → 2 tin (giống cách nhắn nhiều tin ngắn); khách mở đầu bằng
+/// "chị/anh/cô/chú/bác ..." → customer_salutation. Không schema (tóm tắt): trả câu tóm tắt cố định kèm tin cuối.
 /// </summary>
 public sealed partial class FakeChatProvider : IChatProvider
 {
     public const string ModelName = "fake-chat";
+
+    private static readonly string[] NoKnowledgeMessages = ["Dạ câu này em chưa có thông tin, em chuyển nhân viên hỗ trợ mình nhé."];
 
     public Task<ChatResult> ChatAsync(ChatRequest request, CancellationToken cancellationToken)
     {
@@ -37,16 +40,23 @@ public sealed partial class FakeChatProvider : IChatProvider
                 trigger = followUp ? "follow_up" : "thinking",
                 reason = declined ? "Khách đã từ chối." : "Khách hỏi dịch vụ nhưng chưa đặt lịch (giả lập).",
                 suggested_action = "Hỏi lại nhu cầu và mời đặt lịch.",
-                draft_message = declined ? "" : "Dạ em chào anh/chị, em nhắn hỏi thăm mình còn quan tâm dịch vụ bên em không ạ?",
+                draft_message = declined ? "" : "Dạ em chào mình, em nhắn hỏi thăm mình còn quan tâm dịch vụ bên em không ạ?",
             });
         }
         else
         {
             var chunk = ChunkHeader().Match(request.System);
+            var self = SelfReference().Match(last);
+            var salutation = self.Success ? self.Groups["s"].Value.ToLowerInvariant() : "none";
             text = chunk.Success
                 ? JsonSerializer.Serialize(new
                 {
-                    reply = $"Dạ, theo thông tin bên em: {Truncate(chunk.Groups["body"].Value.Trim().ReplaceLineEndings(" "), 300)}",
+                    messages = new[]
+                    {
+                        $"Dạ, theo thông tin bên em: {Truncate(chunk.Groups["body"].Value.Trim().ReplaceLineEndings(" "), 300)}",
+                        "Mình cần em tư vấn thêm gì không ạ?",
+                    },
+                    customer_salutation = salutation,
                     used_chunk_ids = new[] { chunk.Groups["id"].Value },
                     confidence = "high",
                     needs_human = false,
@@ -57,7 +67,8 @@ public sealed partial class FakeChatProvider : IChatProvider
                 })
                 : JsonSerializer.Serialize(new
                 {
-                    reply = "Dạ câu này em chưa có thông tin, em chuyển nhân viên hỗ trợ mình nhé.",
+                    messages = NoKnowledgeMessages,
+                    customer_salutation = salutation,
                     used_chunk_ids = Array.Empty<string>(),
                     confidence = "low",
                     needs_human = true,
@@ -77,4 +88,8 @@ public sealed partial class FakeChatProvider : IChatProvider
     /// <summary>Dòng tiêu đề "[C1] ..." rồi nội dung đến dòng trống (định dạng của PromptBuilder).</summary>
     [GeneratedRegex(@"^\[(?<id>C\d+)\][^\n]*\r?\n(?<body>(?:[^\r\n]+\r?\n?)+)", RegexOptions.Multiline)]
     private static partial Regex ChunkHeader();
+
+    /// <summary>Tin của khách mở đầu bằng cách tự xưng ("chị muốn hỏi...").</summary>
+    [GeneratedRegex(@"(?:^|\n)(?<s>anh|chị|cô|chú|bác)\s", RegexOptions.IgnoreCase)]
+    private static partial Regex SelfReference();
 }
