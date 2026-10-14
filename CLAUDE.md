@@ -414,10 +414,10 @@ Task:
 - [x] Gộp `lead_fields` từ AI vào `contacts` (theo template ngành), lead_status tự động + sửa tay. — 5 tầng Mới → Quan tâm → Nóng → Đã chốt → Không tiềm năng (chủ dự án chốt 2026-10-04), nhãn, nhật ký chăm sóc của nhân viên.
 - [x] Trang Khách tiềm năng: lọc, xem hội thoại, xuất Excel (ghi audit log). — trang "Khách hàng" + hồ sơ khách.
 - [x] Trang "Cần chăm sóc": AI gợi ý khách nhân viên nên chủ động nhắn (mức độ, lý do, tin nháp, hạn nhắn OA, gán nhân viên), bảng `care_suggestions` (`docs/FEATURE-SPECS.md` mục 2).
-- [ ] Dashboard: hội thoại/ngày, khách tiềm năng mới, tỷ lệ bot tự xử lý, danh sách câu bot không trả lời được.
-- [ ] Xóa/xuất dữ liệu một khách cuối; xóa toàn bộ dữ liệu tenant.
-- [ ] Super admin (chỉ chủ dự án): danh sách tenant, gói, hạn, trạng thái, chi phí AI theo tháng, khóa/mở tenant.
-- [ ] Hạn mức hội thoại/tháng theo gói: gần hết → cảnh báo; hết → theo cấu hình (chuyển hết sang người hoặc chặn).
+- [x] Dashboard: hội thoại/ngày, khách tiềm năng mới, tỷ lệ bot tự xử lý, danh sách câu bot không trả lời được.
+- [x] Xóa/xuất dữ liệu một khách cuối; xóa toàn bộ dữ liệu tenant.
+- [x] Super admin (chỉ chủ dự án): danh sách tenant, gói, hạn, trạng thái, chi phí AI theo tháng, khóa/mở tenant. — kèm tạo DN + mật khẩu tạm, tự khóa khi quá hạn 3 ngày.
+- [x] Hạn mức hội thoại/tháng theo gói: gần hết → cảnh báo; hết → theo cấu hình (chuyển hết sang người hoặc chặn). — chủ dự án chốt: hết → khách MỚI chuyển nhân viên, khách đã nhắn trong tháng vẫn được bot trả lời.
 
 Tiêu chí xong: DN dùng thử xem được lead và báo cáo tuần; nhân viên nhắn được khách từ trang "Cần chăm sóc"; chủ dự án thấy chi phí AI từng tenant.
 
