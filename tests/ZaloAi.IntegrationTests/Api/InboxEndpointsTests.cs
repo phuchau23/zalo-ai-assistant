@@ -65,8 +65,8 @@ public sealed class InboxEndpointsTests(PostgresFixture db)
         item.IsTest.ShouldBeTrue();
 
         var detail = (await owner.GetFromJsonAsync<InboxConversationDetail>(Inbox($"/{conversationId}")))!;
-        detail.Messages.Select(m => m.Sender).ShouldBe(["customer", "bot", "system"]);
-        detail.Messages[2].Text.ShouldContain("chuyên viên chăm sóc khách hàng");
+        detail.Messages.Select(m => m.Sender).ShouldBe(["customer", "bot", "bot", "system"]); // câu báo trợ lý AI + câu trả lời + câu chuyển tiếp
+        detail.Messages[3].Text.ShouldContain("chuyên viên chăm sóc khách hàng");
         detail.Messages.ShouldAllBe(m => m.Sender == "customer" || m.DeliveryStatus == "sent");
     }
 

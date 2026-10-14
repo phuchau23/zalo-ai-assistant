@@ -70,11 +70,15 @@ public sealed class ChatTestEndpointsTests(PostgresFixture db)
         var after = await SendAndProcessAsync(client, tenantId, conversation.Id, "Massage đông y 60 phút giá bao nhiêu? SĐT mình 0912345678");
 
         after.WaitingForBot.ShouldBeFalse();
-        after.Messages.Count.ShouldBe(2);
-        var reply = after.Messages[1];
-        reply.Sender.ShouldBe("bot");
-        reply.Text.ShouldContain("trợ lý AI");
-        reply.Text.ShouldContain("450");
+        // Câu báo trợ lý AI là tin riêng đứng đầu, rồi các tin ngắn của câu trả lời theo đúng thứ tự; trace gắn ở tin cuối.
+        after.Messages.Count.ShouldBe(4);
+        after.Messages.Skip(1).ShouldAllBe(m => m.Sender == "bot");
+        after.Messages[1].Text.ShouldContain("trợ lý AI");
+        after.Messages[1].Trace.ShouldBeNull();
+        after.Messages[2].Text.ShouldContain("450");
+        after.Messages[2].Trace.ShouldBeNull();
+        after.Messages[3].Text.ShouldBe("Mình cần em tư vấn thêm gì không ạ?");
+        var reply = after.Messages[3];
         reply.Trace.ShouldNotBeNull();
         reply.Trace.Chunks.ShouldContain(c => c.Code == "DV-MASSAGE-60" && c.Used);
         reply.Trace.PiiMasked.ShouldBe(1);
@@ -89,7 +93,7 @@ public sealed class ChatTestEndpointsTests(PostgresFixture db)
         // Chạy lại job cho cùng tin → không trả lời lần 2.
         await RunJobAsync<ProcessIncomingMessageJob>(job => job.RunAsync(tenantId, after.Messages[0].Id, CancellationToken.None));
         var again = (await client.GetFromJsonAsync<ChatTestConversationResponse>(new Uri($"/chat-test/conversations/{conversation.Id}", UriKind.Relative)))!;
-        again.Messages.Count.ShouldBe(2);
+        again.Messages.Count.ShouldBe(4);
     }
 
     [Fact]
@@ -102,7 +106,8 @@ public sealed class ChatTestEndpointsTests(PostgresFixture db)
         var after = await SendAndProcessAsync(client, tenantId, conversation.Id, "massage xong em bị khó thở");
         after.Mode.ShouldBe("human");
         after.Urgency.ShouldBe("urgent");
-        after.Messages[1].Text.ShouldContain("115");
+        after.Messages[1].Text.ShouldContain("trợ lý AI");
+        after.Messages[2].Text.ShouldContain("115");
 
         // Đang do nhân viên xử lý: khách vẫn nhắn được, bot không trả lời (job bỏ qua).
         using var whileHuman = await client.PostAsJsonAsync(new Uri($"/chat-test/conversations/{conversation.Id}/messages", UriKind.Relative), new { text = "alo" });
@@ -110,6 +115,37 @@ public sealed class ChatTestEndpointsTests(PostgresFixture db)
 
         using var back = await client.PostAsync(new Uri($"/chat-test/conversations/{conversation.Id}/return-to-bot", UriKind.Relative), null);
         (await back.Content.ReadFromJsonAsync<ChatTestConversationResponse>())!.Mode.ShouldBe("bot");
+    }
+
+    [Fact]
+    public async Task Bot_messages_not_yet_delivered_stay_hidden_and_keep_waiting()
+    {
+        var (tenantId, client) = await TenantWithDataAsync("Chat thử từng tin");
+        using var create = await client.PostAsync(Conversations, null);
+        var conversation = (await create.Content.ReadFromJsonAsync<ChatTestConversationResponse>())!;
+        await client.PostAsJsonAsync(new Uri($"/chat-test/conversations/{conversation.Id}/messages", UriKind.Relative), new { text = "chào" });
+
+        // Bot đã soạn 1 tin nhưng chưa gửi tới khách (đang chờ nhịp gõ giữa các tin).
+        using (var scope = db.Api.Services.CreateScope())
+        {
+            var encryptor = scope.ServiceProvider.GetRequiredService<ZaloAi.Core.Security.IFieldEncryptor>();
+            await using var context = db.CreateDbContext(tenantId);
+            context.Messages.Add(new ZaloAi.Core.Entities.Message
+            {
+                Id = Guid.CreateVersion7(),
+                TenantId = tenantId,
+                ConversationId = conversation.Id,
+                Direction = ZaloAi.Core.Entities.MessageDirection.Out,
+                Sender = ZaloAi.Core.Entities.MessageSender.Bot,
+                ContentEnc = encryptor.Encrypt("Dạ tin thứ hai"),
+                DeliveryStatus = ZaloAi.Core.Entities.DeliveryStatus.Pending,
+            });
+            await context.SaveChangesAsync();
+        }
+
+        var detail = (await client.GetFromJsonAsync<ChatTestConversationResponse>(new Uri($"/chat-test/conversations/{conversation.Id}", UriKind.Relative)))!;
+        detail.Messages.ShouldAllBe(m => m.Text != "Dạ tin thứ hai");
+        detail.WaitingForBot.ShouldBeTrue();
     }
 
     [Fact]

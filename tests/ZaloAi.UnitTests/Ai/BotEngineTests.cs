@@ -137,7 +137,7 @@ public sealed class BotEngineTests
         result.NeedsHuman.ShouldBeTrue();
         result.HandoffReason.ShouldBe("urgent");
         result.Reply.ShouldContain("115");
-        result.Reply.ShouldStartWith("Dạ anh/chị ơi");
+        result.Reply.ShouldStartWith("Dạ, những dấu hiệu mình mô tả");
     }
 
     [Fact]
@@ -160,7 +160,7 @@ public sealed class BotEngineTests
         chat.Requests[1].Temperature.ShouldBe(0);
         result.NeedsHuman.ShouldBeTrue();
         result.HandoffReason.ShouldBe("ai_error");
-        result.Reply.ShouldContain("chuyển anh/chị sang nhân viên của Khoa Học Huyệt Đạo");
+        result.Reply.ShouldContain("chuyển mình sang nhân viên của Khoa Học Huyệt Đạo");
         result.Usage.Count.ShouldBe(2);
     }
 
@@ -224,7 +224,8 @@ public sealed class BotEngineTests
         var chat = new ScriptedChat(_ => Json("Dạ bên em có massage cổ vai gáy giúp thư giãn ạ.", ["C1"], health: true));
         var result = await Engine(chat, new StaticSearch(Massage)).ReplyAsync(Turn("em hay đau cổ"), CancellationToken.None);
 
-        result.Reply.ShouldContain("thăm khám trực tiếp");
+        result.Reply.ShouldContain("ghé Khoa Học Huyệt Đạo để chuyên viên bên em kiểm tra trực tiếp");
+        result.Reply.ShouldNotContain("bác sĩ");
     }
 
     [Fact]

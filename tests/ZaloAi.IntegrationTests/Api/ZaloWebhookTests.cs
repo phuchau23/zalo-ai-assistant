@@ -106,9 +106,9 @@ public sealed class ZaloWebhookTests(PostgresFixture db) : IAsyncLifetime, IDisp
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
         await RunJobsAsync(tenantId);
 
-        // AI giả không có dữ liệu → trả lời + chuyển nhân viên kèm câu chuyển tiếp (M5).
+        // AI giả không có dữ liệu → câu báo trợ lý AI (tin riêng) + trả lời + chuyển nhân viên kèm câu chuyển tiếp (M5).
         var messages = await MessagesAsync(tenantId);
-        messages.Select(m => m.Sender).ShouldBe([MessageSender.Customer, MessageSender.Bot, MessageSender.System]);
+        messages.Select(m => m.Sender).ShouldBe([MessageSender.Customer, MessageSender.Bot, MessageSender.Bot, MessageSender.System]);
         messages[0].ExternalMessageId.ShouldBe("msg-1");
         messages[0].ContentEnc.ShouldNotContain("0912345678");
         var reply = messages[1];
@@ -116,8 +116,9 @@ public sealed class ZaloWebhookTests(PostgresFixture db) : IAsyncLifetime, IDisp
         reply.DeliveryStatus.ShouldBe(DeliveryStatus.Sent);
         reply.ExternalMessageId.ShouldBe("zalo-msg-1");
 
-        Sends().Count.ShouldBe(2);
+        Sends().Count.ShouldBe(3);
         messages[2].DeliveryStatus.ShouldBe(DeliveryStatus.Sent);
+        messages[3].DeliveryStatus.ShouldBe(DeliveryStatus.Sent);
         var send = Sends()[0];
         send.Headers["access_token"].ShouldStartWith("AT-");
         var body = JsonDocument.Parse(send.Body).RootElement;
@@ -149,8 +150,8 @@ public sealed class ZaloWebhookTests(PostgresFixture db) : IAsyncLifetime, IDisp
         await RunJobsAsync(tenantId);
         await RunJobsAsync(tenantId);
 
-        (await MessagesAsync(tenantId)).Count.ShouldBe(3); // khách, bot, câu chuyển tiếp — không nhân đôi
-        Sends().Count.ShouldBe(2);
+        (await MessagesAsync(tenantId)).Count.ShouldBe(4); // khách, câu báo AI, bot, câu chuyển tiếp — không nhân đôi
+        Sends().Count.ShouldBe(3);
     }
 
     [Fact]
@@ -172,7 +173,7 @@ public sealed class ZaloWebhookTests(PostgresFixture db) : IAsyncLifetime, IDisp
         };
 
         (await PostAsync(OaSend("zalo-msg-1", null).ToJsonString())).StatusCode.ShouldBe(HttpStatusCode.OK);
-        (await MessagesAsync(tenantId)).Count.ShouldBe(3); // tin bot dội về: bỏ qua
+        (await MessagesAsync(tenantId)).Count.ShouldBe(4); // tin bot dội về: bỏ qua
 
         (await PostAsync(OaSend("staff-1", "admin-9").ToJsonString())).StatusCode.ShouldBe(HttpStatusCode.OK);
         var messages = await MessagesAsync(tenantId);
@@ -181,7 +182,7 @@ public sealed class ZaloWebhookTests(PostgresFixture db) : IAsyncLifetime, IDisp
         // Khách nhắn tiếp: bot không chen vào vì nhân viên đang xử lý.
         (await PostAsync(UserText(oaId, userId, "msg-b", "cảm ơn"))).StatusCode.ShouldBe(HttpStatusCode.OK);
         await RunJobsAsync(tenantId);
-        Sends().Count.ShouldBe(2); // không thêm tin bot nào
+        Sends().Count.ShouldBe(3); // không thêm tin bot nào
     }
 
     [Fact]
@@ -210,7 +211,7 @@ public sealed class ZaloWebhookTests(PostgresFixture db) : IAsyncLifetime, IDisp
         await RunJobsAsync(tenantId);
 
         var sends = Sends();
-        sends.Count.ShouldBe(3); // lỗi -220, gửi lại câu trả lời, câu chuyển tiếp
+        sends.Count.ShouldBe(4); // lỗi -220, gửi lại câu báo AI, câu trả lời, câu chuyển tiếp
         sends[1].Headers["access_token"].ShouldNotBe(sends[0].Headers["access_token"]);
         _zalo.Calls.Count(c => c.Body.Contains("grant_type=refresh_token", StringComparison.Ordinal)).ShouldBe(1);
         (await MessagesAsync(tenantId)).Where(m => m.Direction == MessageDirection.Out).ShouldAllBe(m => m.DeliveryStatus == DeliveryStatus.Sent);
@@ -225,9 +226,9 @@ public sealed class ZaloWebhookTests(PostgresFixture db) : IAsyncLifetime, IDisp
         (await PostAsync(UserText(oaId, NewId(), "msg-7", "hi"))).StatusCode.ShouldBe(HttpStatusCode.OK);
         await RunJobsAsync(tenantId); // không ném lỗi → Hangfire không thử lại
 
-        var reply = (await MessagesAsync(tenantId)).Single(m => m.Sender == MessageSender.Bot);
-        reply.DeliveryStatus.ShouldBe(DeliveryStatus.Failed);
-        reply.DeliveryError.ShouldBe("zalo:-230");
+        var replies = (await MessagesAsync(tenantId)).Where(m => m.Sender == MessageSender.Bot).ToList();
+        replies.Count.ShouldBe(2); // câu báo AI + câu trả lời
+        replies.ShouldAllBe(m => m.DeliveryStatus == DeliveryStatus.Failed && m.DeliveryError == "zalo:-230");
     }
 
     [Fact]
@@ -255,7 +256,8 @@ public sealed class ZaloWebhookTests(PostgresFixture db) : IAsyncLifetime, IDisp
         var encryptor = scope.ServiceProvider.GetRequiredService<IFieldEncryptor>();
         var messages = await MessagesAsync(tenantId);
         encryptor.Decrypt(messages[0].ContentEnc).ShouldBe(InboundText.ForAttachment("image"));
-        JsonDocument.Parse(Sends()[0].Body).RootElement.GetProperty("message").GetProperty("text").GetString()!
+        JsonDocument.Parse(Sends()[0].Body).RootElement.GetProperty("message").GetProperty("text").GetString()!.ShouldContain("trợ lý AI");
+        JsonDocument.Parse(Sends()[1].Body).RootElement.GetProperty("message").GetProperty("text").GetString()!
             .ShouldContain("chưa xem được hình ảnh");
     }
 

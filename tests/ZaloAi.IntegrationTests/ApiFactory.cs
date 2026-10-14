@@ -29,6 +29,7 @@ public class ApiFactory(
         ["RateLimit:LoginPermitPerMinute"] = loginPermitPerMinute.ToString(System.Globalization.CultureInfo.InvariantCulture),
         ["Ai:EmbedProvider"] = "fake",
         ["Ai:ChatProvider"] = "fake",
+        ["Ai:BotMessageGapMs"] = "0",
         ["Storage:LocalRoot"] = TestStorageRoot,
     };
 

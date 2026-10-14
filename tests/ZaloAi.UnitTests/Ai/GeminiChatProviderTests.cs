@@ -163,7 +163,8 @@ public sealed class GeminiChatProviderTests
         var withChunk = await fake.ChatAsync(Request with { System = "Dữ liệu:\n[C1] (mã MS60) Massage 60 phút\nGiá 450.000 đ\n" }, CancellationToken.None);
         var json = JsonDocument.Parse(withChunk.Text).RootElement;
         json.GetProperty("confidence").GetString().ShouldBe("high");
-        json.GetProperty("reply").GetString()!.ShouldContain("450.000");
+        json.GetProperty("messages")[0].GetString()!.ShouldContain("450.000");
+        json.GetProperty("messages").GetArrayLength().ShouldBe(2);
         json.GetProperty("used_chunk_ids")[0].GetString().ShouldBe("C1");
 
         var noChunk = JsonDocument.Parse((await fake.ChatAsync(Request, CancellationToken.None)).Text).RootElement;

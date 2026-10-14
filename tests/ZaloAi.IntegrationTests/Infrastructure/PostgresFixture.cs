@@ -87,6 +87,7 @@ public sealed class PostgresFixture : IAsyncLifetime
                 ["ConnectionStrings:Redis"] = RedisConnectionString,
                 ["Ai:EmbedProvider"] = "fake",
                 ["Ai:ChatProvider"] = "fake",
+                ["Ai:BotMessageGapMs"] = "0",
                 ["Storage:LocalRoot"] = ApiFactory.TestStorageRoot,
             })
             .Build();
