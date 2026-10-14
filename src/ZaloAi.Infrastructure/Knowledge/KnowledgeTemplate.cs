@@ -30,7 +30,7 @@ public sealed record KnowledgeKindDefinition(
 }
 
 /// <summary>
-/// Định nghĩa mẫu dữ liệu chuẩn, phiên bản 1 — nguồn duy nhất cho đọc file, tạo file mẫu, xuất dữ liệu, so sánh.
+/// Định nghĩa mẫu dữ liệu chuẩn, phiên bản 1 (thêm cột "Sau khi làm" 2026-10-14, không bắt buộc — file cũ vẫn nhập được) — nguồn duy nhất cho đọc file, tạo file mẫu, xuất dữ liệu, so sánh.
 /// Đặc tả cho người đọc: docs/KNOWLEDGE-FORMAT.md (đổi ở đây thì cập nhật tài liệu đó).
 /// </summary>
 public static partial class KnowledgeTemplate
@@ -64,6 +64,7 @@ public static partial class KnowledgeTemplate
             new("description", "Mô tả", KnowledgeFieldType.Text, false, 4000),
             new("suitableFor", "Phù hợp với", KnowledgeFieldType.Text, false, 2000),
             new("notSuitableFor", "Không nên làm", KnowledgeFieldType.Text, false, 2000),
+            new("afterCare", "Sau khi làm", KnowledgeFieldType.Text, false, 2000),
             new("branches", "Chi nhánh", KnowledgeFieldType.Text, false, 200),
             new("note", "Ghi chú", KnowledgeFieldType.Text, false, 2000),
         ]),
@@ -79,6 +80,7 @@ public static partial class KnowledgeTemplate
             new("description", "Mô tả", KnowledgeFieldType.Text, false, 4000),
             new("suitableFor", "Phù hợp với", KnowledgeFieldType.Text, false, 2000),
             new("notSuitableFor", "Không nên làm", KnowledgeFieldType.Text, false, 2000),
+            new("afterCare", "Sau khi làm", KnowledgeFieldType.Text, false, 2000),
             new("note", "Ghi chú", KnowledgeFieldType.Text, false, 2000),
         ]),
         new(KnowledgeKind.Faq, "Câu hỏi thường gặp", "faqs", "Câu hỏi thường gặp",
