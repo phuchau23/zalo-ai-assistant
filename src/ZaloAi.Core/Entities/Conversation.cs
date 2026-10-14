@@ -38,6 +38,12 @@ public sealed class Contact : ITenantOwned
     /// <summary>Tin gần nhất của khách trên mọi hội thoại (lọc, sắp xếp danh sách khách).</summary>
     public DateTimeOffset? LastCustomerMessageAt { get; set; }
 
+    /// <summary>Cách gọi khách (<see cref="CustomerSalutation.Allowed"/>); null = chưa biết → gọi "mình".</summary>
+    public string? Salutation { get; set; }
+
+    /// <summary>staff (nhân viên đặt — AI không tự đổi) | customer (khách tự xưng trong lúc chat).</summary>
+    public string? SalutationSource { get; set; }
+
     /// <summary>Không cho bot chủ động nhắn khách này (khách nhắn "hủy"/"dừng", hoặc nhân viên tắt). null = được nhắn.</summary>
     public DateTimeOffset? ProactiveOptOutAt { get; set; }
 

@@ -20,6 +20,8 @@ internal sealed class ContactConfiguration : IEntityTypeConfiguration<Contact>
             .HasDefaultValue(LeadStatus.New).HasSentinel((LeadStatus)(-1));
         builder.Property(c => c.Tags).HasColumnType("text[]");
         builder.Property(c => c.ProactiveOptOutSource).HasMaxLength(20);
+        builder.Property(c => c.Salutation).HasMaxLength(10);
+        builder.Property(c => c.SalutationSource).HasMaxLength(20);
 
         builder.HasIndex(c => new { c.TenantId, c.Channel, c.ExternalUserId }).IsUnique();
         builder.HasIndex(c => new { c.TenantId, c.LeadStatus });
