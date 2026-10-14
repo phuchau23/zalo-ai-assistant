@@ -87,6 +87,7 @@ public sealed class AttentionNotifyJob(
         "urgent" => "dấu hiệu nguy hiểm",
         "medical" => "câu hỏi chuyên môn sức khỏe",
         "media" => "khách gửi hình ảnh/tệp",
+        "quota_exceeded" => "đã hết hạn mức hội thoại tháng này, khách mới cần nhân viên trả lời",
         _ => "bot cần người hỗ trợ",
     };
 }

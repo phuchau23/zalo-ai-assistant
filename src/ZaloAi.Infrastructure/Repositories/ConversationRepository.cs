@@ -153,6 +153,42 @@ public sealed class ConversationRepository(AppDbContext db, ITenantContext tenan
             .ToListAsync(cancellationToken);
     }
 
+    /// <summary>Số hội thoại thật (khách khác nhau có nhắn, không tính Chat thử) từ <paramref name="since"/> — hạn mức theo tháng.</summary>
+    public Task<int> CountActiveConversationsAsync(Guid tenantId, DateTimeOffset since, CancellationToken cancellationToken)
+    {
+        EnsureTenant(tenantId);
+        return (
+            from m in Db.Messages
+            join c in Db.Conversations on m.ConversationId equals c.Id
+            where m.TenantId == tenantId && c.TenantId == tenantId && !c.IsTest && m.Sender == MessageSender.Customer && m.CreatedAt >= since
+            select m.ConversationId).Distinct().CountAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Thứ tự của hội thoại trong tháng: số hội thoại thật khác đã BẮT ĐẦU trước nó (tin khách đầu tiên từ <paramref name="since"/> sớm hơn; trùng tới micro giây
+    /// thì cùng hạng). Hội thoại có thứ tự &lt; hạn mức thì nằm trong hạn mức — khách nhắn dồn nhiều tin hay quay lại
+    /// trong tháng đều giữ nguyên thứ tự. null = hội thoại chưa có tin khách nào trong tháng.
+    /// </summary>
+    public async Task<int?> MonthRankAsync(Guid tenantId, Guid conversationId, DateTimeOffset since, CancellationToken cancellationToken)
+    {
+        EnsureTenant(tenantId);
+        var starts =
+            from m in Db.Messages
+            join c in Db.Conversations on m.ConversationId equals c.Id
+            where m.TenantId == tenantId && c.TenantId == tenantId && !c.IsTest && m.Sender == MessageSender.Customer && m.CreatedAt >= since
+            group m.CreatedAt by m.ConversationId into g
+            select new { ConversationId = g.Key, FirstAt = g.Min() };
+        var mine = await starts.Where(s => s.ConversationId == conversationId).Select(s => (DateTimeOffset?)s.FirstAt).FirstOrDefaultAsync(cancellationToken);
+        if (mine is not { } firstAt)
+        {
+            return null;
+        }
+
+        return await starts.CountAsync(
+            s => s.FirstAt < firstAt,
+            cancellationToken);
+    }
+
     public Task<bool> HasBotReplyAsync(Guid tenantId, Guid conversationId, CancellationToken cancellationToken)
     {
         EnsureTenant(tenantId);
