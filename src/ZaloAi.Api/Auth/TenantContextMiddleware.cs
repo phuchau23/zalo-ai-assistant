@@ -9,7 +9,7 @@ namespace ZaloAi.Api.Auth;
 
 /// <summary>
 /// Sau khi cookie được xác thực: kiểm lại user + membership + trạng thái tenant trong DB, rồi set <see cref="ITenantContext"/>.
-/// - User đã bị xóa → đăng xuất, request coi như chưa đăng nhập (401).
+/// - User đã bị xóa, hoặc mật khẩu đã đổi/cấp lại sau lúc đăng nhập → đăng xuất, request coi như chưa đăng nhập (401).
 /// - Không còn là thành viên, hoặc tenant bị khóa → tenant context rỗng (endpoint cần tenant trả 403).
 /// tenantId chỉ lấy từ cookie đã ký, không bao giờ từ body/query/route.
 /// </summary>
@@ -20,7 +20,8 @@ internal sealed class TenantContextMiddleware(RequestDelegate next)
         if (httpContext.User.Identity?.IsAuthenticated == true && AuthClaims.GetUserId(httpContext.User) is { } userId)
         {
             var user = await access.GetUserAsync(userId, httpContext.RequestAborted);
-            if (user is null)
+            // Không còn user, hoặc mật khẩu đã đổi/cấp lại sau lúc đăng nhập → phiên này hết hiệu lực.
+            if (user is null || AuthClaims.GetPasswordStamp(httpContext.User) != user.PasswordStamp)
             {
                 await httpContext.SignOutAsync();
                 httpContext.User = new ClaimsPrincipal(new ClaimsIdentity());

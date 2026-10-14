@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 namespace ZaloAi.Api.Auth;
 
 /// <summary>
-/// Cookie chỉ chứa userId và tenant đang chọn. Vai trò, trạng thái tenant, cờ super admin đọc lại từ DB mỗi request
+/// Cookie chỉ chứa userId, tenant đang chọn và dấu vân tay mật khẩu. Vai trò, trạng thái tenant, cờ super admin đọc lại từ DB mỗi request
 /// (xem <see cref="TenantContextMiddleware"/>), để thu hồi quyền có hiệu lực ngay.
 /// </summary>
 internal static class AuthClaims
@@ -13,13 +13,18 @@ internal static class AuthClaims
     public const string UserId = "sub";
     public const string TenantId = "tid";
 
+    /// <summary>Dấu vân tay mật khẩu lúc đăng nhập — khác DB (đã đổi/cấp lại mật khẩu) thì phiên bị đăng xuất.</summary>
+    public const string PasswordStamp = "pst";
+
     public static Guid? GetUserId(ClaimsPrincipal principal) => Parse(principal.FindFirstValue(UserId));
 
     public static Guid? GetTenantId(ClaimsPrincipal principal) => Parse(principal.FindFirstValue(TenantId));
 
-    public static Task SignInAsync(HttpContext httpContext, Guid userId, Guid? tenantId)
+    public static string? GetPasswordStamp(ClaimsPrincipal principal) => principal.FindFirstValue(PasswordStamp);
+
+    public static Task SignInAsync(HttpContext httpContext, Guid userId, Guid? tenantId, string passwordStamp)
     {
-        List<Claim> claims = [new(UserId, userId.ToString())];
+        List<Claim> claims = [new(UserId, userId.ToString()), new(PasswordStamp, passwordStamp)];
         if (tenantId is not null)
         {
             claims.Add(new Claim(TenantId, tenantId.Value.ToString()));
