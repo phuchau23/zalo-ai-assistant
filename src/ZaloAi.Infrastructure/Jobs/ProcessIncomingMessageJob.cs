@@ -10,6 +10,7 @@ using ZaloAi.Core.Entities;
 using ZaloAi.Core.Errors;
 using ZaloAi.Core.Options;
 using ZaloAi.Core.Security;
+using ZaloAi.Infrastructure.Billing;
 using ZaloAi.Infrastructure.Customers;
 using ZaloAi.Infrastructure.Inbox;
 using ZaloAi.Infrastructure.Repositories;
@@ -33,6 +34,7 @@ public sealed partial class ProcessIncomingMessageJob(
     IBotEngine bot,
     MessageDeliveryService delivery,
     InboxService inbox,
+    ConversationQuotaService quota,
     IFieldEncryptor encryptor,
     IOptions<AiOptions> options,
     TimeProvider time,
@@ -112,6 +114,13 @@ public sealed partial class ProcessIncomingMessageJob(
         var tenant = await tenants.GetAsync(tenantId, cancellationToken)
             ?? throw new InvalidOperationException("Tenant không tồn tại.");
 
+        // Hết hạn mức hội thoại tháng và đây là khách mới của tháng → không gọi AI, chuyển nhân viên (CLAUDE.md M6 đợt B4).
+        if (!await quota.AllowBotAsync(tenantId, tenant, conversation, cancellationToken))
+        {
+            await HandOffOverQuotaAsync(tenantId, conversation, contact, message.Id, cancellationToken);
+            return;
+        }
+
         var unsummarized = await conversations.ListMessagesAsync(tenantId, conversation.Id, conversation.SummarizedUntil, cancellationToken);
         var history = unsummarized
             .TakeWhile(m => m.Id != message.Id)
@@ -126,11 +135,20 @@ public sealed partial class ProcessIncomingMessageJob(
                 history,
                 conversation.SummaryEnc is null ? null : encryptor.Decrypt(conversation.SummaryEnc),
                 IsFirstBotReply: !await conversations.HasBotReplyAsync(tenantId, conversation.Id, cancellationToken),
-                CustomerName: contact.DisplayName),
+                CustomerName: contact.DisplayName,
+                Salutation: contact.Salutation,
+                SalutationByStaff: contact.SalutationSource == CustomerSalutation.SourceStaff),
             cancellationToken);
 
-        var reply = delivery.AddOutgoing(tenantId, conversation, MessageSender.Bot, result.Reply, replyToMessageId: message.Id, traceJson: result.TraceJson);
+        var replies = AddReplies(tenantId, conversation, message.Id, result);
         AddUsage(tenantId, conversation.Id, result.Usage);
+
+        // Khách tự xưng (anh/chị/cô/chú/bác) → nhớ để lần sau gọi đúng; cách gọi nhân viên đã đặt thì giữ nguyên.
+        if (result.DetectedSalutation is { } detected && contact.SalutationSource != CustomerSalutation.SourceStaff && contact.Salutation != detected)
+        {
+            contact.Salutation = detected;
+            contact.SalutationSource = CustomerSalutation.SourceCustomer;
+        }
 
         if (result.NeedsHuman)
         {
@@ -158,16 +176,74 @@ public sealed partial class ProcessIncomingMessageJob(
 
         // Chuyển người: câu chuyển tiếp (trong/ngoài giờ) + chờ người + Telegram + báo hộp thư.
         var notice = result.NeedsHuman
-            ? await inbox.AfterBotHandoffAsync(tenantId, conversation, result.Urgency, cancellationToken)
+            ? await inbox.AfterBotHandoffAsync(tenantId, conversation, result.Urgency, contact.Salutation, replyToMessageId: null, cancellationToken)
             : null;
 
-        await delivery.DeliverAsync(tenantId, conversation, contact, reply, cancellationToken);
+        for (var i = 0; i < replies.Count; i++)
+        {
+            if (i > 0 && options.Value.BotMessageGapMs > 0)
+            {
+                await Task.Delay(options.Value.BotMessageGapMs, cancellationToken); // nhịp gõ như người thật giữa các tin
+            }
+
+            await delivery.DeliverAsync(tenantId, conversation, contact, replies[i], cancellationToken);
+        }
+
         if (notice is not null)
         {
             await delivery.DeliverAsync(tenantId, conversation, contact, notice, cancellationToken);
         }
 
         await SummarizeIfLongAsync(tenantId, conversation, unsummarized, cancellationToken);
+    }
+
+    /// <summary>
+    /// Hết hạn mức: chế độ nhân viên + câu chuyển tiếp (gắn reply_to_message_id = tin khách → chạy lại không gửi trùng) + Telegram.
+    /// </summary>
+    private async Task HandOffOverQuotaAsync(Guid tenantId, Conversation conversation, Contact contact, Guid customerMessageId, CancellationToken cancellationToken)
+    {
+        conversation.Mode = ConversationMode.Human;
+        conversation.HandoffReason = ConversationQuotaService.HandoffReason;
+        Message? notice;
+        try
+        {
+            notice = await inbox.AfterBotHandoffAsync(tenantId, conversation, Urgency.None, contact.Salutation, customerMessageId, cancellationToken);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        {
+            return; // job khác vừa xử lý cùng tin này
+        }
+
+        if (notice is not null)
+        {
+            await delivery.DeliverAsync(tenantId, conversation, contact, notice, cancellationToken);
+        }
+    }
+
+    /// <summary>
+    /// Mỗi tin bot là một dòng (gửi thành một tin riêng trên kênh). Tin ĐẦU giữ reply_to_message_id (unique), tin CUỐI giữ ai_trace
+    /// (nút "Vì sao bot trả lời vậy?" nằm cuối lượt trả lời, không nằm ở câu báo trợ lý AI).
+    /// Job chạy song song cùng tin khách → lỗi unique, cả lượt bị bỏ; chạy lại → gửi nốt các tin pending theo thứ tự.
+    /// created_at cách nhau 1 ms để thứ tự hiển thị/gửi lại luôn đúng.
+    /// </summary>
+    private List<Message> AddReplies(Guid tenantId, Conversation conversation, Guid customerMessageId, BotTurnResult result)
+    {
+        var now = time.GetUtcNow();
+        var replies = new List<Message>(result.Messages.Count);
+        for (var i = 0; i < result.Messages.Count; i++)
+        {
+            var reply = delivery.AddOutgoing(
+                tenantId,
+                conversation,
+                MessageSender.Bot,
+                result.Messages[i],
+                replyToMessageId: i == 0 ? customerMessageId : null,
+                traceJson: i == result.Messages.Count - 1 ? result.TraceJson : null);
+            reply.CreatedAt = now.AddMilliseconds(i);
+            replies.Add(reply);
+        }
+
+        return replies;
     }
 
     private void AddUsage(Guid tenantId, Guid conversationId, IEnumerable<BotUsage> usage)
