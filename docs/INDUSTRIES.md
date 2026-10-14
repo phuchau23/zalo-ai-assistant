@@ -68,7 +68,10 @@ Templates/<slug>/
 | Chuyển chuyên viên/bác sĩ khi khách mô tả triệu chứng cụ thể | Hứa kết quả: "hết hẳn", "trị dứt điểm", "không tác dụng phụ", "an toàn tuyệt đối" |
 | Dấu hiệu nguy hiểm → khuyên đến cơ sở y tế / gọi 115, báo khẩn cấp | Tiếp tục bán gói khi khách đang có dấu hiệu nguy hiểm |
 
-Câu nhắc bắt buộc khi nói về bệnh/tình trạng cơ thể: *"cần bác sĩ/chuyên viên thăm khám trực tiếp để xác định chính xác"*.
+Khi nói về tình trạng cơ thể luôn mời khách **kiểm tra trực tiếp** (chủ dự án chỉnh 2026-10-14 — nói như người của doanh nghiệp, không đẩy khách đi nơi khác):
+- Cảm giác thông thường sau dịch vụ (mỏi, uể oải, đau nhẹ): mời khách ghé để **chuyên viên của doanh nghiệp** kiểm tra trực tiếp, không khuyên đi khám bác sĩ. Câu dự phòng khi bot quên: *"Nếu {khach} thấy cảm giác này kéo dài hoặc khó chịu hơn, {khach} ghé {ten_doanh_nghiep} để chuyên viên bên {bot} kiểm tra trực tiếp cho {khach} nha."*
+- Bệnh lý, bệnh nền, mang thai, đang dùng thuốc: khuyên hỏi ý kiến **bác sĩ điều trị**; không chẩn đoán.
+- Dấu hiệu nguy hiểm: như trên (cơ sở y tế / 115, báo khẩn cấp).
 
 Kỹ thuật:
 - Tài liệu có cờ `medically_reviewed` (DN tích khi nạp, ghi audit ai tích). Chỉ chunk có cờ này mới được dùng cho câu hỏi về bệnh/tình trạng cơ thể.

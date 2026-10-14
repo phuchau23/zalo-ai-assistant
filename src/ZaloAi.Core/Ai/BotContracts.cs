@@ -38,6 +38,8 @@ public sealed record BotHistoryTurn(MessageSender Sender, string Text);
 /// <param name="Summary">Tóm tắt các tin cũ hơn (nội dung gốc, bộ não tự che).</param>
 /// <param name="IsFirstBotReply">Chưa từng trả lời trong hội thoại này → kèm câu báo trợ lý AI + link chính sách.</param>
 /// <param name="CustomerName">Tên khách đã biết (tên hiển thị Zalo, khách tự khai) — được che trước khi gửi AI.</param>
+/// <param name="Salutation">Cách gọi khách đã lưu (<see cref="CustomerSalutation"/>); null = chưa biết.</param>
+/// <param name="SalutationByStaff">Nhân viên đã đặt cách gọi → AI không đổi theo cách khách tự xưng.</param>
 public sealed record BotTurnRequest(
     Guid TenantId,
     BotProfile Profile,
@@ -45,7 +47,9 @@ public sealed record BotTurnRequest(
     IReadOnlyList<BotHistoryTurn> History,
     string? Summary,
     bool IsFirstBotReply,
-    string? CustomerName = null);
+    string? CustomerName = null,
+    string? Salutation = null,
+    bool SalutationByStaff = false);
 
 public sealed record BotUsage(UsageKind Kind, string Provider, string Model, int InputTokens, int OutputTokens, decimal CostUsd);
 
@@ -56,8 +60,10 @@ public sealed record BotUsage(UsageKind Kind, string Provider, string Model, int
 /// <param name="Confidence">high | medium | low</param>
 /// <param name="Sentiment">positive | neutral | negative, null nếu không rõ</param>
 /// <param name="LeadFields">Thông tin khách tự cung cấp (tên, SĐT...) — dữ liệu cá nhân, phải mã hóa khi lưu.</param>
+/// <param name="Messages">Các tin gửi lần lượt (1–4 tin ngắn như người thật nhắn; câu báo trợ lý AI là tin đầu khi cần).</param>
+/// <param name="DetectedSalutation">Khách tự xưng rõ (anh/chị/cô/chú/bác) trong tin vừa rồi; null nếu không.</param>
 public sealed record BotTurnResult(
-    string Reply,
+    IReadOnlyList<string> Messages,
     bool NeedsHuman,
     string? HandoffReason,
     Urgency Urgency,
@@ -65,7 +71,12 @@ public sealed record BotTurnResult(
     string? Sentiment,
     IReadOnlyDictionary<string, string> LeadFields,
     string TraceJson,
-    IReadOnlyList<BotUsage> Usage);
+    IReadOnlyList<BotUsage> Usage,
+    string? DetectedSalutation = null)
+{
+    /// <summary>Toàn bộ câu trả lời gộp một đoạn (eval, log chẩn đoán).</summary>
+    public string Reply => string.Join("\n", Messages);
+}
 
 public sealed record BotSummaryResult(string Summary, IReadOnlyList<BotUsage> Usage);
 

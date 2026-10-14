@@ -301,6 +301,47 @@ public sealed class CustomerCareTests(PostgresFixture db)
         (await owner.GetFromJsonAsync<HandoffSettingsResponse>(Url("/tenant/handoff-settings")))!.TelegramChatId.ShouldBeNull();
     }
 
+    private static async Task<ContactListItem> ContactAsync(HttpClient client, Guid contactId) =>
+        (await client.GetFromJsonAsync<ContactDetail>(Url($"/contacts/{contactId}")))!.Contact;
+
+    [Fact]
+    public async Task Customer_self_reference_is_remembered_but_staff_salutation_wins()
+    {
+        var (tenantId, owner, conversationId, contactId) = await CustomerAsync("Xưng hô", text: "chị muốn hỏi gói triệt lông");
+        var contact = await ContactAsync(owner, contactId);
+        contact.Salutation.ShouldBe("chị");
+        contact.SalutationSource.ShouldBe("customer");
+
+        // Nhân viên chọn "cô" → bot giữ "cô" dù khách tự xưng khác; câu tiếp quản dùng đúng cách gọi.
+        (await owner.PatchAsJsonAsync(Url($"/contacts/{contactId}"), new { salutation = "cô" })).StatusCode.ShouldBe(HttpStatusCode.OK);
+        await owner.PostAsJsonAsync(Url($"/chat-test/conversations/{conversationId}/messages"), new { text = "anh hỏi thêm chút" });
+        await RunJobsAsync(tenantId);
+        contact = await ContactAsync(owner, contactId);
+        contact.Salutation.ShouldBe("cô");
+        contact.SalutationSource.ShouldBe("staff");
+
+        (await owner.PostAsync(Url($"/inbox/conversations/{conversationId}/take-over"), null)).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        var detail = (await owner.GetFromJsonAsync<InboxConversationDetail>(Url($"/inbox/conversations/{conversationId}")))!;
+        detail.Messages[^1].Text.ShouldStartWith("Dạ chào cô,");
+        detail.Messages.ShouldAllBe(m => !m.Text.Contains("anh/chị"));
+
+        // "auto" bỏ cách gọi nhân viên đặt; giá trị lạ bị từ chối.
+        (await owner.PatchAsJsonAsync(Url($"/contacts/{contactId}"), new { salutation = "auto" })).StatusCode.ShouldBe(HttpStatusCode.OK);
+        (await ContactAsync(owner, contactId)).Salutation.ShouldBeNull();
+        (await owner.PatchAsJsonAsync(Url($"/contacts/{contactId}"), new { salutation = "anh/chị" })).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task Tenant_B_cannot_change_tenant_A_customer_salutation()
+    {
+        var (_, ownerA, _, contactId) = await CustomerAsync("Xưng hô A");
+        var (tenantB, _) = await db.CreateTenantAsync("Xưng hô B");
+        var ownerB = await db.Api.CreateLoggedInClientAsync(PostgresFixture.OwnerEmail(tenantB));
+
+        (await ownerB.PatchAsJsonAsync(Url($"/contacts/{contactId}"), new { salutation = "anh" })).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        (await ContactAsync(ownerA, contactId)).Salutation.ShouldBeNull();
+    }
+
     /// <summary>Đồng hồ cố định cho job (test không phụ thuộc giờ chạy).</summary>
     private sealed class FixedClock(DateTimeOffset now) : TimeProvider
     {

@@ -81,6 +81,10 @@ public static class HangfireSetup
             CareFollowUpSweepJob.RecurringId,
             job => job.RunAsync(CancellationToken.None),
             "* * * * *");
+        recurring.AddOrUpdate<TenantExpiryJob>(
+            TenantExpiryJob.RecurringId,
+            job => job.RunAsync(CancellationToken.None),
+            "5 * * * *");
     }
 
     /// <summary>Tạo/nâng cấp bảng Hangfire (dùng cho lệnh seed và test, để Api dùng được hàng đợi khi Worker chưa chạy lần nào).</summary>

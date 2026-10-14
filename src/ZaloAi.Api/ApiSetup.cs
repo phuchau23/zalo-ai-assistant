@@ -7,11 +7,13 @@ using Hangfire;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Options;
+using ZaloAi.Api.Admin;
 using ZaloAi.Api.Auth;
 using ZaloAi.Api.Chat;
 using ZaloAi.Api.Common;
 using ZaloAi.Api.Connections;
 using ZaloAi.Api.Customers;
+using ZaloAi.Api.Dashboard;
 using ZaloAi.Api.Inbox;
 using ZaloAi.Api.Jobs;
 using ZaloAi.Api.Knowledge;
@@ -140,6 +142,10 @@ internal static class ApiSetup
         app.MapHandoffSettingsEndpoints();
         app.MapCustomerEndpoints();
         app.MapCareEndpoints();
+        app.MapDashboardEndpoints();
+        app.MapCustomerDataEndpoints();
+        app.MapAdminEndpoints();
+        app.MapTeamEndpoints();
 
         app.MapHangfireDashboard("/hangfire", new DashboardOptions
         {

@@ -222,4 +222,20 @@ public sealed class KnowledgeTemplateIoTests
         result.Entries.Select(KnowledgeItemMapper.ContentHash).Order()
             .ShouldBe(original.Select(KnowledgeItemMapper.ContentHash).Order());
     }
+
+    [Fact]
+    public void After_care_column_round_trips_through_excel_and_reaches_search_text()
+    {
+        var original = ReadJson("""
+            { "packages": [ { "code": "GOI-BAM-HUYET-10", "name": "Gói bấm huyệt 10 buổi", "afterCare": "Buổi đầu có thể hơi uể oải 1–2 ngày." } ] }
+            """).Entries;
+
+        using var buffer = new MemoryStream();
+        KnowledgeExcel.Write(original, buffer);
+        buffer.Position = 0;
+        var entry = KnowledgeExcel.Read(buffer).Entries.ShouldHaveSingleItem();
+
+        entry.Text("afterCare").ShouldBe("Buổi đầu có thể hơi uể oải 1–2 ngày.");
+        KnowledgeItemMapper.ToSearchText(entry).ShouldContain("Sau khi làm: Buổi đầu có thể hơi uể oải");
+    }
 }

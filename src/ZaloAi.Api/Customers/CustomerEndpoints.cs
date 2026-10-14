@@ -19,6 +19,8 @@ namespace ZaloAi.Api.Customers;
 /// <param name="Phone">Số điện thoại khách tự cung cấp cho bot (nếu có).</param>
 /// <param name="Interest">Nhu cầu / dịch vụ quan tâm (nếu có).</param>
 /// <param name="ProactiveOptOut">null = bot được chủ động nhắn; customer = khách đã nhắn "hủy" (không bật lại được); staff = nhân viên tắt.</param>
+/// <param name="Salutation">Cách bot gọi khách: anh | chị | cô | chú | bác; null = chưa biết (bot gọi "mình").</param>
+/// <param name="SalutationSource">staff (nhân viên đặt) | customer (khách tự xưng khi chat); null khi chưa biết.</param>
 public sealed record ContactListItem(
     Guid Id,
     string Name,
@@ -32,7 +34,9 @@ public sealed record ContactListItem(
     DateTimeOffset? LastCustomerMessageAt,
     DateTimeOffset CreatedAt,
     string? ProactiveOptOut,
-    DateTimeOffset? LastProactiveAt);
+    DateTimeOffset? LastProactiveAt,
+    string? Salutation,
+    string? SalutationSource);
 
 /// <param name="Counts">Số khách theo trạng thái (new, interested, hot, won, lost) — không phụ thuộc bộ lọc.</param>
 /// <param name="Truncated">Có nhiều khách hơn giới hạn tải một lần.</param>
@@ -65,7 +69,8 @@ public sealed record LeadFieldValue(string Key, string Label, string Value);
 /// <param name="LeadStatus">new | interested | hot | won | lost | auto (trả lại cho hệ thống tự xếp); null = giữ nguyên.</param>
 /// <param name="Tags">null = giữ nguyên.</param>
 /// <param name="ProactiveEnabled">Cho bot chủ động nhắn khách này; null = giữ nguyên. Không bật lại được khi khách tự từ chối.</param>
-public sealed record UpdateContactRequest(string? LeadStatus, IReadOnlyList<string>? Tags, bool? ProactiveEnabled = null);
+/// <param name="Salutation">anh | chị | cô | chú | bác (nhân viên đặt, bot giữ nguyên) | auto (bỏ đặt tay, bot theo cách khách tự xưng); null = giữ nguyên.</param>
+public sealed record UpdateContactRequest(string? LeadStatus, IReadOnlyList<string>? Tags, bool? ProactiveEnabled = null, string? Salutation = null);
 
 /// <param name="Kind">note | service | appointment</param>
 /// <param name="FollowUpAt">Lúc cần chăm sóc lại (kèm múi giờ, vd 2026-10-12T09:30:00+07:00) — tới giờ sẽ hiện ở trang "Cần chăm sóc".</param>
@@ -80,6 +85,9 @@ internal sealed class UpdateContactRequestValidator : AbstractValidator<UpdateCo
             .WithMessage("Trạng thái không hợp lệ.");
         RuleFor(x => x.Tags!.Count).LessThanOrEqualTo(20).WithName("Số nhãn").When(x => x.Tags is not null);
         RuleForEach(x => x.Tags).NotEmpty().MaximumLength(30).WithName("Nhãn");
+        RuleFor(x => x.Salutation)
+            .Must(s => s is null || s == "auto" || CustomerSalutation.IsAllowed(s))
+            .WithMessage("Cách gọi khách không hợp lệ.");
     }
 }
 
@@ -241,6 +249,20 @@ internal static class CustomerEndpoints
             audit.Add(tenantId, tenant.UserId, "contact.proactive_changed", $"{contactId}:{enabled}");
         }
 
+        if (request.Salutation == "auto")
+        {
+            if (contact.SalutationSource == CustomerSalutation.SourceStaff)
+            {
+                contact.Salutation = null;
+                contact.SalutationSource = null;
+            }
+        }
+        else if (request.Salutation is not null)
+        {
+            contact.Salutation = request.Salutation;
+            contact.SalutationSource = CustomerSalutation.SourceStaff;
+        }
+
         if (request.Tags is not null)
         {
             contact.Tags = request.Tags.Select(t => t.Trim()).Where(t => t.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
@@ -371,7 +393,9 @@ internal static class CustomerEndpoints
         c.LastCustomerMessageAt,
         c.CreatedAt,
         c.ProactiveOptOutAt is null ? null : c.ProactiveOptOutSource ?? "customer",
-        c.LastProactiveAt);
+        c.LastProactiveAt,
+        CustomerSalutation.IsAllowed(c.Salutation) ? c.Salutation : null,
+        CustomerSalutation.IsAllowed(c.Salutation) ? c.SalutationSource : null);
 
     private static ContactNoteItem ToNote(ContactNote n, IReadOnlyDictionary<Guid, string> names, IFieldEncryptor encryptor) => new(
         n.Id,

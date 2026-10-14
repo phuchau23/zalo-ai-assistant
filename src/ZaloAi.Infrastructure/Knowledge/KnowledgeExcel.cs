@@ -200,6 +200,8 @@ public static class KnowledgeExcel
             "4. GIỮ NGUYÊN MÃ khi sửa nội dung một mục. Đổi mã = hệ thống hiểu là mục mới.",
             "5. Giá: số tiền VNĐ, ví dụ 450000 hoặc 450.000. Không rõ giá thì để trống và ghi lý do vào cột Ghi chú giá. Không ghi \"liên hệ\" vào cột Giá.",
             "6. Mỗi mức thời lượng/giá khác nhau của cùng dịch vụ là một dòng riêng.",
+            "   Cột \"Sau khi làm\" (Dịch vụ, Gói): cảm giác khách thường gặp sau buổi làm, kéo dài bao lâu, nên làm/kiêng gì, khi nào cần báo lại. Bot dùng để hỏi thăm khách đúng theo gói đã làm.",
+            "   Ngành spa/nha khoa: sau khi nhập, bật \"Đã duyệt chuyên môn\" cho mục đã được chuyên viên kiểm tra thì bot mới được dùng phần nói về cơ thể.",
             "7. Sheet này (Hướng dẫn) được bỏ qua khi nhập.",
             "",
             "Khi nhập file, hệ thống KHÔNG thay đổi dữ liệu ngay mà hiện bản so sánh (thêm mới, thay đổi, có thể trùng, không còn trong file) để bạn chọn trước khi áp dụng.",

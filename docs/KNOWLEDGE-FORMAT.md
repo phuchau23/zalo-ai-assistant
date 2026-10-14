@@ -44,6 +44,7 @@ File Excel mẫu còn có sheet `Hướng dẫn` (chỉ để đọc, hệ thố
 | Mô tả | `description` | chữ ≤ 4000 | quy trình, bao gồm những gì |
 | Phù hợp với | `suitableFor` | chữ ≤ 2000 | |
 | Không nên làm | `notSuitableFor` | chữ ≤ 2000 | chống chỉ định, trường hợp phải hỏi chuyên viên |
+| Sau khi làm | `afterCare` | chữ ≤ 2000 | cảm giác thường gặp sau buổi làm, bao lâu hết, nên làm/kiêng gì, khi nào báo lại DN — bot dùng khi hỏi thăm khách (ngành sức khỏe: cần "Đã duyệt chuyên môn"). Thêm 2026-10-14, không bắt buộc |
 | Chi nhánh | `branches` | chữ ≤ 200 | để trống = mọi chi nhánh |
 | Ghi chú | `note` | chữ ≤ 2000 | ghi chú nội bộ cho bot |
 
@@ -60,6 +61,7 @@ File Excel mẫu còn có sheet `Hướng dẫn` (chỉ để đọc, hệ thố
 | Mô tả | `description` | chữ ≤ 4000 | |
 | Phù hợp với | `suitableFor` | chữ ≤ 2000 | |
 | Không nên làm | `notSuitableFor` | chữ ≤ 2000 | |
+| Sau khi làm | `afterCare` | chữ ≤ 2000 | cảm giác thường gặp sau buổi làm, bao lâu hết, nên làm/kiêng gì, khi nào báo lại DN — bot dùng khi hỏi thăm khách (ngành sức khỏe: cần "Đã duyệt chuyên môn"). Thêm 2026-10-14, không bắt buộc |
 | Ghi chú | `note` | chữ ≤ 2000 | |
 
 ### Câu hỏi thường gặp
@@ -142,8 +144,8 @@ Bạn là trợ lý nhập liệu. Hãy chuyển tài liệu tôi gửi kèm th�
   "format": "zaloai-knowledge",
   "version": 1,
   "info":     [ { "code", "title", "content" } ],
-  "services": [ { "code", "group", "name", "durationMinutes", "price", "priceUnit", "priceNote", "description", "suitableFor", "notSuitableFor", "branches", "note" } ],
-  "packages": [ { "code", "group", "name", "sessions", "minutesPerSession", "price", "priceNote", "description", "suitableFor", "notSuitableFor", "note" } ],
+  "services": [ { "code", "group", "name", "durationMinutes", "price", "priceUnit", "priceNote", "description", "suitableFor", "notSuitableFor", "afterCare", "branches", "note" } ],
+  "packages": [ { "code", "group", "name", "sessions", "minutesPerSession", "price", "priceNote", "description", "suitableFor", "notSuitableFor", "afterCare", "note" } ],
   "faqs":     [ { "code", "question", "answer" } ],
   "policies": [ { "code", "topic", "content" } ]
 }

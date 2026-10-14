@@ -237,9 +237,15 @@ internal static class ChatTestEndpoints
         IFieldEncryptor encryptor,
         CancellationToken cancellationToken)
     {
-        var messages = await conversations.ListMessagesAsync(tenantId, conversation.Id, after: null, cancellationToken);
+        var all = await conversations.ListMessagesAsync(tenantId, conversation.Id, after: null, cancellationToken);
         var (cost, calls) = await conversations.UsageForConversationAsync(tenantId, conversation.Id, cancellationToken);
-        var waiting = conversation.Mode == ConversationMode.Bot && messages.Count > 0 && messages[^1].Sender == MessageSender.Customer;
+
+        // Chỉ hiện tin khách đã thấy: bot trả lời nhiều tin ngắn thì các tin được lưu cùng lúc rồi gửi lần lượt (cách nhau ~1 giây).
+        // Còn tin chờ gửi → vẫn "đang trả lời" để giao diện hỏi lại và hiện từng tin như người thật đang gõ.
+        var pending = all.Any(m => m.Direction == MessageDirection.Out && m.DeliveryStatus == DeliveryStatus.Pending);
+        var messages = all.Where(m => !(m.Direction == MessageDirection.Out && m.DeliveryStatus == DeliveryStatus.Pending)).ToList();
+        var waiting = conversation.Mode == ConversationMode.Bot
+            && (pending || (messages.Count > 0 && messages[^1].Sender == MessageSender.Customer));
         return new ChatTestConversationResponse(
             conversation.Id,
             Lower(conversation.Mode),

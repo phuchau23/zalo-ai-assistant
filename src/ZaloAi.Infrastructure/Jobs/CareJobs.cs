@@ -93,7 +93,8 @@ public sealed class CareAnalysisJob(
                 contact.LeadStatus,
                 conversation.LastCustomerMessageAt,
                 followUp is null ? null : ToInput(followUp),
-                BotWillSend: settings.CareAutoSend),
+                BotWillSend: settings.CareAutoSend,
+                Salutation: contact.Salutation),
             cancellationToken);
 
         var now = time.GetUtcNow();

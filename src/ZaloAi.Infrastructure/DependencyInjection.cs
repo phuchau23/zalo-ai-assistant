@@ -43,6 +43,7 @@ public static class DependencyInjection
         services.AddValidatedOptions<StorageOptions>(configuration, StorageOptions.SectionName);
         services.AddValidatedOptions<ZaloOptions>(configuration, ZaloOptions.SectionName);
         services.AddValidatedOptions<TelegramOptions>(configuration, TelegramOptions.SectionName);
+        services.AddValidatedOptions<BillingOptions>(configuration, BillingOptions.SectionName);
 
         services.AddSingleton<IFieldEncryptor, AesGcmFieldEncryptor>();
         services.AddSingleton<IPasswordHasher<User>, PasswordHasher<User>>();
@@ -100,6 +101,13 @@ public static class DependencyInjection
 
         // Khách hàng + Cần chăm sóc + kết nối Telegram tự phục vụ (M6)
         services.AddScoped<ContactRepository>();
+        services.AddScoped<DashboardRepository>();
+        services.AddScoped<SuperAdminRepository>();
+        services.AddScoped<ZaloAi.Infrastructure.Admin.TenantAdminService>();
+        services.AddScoped<TenantExpiryJob>();
+        services.AddScoped<ZaloAi.Infrastructure.Billing.ConversationQuotaService>();
+        services.AddScoped<QuotaNotifyJob>();
+        services.AddScoped<ZaloAi.Infrastructure.Team.TeamService>();
         services.AddScoped<CareAnalysisJob>();
         services.AddScoped<CareSweepJob>();
         services.AddScoped<CareFollowUpSweepJob>();

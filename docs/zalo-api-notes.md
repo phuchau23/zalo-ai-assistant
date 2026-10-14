@@ -87,11 +87,24 @@ Hoàn thành file này là việc **đầu tiên của M4**, trước khi viết
   - Khác: **-32** vượt tốc độ (retry sau), **-200** gửi thất bại, **-201** tham số sai, **-210** tham số vượt giới hạn, **-211** hết quota, **-234** không gửi được 22h–6h (tin truyền thông), **-242** appsecret_proof sai, **-248** vi phạm tiêu chuẩn nền tảng, **-320/-321** tính năng trả phí cần Zalo Cloud Account / hết tiền.
 - CHƯA KIỂM CHỨNG: định dạng lỗi của endpoint OAuth (`oauth.zaloapp.com/v4/oa/access_token`) khi code/refresh token sai.
 
-## 8. ZNS (Zalo Notification Service) — Giai đoạn 2
+## 8. ZNS / ZBS Template Message (nhắn trước cho khách)
 
-- **Trạng thái:** CHƯA KIỂM CHỨNG
-- Cần ghi: điều kiện dùng, quy trình duyệt mẫu tin, giá mỗi tin, endpoint gửi, quy định nội dung (không quảng cáo...).
-- Nguồn: _
+- **Trạng thái:** KIỂM CHỨNG MỘT PHẦN (2026-10-14) — chủ dự án copy: changelog [V251209](https://developers.zalo.me/changelog/thong-bao-ra-mat-zbs-template-message-va-lo-trinh-chuyen-doi-7814), zalo.cloud "Phân biệt các hình thức gửi thông báo từ Zalo OA" và "Phân biệt 4 loại mẫu ZNS" (bài 26/11/2025), trang [Gửi ZNS sử dụng development mode](https://developers.zalo.me/docs/zalo-notification-service/gui-tin-zns/gui-zns-su-dung-development-mode) (trang ghi "không còn được cập nhật").
+- **Hợp nhất từ 01/01/2026:** ZNS + tin UID Giao dịch + UID Truyền thông → **ZBS Template Message**. Zalo Cloud Account đổi tên thành **ZBS Account** (tự động).
+  - Phân loại: **Tin Giao dịch** = Tag 1 (Transaction), **Tag 2 (Customer care)**, tin UID Giao dịch; **Tin Hậu mãi** = Tag 3 (Promotion), tin UID Truyền thông.
+  - Hình thức gửi: **qua số điện thoại** (ZNS — "không cần thay đổi, tích hợp như hiện tại") hoặc **qua UID** (Zalo user id theo OA; API mới release 01/01/2026, giá **ưu đãi hơn** gửi qua SĐT).
+  - **Mọi template phải được ZBS kiểm duyệt trước khi gửi** (cả SĐT và UID). Template duyệt từ 10/12/2025 dùng được cho cả 2 luồng; template ZNS cũ hơn chỉ gửi qua SĐT. Tạo template qua ZCA/ZBS Account hoặc API tạo template. Duyệt "cam kết trong 2 ngày làm việc" (zalo.cloud).
+  - Chính sách nội dung dùng chung; chính sách gửi (quota, tần suất, hạn mức tháng) **riêng** cho SĐT và UID.
+- **Điều kiện / nội dung (zalo.cloud):** gửi tới SĐT đang dùng Zalo, **không cần quan tâm OA**; người nhận phải "có quan hệ với doanh nghiệp"; nội dung **chỉ mang tính chăm sóc khách hàng** (liên quan giao dịch, sự kiện mới phát sinh). Người nhận từ chối bằng "Báo xấu" → ảnh hưởng chất lượng. Số lượng gửi theo hạn mức dựa trên **chất lượng gửi** của OA. ZNS Xác thực (OTP) là ngoại lệ, gửi được cho người chưa giao dịch.
+- **4 loại mẫu:** dạng bảng (đơn hàng, giao dịch, hóa đơn), văn bản (hỗ trợ sau giao dịch, phân loại theo mục đích), xác thực (OTP), **đánh giá dịch vụ** (1–5 sao, thêm chi tiết lý do). Tối đa 2 nút CTA (link).
+- **Giá (ĐÃ KIỂM CHỨNG 2026-10-14, chủ dự án chụp https://zalo.solutions/zns/pricing; chưa gồm VAT, chỉ tính tin gửi thành công):**
+  - Theo loại template, gửi qua SĐT: tùy chỉnh **300đ**, đánh giá dịch vụ **300đ**, yêu cầu chuyển khoản 300đ, xác thực 400đ, voucher 400đ, vé xe (beta) 300đ, hành trình ngành đặc biệt từ 200đ, loại khác 300đ.
+  - Gửi qua **UID rẻ hơn** (ví dụ trên trang ước tính): tùy chỉnh/đánh giá **210đ**, xác thực/voucher 280đ. Mức ưu đãi UID "có thể thay đổi".
+  - Nút thao tác (CTA, tối đa 3 trên trang ước tính): nhóm dịch vụ mặc định (sao chép, chuyển khoản, xem chi tiết) 0đ; nhóm tài sản trên Zalo (trang thông tin OA, Mini App, bài viết OA) và trang của DN: nút đầu tiên của nhóm 0đ, từ nút thứ 2 cùng nhóm 100đ/nút; gọi điện 200đ; trang web/Mini App khác 500đ; ứng dụng DN 600đ; ứng dụng khác 1.000đ; trang tải ứng dụng 3.000đ.
+  - Thành phần đặc biệt: hình ảnh +300đ; nút phản hồi (beta) +100đ. Lệnh cấp quyền gọi 400đ.
+- **API gửi theo SĐT (chế độ development):** `POST https://business.openapi.zalo.me/message/template`, header `access_token`, body JSON: `phone` (chuẩn hóa mã quốc gia, vd `84987654321`), `template_id`, `template_data` (object theo từng template), `tracking_id` (bắt buộc, ≤ 48 ký tự, không ký tự đặc biệt — dùng để đối soát), `mode: "development"` (chỉ gửi được tới quản trị viên app/OA). Phản hồi: `{ "data": { "sent_time", "msg_id" }, "error": 0, "message": "Success" }`.
+- **CHƯA KIỂM CHỨNG (cần trước khi code):** trang API gửi chính thức của ZBS Template Message (gửi qua SĐT và qua UID: endpoint, tham số, loại access token, appsecret_proof), bảng mã lỗi ZBS/ZNS, quy định kiểm duyệt nội dung template (Tag 2 vs Tag 3), webhook trạng thái template / người dùng nhận tin / bấm nút "Nhắn tin", changelog **V261001 "Cập nhật cơ chế ZBS Template Message"** (mới nhất), quyền (scope) app cần bật lại.
+- **Áp dụng cho dự án:** hỏi thăm sau dịch vụ, nhắc lịch → Tag 2 (CSKH); mời gói/ưu đãi → Tag 3 (Hậu mãi) và chỉ gửi khi khách đồng ý nhận tin (CLAUDE.md mục 7). Khách đã từng chat OA (có Zalo user id) → ưu tiên gửi **qua UID** (rẻ hơn); chỉ có SĐT → gửi qua SĐT.
 
 ## 9. Chính sách và điều khoản
 
@@ -105,6 +118,7 @@ Hoàn thành file này là việc **đầu tiên của M4**, trước khi viết
 
 | Ngày | Mục | Người kiểm tra | Ghi chú |
 | --- | --- | --- | --- |
+| 2026-10-14 | 8 | chủ dự án (copy changelog V251209, zalo.cloud, trang ZNS development mode) | ZBS Template Message, loại mẫu, điều kiện, giá, API gửi thử theo SĐT |
 | 2026-10-04 | 5 (OA gửi tin), 7 | chủ dự án (ảnh + copy docs) | Sự kiện oa_send_*, mã lỗi, giới hạn tốc độ |
 | 2026-10-04 | 6 | chủ dự án (ảnh + copy docs) | Gửi tin tư vấn văn bản, điều kiện, quota |
 | 2026-10-04 | 2, 3 | chủ dự án (ảnh + copy docs) | OAuth v4: PKCE, đổi code, refresh |

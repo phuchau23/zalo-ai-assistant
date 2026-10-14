@@ -438,6 +438,16 @@ namespace ZaloAi.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(20)")
                         .HasColumnName("proactive_opt_out_source");
 
+                    b.Property<string>("Salutation")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("salutation");
+
+                    b.Property<string>("SalutationSource")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("salutation_source");
+
                     b.PrimitiveCollection<List<string>>("Tags")
                         .IsRequired()
                         .HasColumnType("text[]")
@@ -1144,8 +1154,12 @@ namespace ZaloAi.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)")
-                        .HasDefaultValue("friendly")
+                        .HasDefaultValue("human")
                         .HasColumnName("bot_tone");
+
+                    b.Property<int?>("ConversationQuota")
+                        .HasColumnType("integer")
+                        .HasColumnName("conversation_quota");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -1183,6 +1197,11 @@ namespace ZaloAi.Infrastructure.Persistence.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)")
                         .HasColumnName("status");
+
+                    b.Property<string>("SuspendedReason")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("suspended_reason");
 
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")

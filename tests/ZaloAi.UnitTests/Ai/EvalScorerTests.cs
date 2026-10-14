@@ -11,7 +11,7 @@ public sealed class EvalScorerTests
     private static readonly HashSet<long> Known = EvalScorer.KnownAmounts(["""{"price": 490000}""", "Gói 13.000.000đ, 10 buổi"]);
 
     private static BotTurnResult Result(string reply, bool needsHuman = false, Urgency urgency = Urgency.None, string? reason = null) =>
-        new(reply, needsHuman, reason, urgency, "high", null, new Dictionary<string, string>(), "{}", []);
+        new([reply], needsHuman, reason, urgency, "high", null, new Dictionary<string, string>(), "{}", []);
 
     private static EvalCase Case(string expect, string[][]? must = null, string[]? mustNot = null) =>
         new("T1", "normal", "?", expect, must ?? [], mustNot ?? [], null);

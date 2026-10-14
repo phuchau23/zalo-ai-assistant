@@ -120,7 +120,7 @@ public sealed class CareAdvisorTests
     public async Task Masks_pii_before_ai_and_restores_in_result()
     {
         var chat = new ScriptedChat(Answer("Dạ chị [NAME_1] ơi, em nhắn hỏi thăm chị ạ."));
-        var result = await new CareAdvisor(chat, TimeProvider.System).AnalyzeAsync(Request(), CancellationToken.None);
+        var result = await CareAdvisors.Create(chat).AnalyzeAsync(Request(), CancellationToken.None);
 
         var sent = chat.Requests.ShouldHaveSingleItem().Turns.ShouldHaveSingleItem().Text;
         sent.ShouldNotContain("0912345678");
@@ -137,7 +137,7 @@ public sealed class CareAdvisorTests
     public async Task Invalid_output_retries_once_then_gives_up()
     {
         var chat = new ScriptedChat("không phải json", "{}");
-        (await new CareAdvisor(chat, TimeProvider.System).AnalyzeAsync(Request(), CancellationToken.None)).ShouldBeNull();
+        (await CareAdvisors.Create(chat).AnalyzeAsync(Request(), CancellationToken.None)).ShouldBeNull();
         chat.Requests.Count.ShouldBe(2);
     }
 
@@ -145,7 +145,7 @@ public sealed class CareAdvisorTests
     public async Task No_follow_up_means_no_draft_and_unknown_trigger_becomes_other()
     {
         var json = Answer("Tin nháp", follow: false).Replace("price_no_close", "spam_everyone", StringComparison.Ordinal);
-        var result = await new CareAdvisor(new ScriptedChat(json), TimeProvider.System).AnalyzeAsync(Request(), CancellationToken.None);
+        var result = await CareAdvisors.Create(new ScriptedChat(json)).AnalyzeAsync(Request(), CancellationToken.None);
         result.ShouldNotBeNull();
         result.ShouldFollowUp.ShouldBeFalse();
         result.Draft.ShouldBeNull();
@@ -194,7 +194,7 @@ public sealed class CareAdvisorBotVoiceTests
     public async Task Bot_voice_prompt_and_price_in_bot_draft_is_blocked()
     {
         var chat = new OneAnswer(Json("send", "Dạ gói triệt lông bên em 500k ạ, chị muốn đặt lịch không?"));
-        var result = await new CareAdvisor(chat, TimeProvider.System).AnalyzeAsync(Request(botWillSend: true), CancellationToken.None);
+        var result = await CareAdvisors.Create(chat).AnalyzeAsync(Request(botWillSend: true), CancellationToken.None);
 
         chat.Last!.System.ShouldContain("TRỢ LÝ AI Mai");
         result.ShouldNotBeNull();
@@ -203,14 +203,14 @@ public sealed class CareAdvisorBotVoiceTests
         result.Draft.ShouldBeNull();
 
         // Nhân viên gửi (không phải bot): giá do nhân viên kiểm tra, không chặn.
-        var staff = await new CareAdvisor(new OneAnswer(Json("send", "Dạ gói 500k ạ")), TimeProvider.System).AnalyzeAsync(Request(botWillSend: false), CancellationToken.None);
+        var staff = await CareAdvisors.Create(new OneAnswer(Json("send", "Dạ gói 500k ạ"))).AnalyzeAsync(Request(botWillSend: false), CancellationToken.None);
         staff!.DraftBlocked.ShouldBeFalse();
     }
 
     [Fact]
     public async Task Parses_ask_human_and_promotional()
     {
-        var result = await new CareAdvisor(new OneAnswer(Json("ask_human", "Dạ em hỏi thăm ạ", "weird_reason", promotional: true)), TimeProvider.System)
+        var result = await CareAdvisors.Create(new OneAnswer(Json("ask_human", "Dạ em hỏi thăm ạ", "weird_reason", promotional: true)))
             .AnalyzeAsync(Request(botWillSend: true), CancellationToken.None);
         result!.Action.ShouldBe(CareAction.AskHuman);
         result.HumanReason.ShouldBe("other");
@@ -308,4 +308,126 @@ public sealed class CareDecisionTests
     [InlineData("gói 90 phút bao nhiêu", false)]
     public void Opt_out_command_matches_whole_message_only(string text, bool expected) =>
         CareDecision.IsOptOutCommand(text).ShouldBe(expected);
+}
+
+public sealed class SalutationTests
+{
+    private sealed class RecordingChat : IChatProvider
+    {
+        public List<ChatRequest> Requests { get; } = [];
+
+        public Task<ChatResult> ChatAsync(ChatRequest request, CancellationToken cancellationToken)
+        {
+            Requests.Add(request);
+            return Task.FromResult(new ChatResult("{}", "test", "m", 1, 1, 0m, 1));
+        }
+    }
+
+    private static readonly DateTimeOffset Now = new(2026, 10, 14, 3, 0, 0, TimeSpan.Zero); // 10:00 giờ Việt Nam
+
+    [Theory]
+    [InlineData(null, "mình")]
+    [InlineData("anh", "anh")]
+    [InlineData("chị", "chị")]
+    [InlineData("anh/chị", "mình")]
+    [InlineData("em", "mình")]
+    public void Resolve_falls_back_to_minh(string? stored, string expected) =>
+        CustomerSalutation.Resolve(stored).ShouldBe(expected);
+
+    [Fact]
+    public void Handoff_texts_use_the_customer_salutation()
+    {
+        var settings = new HandoffSettings { TenantId = Guid.NewGuid() };
+        HandoffTexts.Fill(settings.TakeoverMessage, "Spa Hoa Mai", "Lan", settings, Now, "chị").ShouldBe(
+            "Dạ chào chị, em là Lan, chuyên viên chăm sóc khách hàng của Spa Hoa Mai. Em sẽ hỗ trợ chị tiếp ạ.");
+        HandoffTexts.Handoff(settings, "Spa Hoa Mai", Now, null).ShouldContain("chuyển mình sang chuyên viên");
+        HandoffTexts.Handoff(settings, "Spa Hoa Mai", Now, "anh").ShouldNotContain("anh/chị");
+    }
+
+    [Theory]
+    [InlineData(null, "gọi khách là \"mình\"")]
+    [InlineData("cô", "gọi khách là \"cô\"")]
+    public async Task Care_prompt_addresses_customer_without_anh_chi(string? salutation, string expected)
+    {
+        var request = new CareAnalysisRequest(
+            Guid.NewGuid(),
+            new BotProfile("Spa Hoa Mai", "spa", "Mai", "em", BotTone.Human, null, null),
+            null,
+            null,
+            [new BotHistoryTurn(MessageSender.Customer, "gói triệt lông bao nhiêu em?")],
+            [],
+            LeadStatus.Interested,
+            null,
+            null,
+            BotWillSend: true,
+            Salutation: salutation);
+        var chat = new RecordingChat();
+        await CareAdvisors.Create(chat).AnalyzeAsync(request, CancellationToken.None);
+        var system = chat.Requests[0].System;
+
+        system.ShouldContain(expected);
+        system.ShouldNotContain("gọi khách là \"anh/chị\"");
+        system.ShouldContain("biểu tượng cảm xúc dễ thương");
+    }
+}
+
+
+/// <summary>Tạo CareAdvisor cho test: AI giả + kho kiến thức giả (mặc định trống).</summary>
+internal static class CareAdvisors
+{
+    public static CareAdvisor Create(IChatProvider chat, IKnowledgeSearch? search = null) =>
+        new(chat, search ?? new StaticKnowledge(), Microsoft.Extensions.Options.Options.Create(new ZaloAi.Core.Options.AiOptions()), TimeProvider.System, Microsoft.Extensions.Logging.Abstractions.NullLogger<CareAdvisor>.Instance);
+}
+
+internal sealed class StaticKnowledge(params KnowledgeHit[] hits) : IKnowledgeSearch
+{
+    public List<string> Queries { get; } = [];
+
+    public Task<IReadOnlyList<KnowledgeHit>> SearchAsync(Guid tenantId, string query, int limit, CancellationToken cancellationToken)
+    {
+        Queries.Add(query);
+        return Task.FromResult<IReadOnlyList<KnowledgeHit>>(hits);
+    }
+}
+
+public sealed class CareAdvisorKnowledgeTests
+{
+    private sealed class RecordingChat : IChatProvider
+    {
+        public ChatRequest? Last { get; private set; }
+
+        public Task<ChatResult> ChatAsync(ChatRequest request, CancellationToken cancellationToken)
+        {
+            Last = request;
+            return Task.FromResult(new ChatResult("{}", "test", "m", 1, 1, 0m, 1));
+        }
+    }
+
+    [Fact]
+    public async Task Uses_reviewed_after_care_info_of_the_package_the_customer_did()
+    {
+        var hit = new KnowledgeHit(Guid.NewGuid(), "item", Guid.NewGuid(), "GOI-BAM-HUYET", "Gói bấm huyệt 10 buổi",
+            "[Gói liệu trình] Gói bấm huyệt 10 buổi\nSau khi làm: Buổi đầu có thể hơi uể oải 1–2 ngày, nên uống nước ấm.", 0.8, MedicallyReviewed: true);
+        var search = new StaticKnowledge(hit);
+        var chat = new RecordingChat();
+        var request = new CareAnalysisRequest(
+            Guid.NewGuid(),
+            new BotProfile("Spa Hoa Mai", "spa", "Mai", "em", BotTone.Human, null, null),
+            null,
+            null,
+            [new BotHistoryTurn(MessageSender.Customer, "ok em, số chị 0912345678")],
+            [new CareNoteInput("service", new DateOnly(2026, 10, 13), null, "Đã làm buổi 1 gói bấm huyệt 10 buổi")],
+            LeadStatus.Won,
+            null,
+            null,
+            BotWillSend: true,
+            Salutation: "chị");
+
+        await CareAdvisors.Create(chat, search).AnalyzeAsync(request, CancellationToken.None);
+
+        search.Queries.ShouldHaveSingleItem().ShouldContain("gói bấm huyệt 10 buổi");
+        search.Queries[0].ShouldNotContain("0912345678");
+        chat.Last!.System.ShouldContain("[ĐÃ DUYỆT CHUYÊN MÔN] [Gói liệu trình] Gói bấm huyệt 10 buổi");
+        chat.Last.System.ShouldContain("Sau khi làm: Buổi đầu có thể hơi uể oải");
+    }
 }

@@ -34,6 +34,7 @@ public sealed class JobsTests(PostgresFixture db)
             ["Jobs:WorkerCount"] = "2",
             ["Ai:EmbedProvider"] = "fake",
             ["Ai:ChatProvider"] = "fake",
+            ["Ai:BotMessageGapMs"] = "0",
             ["Storage:LocalRoot"] = ApiFactory.TestStorageRoot,
         });
         builder.Services.AddZaloAiInfrastructure(builder.Configuration);

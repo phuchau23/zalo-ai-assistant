@@ -14,8 +14,8 @@ public static partial class KnowledgeTemplate
           "format": "zaloai-knowledge",
           "version": 1,
           "info":     [ { "code", "title", "content" } ],
-          "services": [ { "code", "group", "name", "durationMinutes", "price", "priceUnit", "priceNote", "description", "suitableFor", "notSuitableFor", "branches", "note" } ],
-          "packages": [ { "code", "group", "name", "sessions", "minutesPerSession", "price", "priceNote", "description", "suitableFor", "notSuitableFor", "note" } ],
+          "services": [ { "code", "group", "name", "durationMinutes", "price", "priceUnit", "priceNote", "description", "suitableFor", "notSuitableFor", "afterCare", "branches", "note" } ],
+          "packages": [ { "code", "group", "name", "sessions", "minutesPerSession", "price", "priceNote", "description", "suitableFor", "notSuitableFor", "afterCare", "note" } ],
           "faqs":     [ { "code", "question", "answer" } ],
           "policies": [ { "code", "topic", "content" } ]
         }
@@ -28,6 +28,7 @@ public static partial class KnowledgeTemplate
         5. Địa chỉ, chi nhánh, hotline, giờ mở cửa, cách đặt lịch, thanh toán → "info" (mỗi thông tin một mục).
         6. Đặt lịch, hủy/đổi lịch, hoàn tiền, bảo hành, ưu đãi → "policies".
         7. Giữ nguyên nội dung gốc, không thêm thông tin không có trong tài liệu. Trường không có thông tin → null.
-        8. Nội dung tiếng Việt có dấu.
+        8. "afterCare" (Sau khi làm): cảm giác khách thường gặp sau buổi làm, kéo dài bao lâu, nên làm/kiêng gì, khi nào cần báo lại doanh nghiệp — chỉ chép từ tài liệu, không tự viết.
+        9. Nội dung tiếng Việt có dấu.
         """;
 }

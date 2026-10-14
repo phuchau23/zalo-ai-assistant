@@ -11,6 +11,9 @@ public enum BotTone
 
     /// <summary>Ngắn gọn, đi thẳng vào ý.</summary>
     Concise = 2,
+
+    /// <summary>Như nhân viên thật: chia vài tin ngắn, đa dạng cách nói, emoji vừa phải (mặc định).</summary>
+    Human = 3,
 }
 
 public enum TenantStatus
@@ -23,6 +26,10 @@ public enum TenantStatus
 /// <summary>Doanh nghiệp thuê dịch vụ. Bảng gốc của cô lập dữ liệu: DbContext chỉ cho thấy tenant hiện tại.</summary>
 public sealed class Tenant
 {
+    public const string SuspendManual = "manual";
+
+    public const string SuspendExpired = "expired";
+
     public Guid Id { get; set; }
 
     public required string Name { get; set; }
@@ -43,7 +50,13 @@ public sealed class Tenant
 
     public TenantStatus Status { get; set; } = TenantStatus.Active;
 
-    public BotTone BotTone { get; set; } = BotTone.Friendly;
+    /// <summary>Vì sao bị khóa: <see cref="SuspendManual"/> (super admin khóa) | <see cref="SuspendExpired"/> (tự khóa khi quá hạn thuê).</summary>
+    public string? SuspendedReason { get; set; }
+
+    /// <summary>Hạn mức hội thoại/tháng riêng do super admin đặt; null = theo gói (Billing:Plans).</summary>
+    public int? ConversationQuota { get; set; }
+
+    public BotTone BotTone { get; set; } = BotTone.Human;
 
     /// <summary>
     /// Ghi chú thêm của chủ DN cho bot (ví dụ "luôn mời khách đặt lịch"). Không ghi đè được quy tắc an toàn và câu báo trợ lý AI.
