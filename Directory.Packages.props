@@ -5,6 +5,10 @@
     <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
   <ItemGroup>
+    <!-- Bản vá bảo mật cho gói gián tiếp (2026-10-14): 10.0.0–10.0.12 có lỗi DoS (CVE-2026-70162, CVE-2026-84008,
+         CVE-2026-96958/96959/96960), vá ở 10.0.13. Bỏ ghim khi các gói kéo nó vào đã tự lên bản vá. -->
+    <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
+    <PackageVersion Include="System.Security.Cryptography.Xml" Version="10.0.13" />
     <!-- Hosting -->
     <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.12" />
     <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.12" />
