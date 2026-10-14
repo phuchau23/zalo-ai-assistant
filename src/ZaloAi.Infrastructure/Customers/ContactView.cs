@@ -108,3 +108,51 @@ public static class ContactExcel
     private static string Format(DateTimeOffset? value) =>
         value is { } v ? v.ToOffset(TimeSpan.FromHours(7)).ToString("dd/MM/yyyy HH:mm", CultureInfo.InvariantCulture) : "";
 }
+
+/// <summary>Một sheet Excel: tiêu đề cột + các dòng (đều là chữ).</summary>
+public sealed record ExcelSheet(string Name, IReadOnlyList<string> Headers, IReadOnlyList<IReadOnlyList<string>> Rows);
+
+/// <summary>Xuất toàn bộ dữ liệu của MỘT khách (quyền được biết/nhận dữ liệu cá nhân) thành file Excel nhiều sheet.</summary>
+public static class ContactDataExcel
+{
+    public static void Write(IReadOnlyList<ExcelSheet> sheets, Stream output)
+    {
+        ArgumentNullException.ThrowIfNull(sheets);
+        using var workbook = new XLWorkbook();
+        foreach (var data in sheets)
+        {
+            var sheet = workbook.Worksheets.Add(data.Name);
+            for (var i = 0; i < data.Headers.Count; i++)
+            {
+                var cell = sheet.Cell(1, i + 1);
+                cell.Value = data.Headers[i];
+                cell.Style.Font.Bold = true;
+                cell.Style.Fill.BackgroundColor = XLColor.FromHtml("#E8F0FE");
+            }
+
+            for (var r = 0; r < data.Rows.Count; r++)
+            {
+                for (var c = 0; c < data.Rows[r].Count; c++)
+                {
+                    // Luôn ghi dạng chữ (không phải công thức) — nội dung khách nhắn "=..." cũng không chạy được trong Excel.
+                    var cell = sheet.Cell(r + 2, c + 1);
+                    cell.Style.NumberFormat.Format = "@";
+                    cell.Value = data.Rows[r][c];
+                    cell.Style.Alignment.WrapText = true;
+                }
+            }
+
+            sheet.SheetView.FreezeRows(1);
+            sheet.Columns().AdjustToContents(1, Math.Min(data.Rows.Count + 1, 200));
+            foreach (var column in sheet.ColumnsUsed().Where(col => col.Width > 80))
+            {
+                column.Width = 80;
+            }
+        }
+
+        workbook.SaveAs(output);
+    }
+
+    public static string Format(DateTimeOffset? value) =>
+        value is { } v ? v.ToOffset(TimeSpan.FromHours(7)).ToString("dd/MM/yyyy HH:mm", CultureInfo.InvariantCulture) : "";
+}

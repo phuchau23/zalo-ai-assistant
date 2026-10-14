@@ -84,6 +84,29 @@ public sealed class ContactRepository(AppDbContext db, ITenantContext tenantCont
             .ToListAsync(cancellationToken);
     }
 
+    /// <summary>Mọi tin nhắn của khách trên mọi hội thoại, cũ trước (xuất dữ liệu cá nhân của khách).</summary>
+    public async Task<IReadOnlyList<Message>> ListAllMessagesAsync(Guid tenantId, Guid contactId, CancellationToken cancellationToken)
+    {
+        EnsureTenant(tenantId);
+        return await (
+            from m in Db.Messages.AsNoTracking()
+            join c in Db.Conversations on m.ConversationId equals c.Id
+            where m.TenantId == tenantId && c.TenantId == tenantId && c.ContactId == contactId
+            orderby m.CreatedAt, m.Id
+            select m).ToListAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Xóa vĩnh viễn một khách (yêu cầu xóa dữ liệu cá nhân, CLAUDE.md mục 7). Một câu DELETE có lọc tenant_id; khóa ngoại ON DELETE
+    /// CASCADE xóa theo ghi chú, hội thoại, tin nhắn, gợi ý chăm sóc; bản ghi chi phí AI giữ lại (conversation_id → NULL, không có
+    /// dữ liệu cá nhân). Trả số khách đã xóa (0 = không thuộc tenant).
+    /// </summary>
+    public async Task<int> DeleteAsync(Guid tenantId, Guid contactId, CancellationToken cancellationToken)
+    {
+        EnsureTenant(tenantId);
+        return await Db.Contacts.Where(c => c.TenantId == tenantId && c.Id == contactId).ExecuteDeleteAsync(cancellationToken);
+    }
+
     /// <summary>Hội thoại gần nhất của khách (được track) — nơi gắn gợi ý chăm sóc.</summary>
     public Task<Conversation?> LatestConversationAsync(Guid tenantId, Guid contactId, CancellationToken cancellationToken)
     {
