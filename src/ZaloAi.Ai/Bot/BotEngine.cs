@@ -17,7 +17,7 @@ namespace ZaloAi.Ai.Bot;
 /// <summary>
 /// Bộ não trả lời khách (CLAUDE.md M3, INDUSTRIES.md mục 2–3). Không đọc/ghi database.
 /// Thứ tự: che dữ liệu cá nhân → dấu hiệu nguy hiểm (trước khi gọi AI) → tìm kiến thức trong kho tenant → gọi AI (JSON)
-/// → lỗi định dạng thử lại 1 lần → câu cấm thử viết lại 1 lần → chặn giá không có nguồn → nhắc thăm khám (ngành y)
+/// → lỗi định dạng thử lại 1 lần → câu cấm thử viết lại 1 lần → chặn giá không có nguồn → mời kiểm tra trực tiếp (ngành y)
 /// → ghép lại dữ liệu đã che → câu báo trợ lý AI ở tin đầu tiên. Lỗi AI → câu dự phòng + chuyển người (không im lặng).
 /// </summary>
 public sealed partial class BotEngine(
@@ -34,7 +34,8 @@ public sealed partial class BotEngine(
     {
         ArgumentNullException.ThrowIfNull(request);
         var template = IndustryTemplateRegistry.Get(request.Profile.IndustrySlug);
-        var texts = new BotTexts(template, request.Profile);
+        var addressing = Addressing.From(request.Salutation, request.SalutationByStaff);
+        var texts = new BotTexts(request.Profile, addressing.Salutation, template.UrgentReply);
         var trace = new TurnTrace(template);
         var usage = new List<BotUsage>();
 
@@ -53,27 +54,27 @@ public sealed partial class BotEngine(
         {
             trace.DangerSignal = danger;
             trace.Guards.Add("danger_keyword");
-            return Finish(request, texts, trace, vault, usage, new Decision(texts.Urgent, true, "urgent", Urgency.Urgent, "high", null, []));
+            return Finish(request, texts, trace, vault, usage, new Decision([texts.Urgent], true, "urgent", Urgency.Urgent, "high", null, []));
         }
 
         // Tin không phải chữ (ảnh, video, file...): bot chưa xem được → trả lời cố định, không gọi AI (không bịa nội dung ảnh).
         if (InboundText.IsMedia(request.CustomerMessage))
         {
             trace.Guards.Add("media_handoff");
-            return Finish(request, texts, trace, vault, usage, new Decision(texts.Media, true, "media", Urgency.None, "high", null, []));
+            return Finish(request, texts, trace, vault, usage, new Decision([texts.Media], true, "media", Urgency.None, "high", null, []));
         }
 
         if (request.CustomerMessage == InboundText.Sticker)
         {
             trace.Guards.Add("sticker_reply");
-            return Finish(request, texts, trace, vault, usage, new Decision(texts.Sticker, false, null, Urgency.None, "high", null, []));
+            return Finish(request, texts, trace, vault, usage, new Decision([texts.Sticker], false, null, Urgency.None, "high", null, []));
         }
 
         // 2. Tìm kiến thức (câu đã che — không gửi dữ liệu cá nhân cho dịch vụ tạo vector).
         var chunks = await SearchAsync(request.TenantId, maskedMessage, maskedHistory, trace, cancellationToken);
 
         // 3. Gọi AI.
-        var system = PromptBuilder.BuildSystem(template, request.Profile, chunks, maskedSummary, time.GetUtcNow());
+        var system = PromptBuilder.BuildSystem(template, request.Profile, chunks, maskedSummary, time.GetUtcNow(), addressing);
         var turns = BuildTurns(maskedHistory, maskedMessage);
         BotAnswer? answer;
         try
@@ -91,7 +92,7 @@ public sealed partial class BotEngine(
                 trace.Guards.Add("forbidden_retry");
                 trace.Forbidden = violations;
                 var retryTurns = turns
-                    .Append(new ChatTurn(ChatRole.Assistant, answer.Reply))
+                    .Append(new ChatTurn(ChatRole.Assistant, answer.Text))
                     .Append(new ChatTurn(ChatRole.User,
                         $"[Hệ thống, không phải khách] Câu trả lời vừa rồi có cụm từ không được phép: {string.Join(", ", violations.Select(v => $"\"{v}\""))}. " +
                         "Viết lại câu trả lời cho tin nhắn trước của khách, giữ nguyên thông tin đúng, không dùng các cụm đó, không hứa hẹn kết quả."))
@@ -223,7 +224,7 @@ public sealed partial class BotEngine(
     private static List<string> Violations(IndustryTemplate template, BotAnswer answer, IReadOnlyList<PromptChunk> chunks)
     {
         var used = chunks.Where(c => answer.UsedChunkIds.Contains(c.Id)).Select(c => c.Hit.Content);
-        return ForbiddenFilter.FindViolations(template, answer.Reply, used).ToList();
+        return ForbiddenFilter.FindViolations(template, answer.Text, used).ToList();
     }
 
     private static Decision Decide(IndustryTemplate template, BotTexts texts, BotAnswer answer, IReadOnlyList<PromptChunk> chunks, TurnTrace trace)
@@ -233,7 +234,8 @@ public sealed partial class BotEngine(
         trace.UsedChunkIds = used;
         trace.HealthTopic = answer.HealthTopic;
 
-        var reply = answer.Reply.Trim();
+        var messages = answer.Messages.ToList();
+        var reply = answer.Text;
         var needsHuman = answer.NeedsHuman;
         var reason = answer.HandoffReason;
         var urgency = answer.Urgency switch
@@ -246,7 +248,7 @@ public sealed partial class BotEngine(
         if (urgency == Urgency.Urgent)
         {
             trace.Guards.Add("ai_urgent");
-            return new Decision(texts.Urgent, true, "urgent", Urgency.Urgent, answer.Confidence, answer.Sentiment, answer.LeadFields);
+            return new Decision([texts.Urgent], true, "urgent", Urgency.Urgent, answer.Confidence, answer.Sentiment, answer.LeadFields);
         }
 
         // "0 bịa giá": có con số tiền nhưng không dẫn đoạn dữ liệu nào → không gửi, chuyển người.
@@ -256,7 +258,7 @@ public sealed partial class BotEngine(
             return Handoff(texts, "no_knowledge") with { Sentiment = answer.Sentiment, LeadFields = answer.LeadFields };
         }
 
-        if (string.IsNullOrWhiteSpace(reply))
+        if (messages.Count == 0)
         {
             trace.Guards.Add("empty_reply");
             return Handoff(texts, "ai_error");
@@ -277,10 +279,10 @@ public sealed partial class BotEngine(
             reason ??= "negative_sentiment";
         }
 
-        if (template.MedicalSafety && answer.HealthTopic && !VietText.Fold(reply).Contains(" tham kham truc tiep ", StringComparison.Ordinal))
+        if (template.MedicalSafety && answer.HealthTopic && !MentionsInPersonCheck(reply))
         {
             trace.Guards.Add("medical_disclaimer_added");
-            reply = $"{reply}\n{texts.MedicalDisclaimer}";
+            messages.Add(texts.MedicalDisclaimer);
         }
 
         if (needsHuman && string.IsNullOrWhiteSpace(reason))
@@ -288,11 +290,20 @@ public sealed partial class BotEngine(
             reason = "other";
         }
 
-        return new Decision(reply, needsHuman, needsHuman ? reason : null, urgency, answer.Confidence, answer.Sentiment, answer.LeadFields);
+        return new Decision(messages, needsHuman, needsHuman ? reason : null, urgency, answer.Confidence, answer.Sentiment, answer.LeadFields, answer.CustomerSalutation);
+    }
+
+    /// <summary>Câu trả lời đã mời khách kiểm tra/thăm khám trực tiếp (chuyên viên của DN, hoặc bác sĩ với bệnh lý) chưa.</summary>
+    private static bool MentionsInPersonCheck(string reply)
+    {
+        var folded = VietText.Fold(reply);
+        return folded.Contains(" kiem tra truc tiep ", StringComparison.Ordinal)
+            || folded.Contains(" tham kham ", StringComparison.Ordinal)
+            || folded.Contains(" bac si ", StringComparison.Ordinal);
     }
 
     private static Decision Handoff(BotTexts texts, string reason) =>
-        new(texts.Handoff, true, reason, Urgency.None, "low", null, []);
+        new([texts.Handoff], true, reason, Urgency.None, "low", null, []);
 
     private static BotTurnResult Finish(
         BotTurnRequest request,
@@ -302,10 +313,13 @@ public sealed partial class BotEngine(
         List<BotUsage> usage,
         Decision decision)
     {
-        var reply = PiiMasker.Restore(decision.Reply, vault).Trim();
+        var messages = decision.Messages
+            .Select(m => PiiMasker.Restore(m, vault).Trim())
+            .Where(m => m.Length > 0)
+            .ToList();
         if (request.IsFirstBotReply)
         {
-            reply = $"{texts.Disclosure}\n\n{reply}";
+            messages.Insert(0, texts.Disclosure); // tin riêng, luôn đứng đầu (CLAUDE.md mục 7)
         }
 
         var allowedKeys = IndustryTemplateRegistry.Get(request.Profile.IndustrySlug).LeadFields.Select(f => f.Key).ToHashSet(StringComparer.Ordinal);
@@ -327,9 +341,10 @@ public sealed partial class BotEngine(
         trace.Sentiment = decision.Sentiment;
         trace.LeadKeys = leads.Keys.ToList();
         trace.FirstReply = request.IsFirstBotReply;
+        trace.Parts = messages.Count;
 
         return new BotTurnResult(
-            reply,
+            messages,
             decision.NeedsHuman,
             decision.HandoffReason,
             decision.Urgency,
@@ -337,7 +352,8 @@ public sealed partial class BotEngine(
             decision.Sentiment,
             leads,
             trace.ToJson(),
-            usage);
+            usage,
+            decision.DetectedSalutation);
     }
 
     /// <summary>Lịch sử (đã che) + tin mới → lượt chat cho AI: bắt đầu bằng khách, gộp các tin liên tiếp cùng phía.</summary>
@@ -375,13 +391,14 @@ public sealed partial class BotEngine(
     private static partial void LogSearchFailed(ILogger logger, string errorType);
 
     private sealed record Decision(
-        string Reply,
+        IReadOnlyList<string> Messages,
         bool NeedsHuman,
         string? HandoffReason,
         Urgency Urgency,
         string Confidence,
         string? Sentiment,
-        IReadOnlyList<KeyValuePair<string, string>> LeadFields);
+        IReadOnlyList<KeyValuePair<string, string>> LeadFields,
+        string? DetectedSalutation = null);
 
     /// <summary>Thông tin chẩn đoán cho màn "Vì sao bot trả lời vậy?" — KHÔNG chứa nội dung tin hay dữ liệu cá nhân của khách.</summary>
     private sealed class TurnTrace(IndustryTemplate template)
@@ -422,6 +439,8 @@ public sealed partial class BotEngine(
 
         public bool FirstReply { get; set; }
 
+        public int Parts { get; set; }
+
         public string ToJson() => new JsonObject
         {
             ["template"] = $"{template.Slug}@{template.Version}",
@@ -454,14 +473,15 @@ public sealed partial class BotEngine(
             ["leadKeys"] = new JsonArray(LeadKeys.Select(k => (JsonNode?)k).ToArray()),
             ["piiMasked"] = PiiMasked,
             ["firstReply"] = FirstReply,
+            ["parts"] = Parts,
         }.ToJsonString();
     }
 }
 
-/// <summary>Câu cố định của bot, đã thay {bot} {khach} {ten_doanh_nghiep}.</summary>
-internal sealed class BotTexts(IndustryTemplate template, BotProfile profile)
+/// <summary>Câu cố định của bot, đã thay {bot} {khach} (cách gọi khách: anh/chị/... hoặc "mình") {ten_doanh_nghiep}.</summary>
+internal sealed class BotTexts(BotProfile profile, string salutation, string urgentReply)
 {
-    public string Urgent => Fill(template.UrgentReply);
+    public string Urgent => Fill(urgentReply);
 
     public string Handoff => Fill("Dạ {bot} xin phép chuyển {khach} sang nhân viên của {ten_doanh_nghiep} để hỗ trợ chính xác hơn ạ. Nhân viên sẽ phản hồi {khach} sớm nhất có thể.");
 
@@ -469,7 +489,8 @@ internal sealed class BotTexts(IndustryTemplate template, BotProfile profile)
 
     public string Sticker => Fill("Dạ, {bot} có thể hỗ trợ gì thêm cho {khach} ạ?");
 
-    public string MedicalDisclaimer => Fill("Để xác định chính xác tình trạng, {khach} cần bác sĩ/chuyên viên thăm khám trực tiếp ạ.");
+    /// <summary>Câu dự phòng khi bot nói về cơ thể mà quên mời kiểm tra trực tiếp — mời về chuyên viên của DN, không đẩy khách đi nơi khác.</summary>
+    public string MedicalDisclaimer => Fill("Nếu {khach} thấy cảm giác này kéo dài hoặc khó chịu hơn, {khach} ghé {ten_doanh_nghiep} để chuyên viên bên {bot} kiểm tra trực tiếp cho {khach} nha.");
 
     /// <summary>Câu báo trợ lý AI + link chính sách (CLAUDE.md mục 7) — không tắt được.</summary>
     public string Disclosure
@@ -487,7 +508,7 @@ internal sealed class BotTexts(IndustryTemplate template, BotProfile profile)
     {
         var filled = text
             .Replace("{bot}", profile.BotPronoun, StringComparison.Ordinal)
-            .Replace("{khach}", template.CustomerAddress, StringComparison.Ordinal)
+            .Replace("{khach}", salutation, StringComparison.Ordinal)
             .Replace("{ten_doanh_nghiep}", profile.BusinessName, StringComparison.Ordinal);
         return CapitalizeSentences(filled);
     }
@@ -517,9 +538,12 @@ internal sealed class BotTexts(IndustryTemplate template, BotProfile profile)
     }
 }
 
-/// <summary>JSON AI trả về (schema trong <see cref="PromptBuilder.ReplySchema"/>). Thiếu "reply" → coi như sai định dạng.</summary>
+/// <summary>
+/// JSON AI trả về (schema trong <see cref="PromptBuilder.ReplySchema"/>): "messages" (mảng tin), hoặc "reply" (một đoạn, định dạng cũ).
+/// Thiếu cả hai → coi như sai định dạng. Tối đa <see cref="MaxMessages"/> tin, phần dư gộp vào tin cuối.
+/// </summary>
 internal sealed record BotAnswer(
-    string Reply,
+    IReadOnlyList<string> Messages,
     IReadOnlyList<string> UsedChunkIds,
     string Confidence,
     bool NeedsHuman,
@@ -527,10 +551,16 @@ internal sealed record BotAnswer(
     string Urgency,
     bool HealthTopic,
     string? Sentiment,
-    IReadOnlyList<KeyValuePair<string, string>> LeadFields)
+    IReadOnlyList<KeyValuePair<string, string>> LeadFields,
+    string? CustomerSalutation = null)
 {
+    public const int MaxMessages = 4;
+
     private static readonly string[] Confidences = ["high", "medium", "low"];
     private static readonly string[] Sentiments = ["positive", "neutral", "negative"];
+
+    /// <summary>Các tin gộp một đoạn (kiểm tra câu cấm, giá, lượt viết lại).</summary>
+    public string Text => string.Join("\n", Messages);
 
     public static BotAnswer? TryParse(string text)
     {
@@ -548,9 +578,7 @@ internal sealed record BotAnswer(
         {
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
-            if (root.ValueKind != JsonValueKind.Object
-                || !root.TryGetProperty("reply", out var reply)
-                || reply.ValueKind != JsonValueKind.String)
+            if (root.ValueKind != JsonValueKind.Object || ReadMessages(root) is not { } messages)
             {
                 return null;
             }
@@ -578,8 +606,9 @@ internal sealed record BotAnswer(
             var confidence = Str("confidence");
             var sentiment = Str("sentiment");
             var reason = Str("handoff_reason");
+            var salutation = Str("customer_salutation");
             return new BotAnswer(
-                reply.GetString()!,
+                messages,
                 ids,
                 Confidences.Contains(confidence) ? confidence! : "low",
                 Bool("needs_human"),
@@ -587,11 +616,40 @@ internal sealed record BotAnswer(
                 Str("urgency") ?? "none",
                 Bool("health_topic"),
                 Sentiments.Contains(sentiment) ? sentiment : null,
-                leads);
+                leads,
+                ZaloAi.Core.Entities.CustomerSalutation.IsAllowed(salutation) ? salutation : null);
         }
         catch (JsonException)
         {
             return null;
         }
+    }
+
+    /// <summary>"messages" (bỏ tin rỗng, tối đa <see cref="MaxMessages"/>) hoặc "reply". null = không có nội dung đúng kiểu.</summary>
+    private static List<string>? ReadMessages(JsonElement root)
+    {
+        if (root.TryGetProperty("messages", out var array) && array.ValueKind == JsonValueKind.Array)
+        {
+            var items = array.EnumerateArray()
+                .Where(m => m.ValueKind == JsonValueKind.String)
+                .Select(m => m.GetString()!.Trim())
+                .Where(m => m.Length > 0)
+                .ToList();
+            if (items.Count > MaxMessages)
+            {
+                items[MaxMessages - 1] = string.Join("\n", items.Skip(MaxMessages - 1));
+                items.RemoveRange(MaxMessages, items.Count - MaxMessages);
+            }
+
+            return items;
+        }
+
+        if (root.TryGetProperty("reply", out var reply) && reply.ValueKind == JsonValueKind.String)
+        {
+            var text = reply.GetString()!.Trim();
+            return text.Length == 0 ? [] : [text];
+        }
+
+        return null;
     }
 }
