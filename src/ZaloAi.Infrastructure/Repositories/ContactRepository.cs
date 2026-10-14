@@ -84,6 +84,23 @@ public sealed class ContactRepository(AppDbContext db, ITenantContext tenantCont
             .ToListAsync(cancellationToken);
     }
 
+    /// <summary>
+    /// Lịch hẹn chăm sóc đã tới giờ của khách CHỈ CÓ SĐT (nhập từ danh sách, chưa nhắn OA → bot chưa nhắn được), chưa đánh dấu đã liên
+    /// hệ — để nhân viên gọi điện/nhắn tay. Sớm nhất trước.
+    /// </summary>
+    public async Task<IReadOnlyList<(ContactNote Note, Contact Contact)>> ListPhoneOnlyDueAsync(Guid tenantId, DateTimeOffset now, int limit, CancellationToken cancellationToken)
+    {
+        EnsureTenant(tenantId);
+        var rows = await (
+            from n in Db.ContactNotes.AsNoTracking()
+            join c in Db.Contacts.AsNoTracking() on n.ContactId equals c.Id
+            where n.TenantId == tenantId && c.TenantId == tenantId && c.Channel == ChannelKind.Phone
+                  && n.FollowUpAt != null && n.FollowUpAt <= now && n.FollowUpDoneAt == null
+            orderby n.FollowUpAt
+            select new { n, c }).Take(limit).ToListAsync(cancellationToken);
+        return rows.Select(r => (r.n, r.c)).ToList();
+    }
+
     /// <summary>Mọi tin nhắn của khách trên mọi hội thoại, cũ trước (xuất dữ liệu cá nhân của khách).</summary>
     public async Task<IReadOnlyList<Message>> ListAllMessagesAsync(Guid tenantId, Guid contactId, CancellationToken cancellationToken)
     {

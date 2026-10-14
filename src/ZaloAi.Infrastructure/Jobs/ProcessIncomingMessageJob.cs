@@ -35,6 +35,7 @@ public sealed partial class ProcessIncomingMessageJob(
     MessageDeliveryService delivery,
     InboxService inbox,
     ConversationQuotaService quota,
+    ContactPhoneLinker phoneLinker,
     IFieldEncryptor encryptor,
     IOptions<AiOptions> options,
     TimeProvider time,
@@ -162,6 +163,9 @@ public sealed partial class ProcessIncomingMessageJob(
         }
 
         var leadFields = MergeLeadFields(contact, result.LeadFields);
+
+        // Khách tự cho SĐT → gắn vào hồ sơ; trùng khách DN đã nhập từ danh sách thì gộp lịch sử chăm sóc vào hồ sơ đang chat.
+        await phoneLinker.LinkAsync(tenantId, contact, leadFields.GetValueOrDefault("phone"), cancellationToken);
         var customerMessages = history.Count(t => t.Sender == MessageSender.Customer) + 1 + (conversation.SummaryEnc is null ? 0 : 3);
         LeadRules.Promote(contact, LeadRules.FromBotTurn(leadFields, result.HandoffReason, customerMessages), time.GetUtcNow());
 
