@@ -1,10 +1,14 @@
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using ZaloAi.Ai.Privacy;
 using ZaloAi.Ai.Safety;
 using ZaloAi.Core.Ai;
 using ZaloAi.Core.Entities;
+using ZaloAi.Core.Errors;
+using ZaloAi.Core.Options;
 using ZaloAi.IndustryTemplates;
 
 namespace ZaloAi.Ai.Care;
@@ -14,8 +18,12 @@ namespace ZaloAi.Ai.Care;
 /// Che dữ liệu cá nhân trước khi gửi AI, ghép lại sau. Tin nháp có câu cấm của ngành — hoặc có giá tiền khi bot tự gửi (bot không
 /// được tự nêu giá ngoài câu trả lời có dẫn nguồn) — bị chặn (<see cref="CareAnalysisResult.DraftBlocked"/>), job sẽ chuyển nhân viên.
 /// </summary>
-public sealed class CareAdvisor(IChatProvider chat, TimeProvider time) : ICareAdvisor
+public sealed partial class CareAdvisor(IChatProvider chat, IKnowledgeSearch search, IOptions<AiOptions> options, TimeProvider time, ILogger<CareAdvisor> logger)
+    : ICareAdvisor
 {
+    /// <summary>Số đoạn kiến thức đưa vào phân tích (dịch vụ/gói khách đã làm, cột "Sau khi làm").</summary>
+    private const int KnowledgeLimit = 3;
+
     public const string Schema = """
         {
           "type": "object",
@@ -45,8 +53,9 @@ public sealed class CareAdvisor(IChatProvider chat, TimeProvider time) : ICareAd
         var vault = new PiiVault();
         vault.AddKnown(PiiMasker.Name, request.CustomerName);
 
-        var system = BuildSystem(template, request, time.GetUtcNow());
         var input = BuildInput(request, vault);
+        var chunks = await KnowledgeAsync(request, vault, cancellationToken);
+        var system = BuildSystem(template, request, time.GetUtcNow(), chunks);
         var usage = new List<BotUsage>();
         for (var attempt = 0; attempt < 2; attempt++)
         {
@@ -61,7 +70,7 @@ public sealed class CareAdvisor(IChatProvider chat, TimeProvider time) : ICareAd
             }
 
             var draft = parsed.Draft is null || parsed.Action == CareAction.None ? null : PiiMasker.Restore(parsed.Draft.Trim(), vault);
-            var sources = request.Messages.Select(m => m.Text).Concat(request.Notes.Select(n => n.Text)).ToList();
+            var sources = request.Messages.Select(m => m.Text).Concat(request.Notes.Select(n => n.Text)).Concat(chunks.Select(c => c.Content)).ToList();
             var blocked = draft is not null
                 && (ForbiddenFilter.FindViolations(template, draft, sources).Count > 0 || (request.BotWillSend && PriceDetector.MentionsPrice(draft)));
 
@@ -78,7 +87,35 @@ public sealed class CareAdvisor(IChatProvider chat, TimeProvider time) : ICareAd
         return null;
     }
 
-    internal static string BuildSystem(IndustryTemplate template, CareAnalysisRequest request, DateTimeOffset now)
+    /// <summary>
+    /// Tìm trong kho kiến thức CỦA TENANT theo dịch vụ/gói khách đã làm (ghi chú, tin gần nhất — đã che dữ liệu cá nhân) để tin hỏi thăm
+    /// bám đúng thông tin "Sau khi làm" của gói. Lỗi tìm kiếm → phân tích không có dữ liệu (không chặn việc chăm sóc).
+    /// </summary>
+    private async Task<IReadOnlyList<KnowledgeHit>> KnowledgeAsync(CareAnalysisRequest request, PiiVault vault, CancellationToken cancellationToken)
+    {
+        var parts = request.Notes.Where(n => n.Kind == "service").Select(n => n.Text)
+            .Concat(request.FollowUpNote is { } f ? [f.Text] : [])
+            .Concat(request.Messages.Where(m => m.Sender == MessageSender.Customer).TakeLast(2).Select(m => m.Text))
+            .Select(t => PiiMasker.Mask(t, vault));
+        var query = string.Join('\n', parts);
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            return [];
+        }
+
+        try
+        {
+            var hits = await search.SearchAsync(request.TenantId, query.Length > 800 ? query[..800] : query, KnowledgeLimit, cancellationToken);
+            return hits.Where(h => h.Score >= options.Value.BotMinScore).ToList();
+        }
+        catch (AiProviderException ex)
+        {
+            LogSearchFailed(logger, ex.GetType().Name);
+            return [];
+        }
+    }
+
+    internal static string BuildSystem(IndustryTemplate template, CareAnalysisRequest request, DateTimeOffset now, IReadOnlyList<KnowledgeHit> chunks)
     {
         var p = request.Profile;
         var s = new StringBuilder();
@@ -94,21 +131,45 @@ public sealed class CareAdvisor(IChatProvider chat, TimeProvider time) : ICareAd
         s.AppendLine("- reason và suggested_action viết cho nhân viên, ngắn gọn, nêu đúng điều khách đã nói. Không suy đoán điều không có trong dữ liệu.");
         s.AppendLine();
         s.AppendLine("## Tin gửi khách (draft_message)");
+        var salutation = CustomerSalutation.Resolve(request.Salutation);
+        var address = salutation == CustomerSalutation.Unknown
+            ? "gọi khách là \"mình\" (chưa biết giới tính; nếu trong hội thoại khách tự xưng anh/chị/cô/chú/bác thì gọi theo đó)"
+            : $"gọi khách là \"{salutation}\"";
         if (request.BotWillSend)
         {
-            s.AppendLine(CultureInfo.InvariantCulture, $"- Tin này do TRỢ LÝ AI {p.BotName} của \"{p.BusinessName}\" tự gửi cho khách (khách đã biết đang nói chuyện với trợ lý AI). Xưng \"{p.BotPronoun}\", gọi khách là \"{template.CustomerAddress}\" (hoặc theo cách khách tự xưng trong hội thoại). KHÔNG giả làm nhân viên, không ký tên người.");
-            s.AppendLine("- Ngắn (1-3 câu), tự nhiên, nhắc đúng điều khách đã quan tâm, kết bằng một câu hỏi mở để khách dễ trả lời. Không dồn ép mua hàng.");
+            s.AppendLine(CultureInfo.InvariantCulture, $"- Tin này do TRỢ LÝ AI {p.BotName} của \"{p.BusinessName}\" tự gửi cho khách (khách đã biết đang nói chuyện với trợ lý AI). Xưng \"{p.BotPronoun}\", {address}. Không gọi trống tên khách, không viết \"anh/chị\". KHÔNG giả làm nhân viên, không ký tên người.");
+            s.AppendLine("- Ngắn (1-3 câu), ấm áp, tự nhiên như một nhân viên chăm sóc khách hàng tận tâm hỏi han thật lòng; nhắc đúng điều khách đã quan tâm, kết bằng một câu hỏi mở để khách dễ trả lời. Không dồn ép mua hàng.");
+            s.AppendLine(p.Tone is BotTone.Human or BotTone.Friendly
+                ? "- Có thể dùng 1–2 biểu tượng cảm xúc dễ thương (😊 💙 🌿 ✨), không dùng khi chuyện khách đang lo lắng; từ đệm (nè, nha, nhé) tối đa 1 lần."
+                : "- Không dùng biểu tượng cảm xúc.");
             s.AppendLine("- KHÔNG nêu bất kỳ con số giá tiền nào, KHÔNG nhắc ưu đãi/khuyến mãi/lịch trống/chính sách. Nếu cần các thông tin đó thì chọn ask_human.");
         }
         else
         {
-            s.AppendLine(CultureInfo.InvariantCulture, $"- Nhân viên sẽ đọc, SỬA rồi mới gửi. Viết như nhân viên chăm sóc khách hàng của \"{p.BusinessName}\": lịch sự, ngắn (2-4 câu), gọi khách là \"{template.CustomerAddress}\" (hoặc theo cách khách tự xưng trong hội thoại), xưng \"em\".");
+            s.AppendLine(CultureInfo.InvariantCulture, $"- Nhân viên sẽ đọc, SỬA rồi mới gửi. Viết như nhân viên chăm sóc khách hàng của \"{p.BusinessName}\": lịch sự, ngắn (2-4 câu), {address}, xưng \"em\". Không gọi trống tên khách, không viết \"anh/chị\".");
             s.AppendLine("- KHÔNG bịa giá, khuyến mãi, ưu đãi, lịch trống, chính sách. Chỉ nhắc lại thông tin đã có trong hội thoại. Cần ưu đãi/lịch cụ thể thì để chỗ trống dạng \"(nhân viên điền ưu đãi nếu có)\".");
         }
 
         s.AppendLine("- Không chẩn đoán, không hứa kết quả.");
         s.AppendLine("- Giữ nguyên các mã như [NAME_1], [PHONE_1] nếu cần dùng (hệ thống tự thay bằng giá trị thật).");
         s.AppendLine("- action = none thì draft_message để chuỗi rỗng. action = ask_human vẫn viết tin nháp để nhân viên dùng.");
+        if (chunks.Count > 0)
+        {
+            s.AppendLine();
+            s.AppendLine("## DỮ LIỆU THAM KHẢO (của doanh nghiệp, về dịch vụ/gói khách quan tâm hoặc đã làm)");
+            s.AppendLine("Dùng để hỏi thăm đúng theo gói: cảm giác thường gặp sau buổi làm, lưu ý nên làm/kiêng (mục \"Sau khi làm\"), để khách thấy được quan tâm thật. Chỉ nói điều có trong dữ liệu; không chép giá.");
+            if (template.MedicalSafety)
+            {
+                s.AppendLine("Ngành sức khỏe: điều về cảm giác/tình trạng cơ thể CHỈ lấy từ đoạn có nhãn [ĐÃ DUYỆT CHUYÊN MÔN]; đoạn chưa duyệt thì chỉ hỏi thăm chung, không giải thích.");
+            }
+
+            foreach (var c in chunks)
+            {
+                var reviewed = template.MedicalSafety ? (c.MedicallyReviewed ? " [ĐÃ DUYỆT CHUYÊN MÔN]" : " [chưa duyệt chuyên môn]") : "";
+                s.AppendLine(CultureInfo.InvariantCulture, $"-{reviewed} {c.Content.Trim()}");
+            }
+        }
+
         if (request.FollowUpNote is not null)
         {
             s.AppendLine();
@@ -222,6 +283,9 @@ public sealed class CareAdvisor(IChatProvider chat, TimeProvider time) : ICareAd
             return null;
         }
     }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Chăm sóc chủ động: tìm kiến thức lỗi ({ErrorType}), phân tích không có dữ liệu tham khảo")]
+    private static partial void LogSearchFailed(ILogger logger, string errorType);
 
     private static string? Str(JsonElement root, string name) =>
         root.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;

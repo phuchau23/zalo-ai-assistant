@@ -19,7 +19,8 @@ public sealed record CareAnalysisRequest(
     LeadStatus LeadStatus,
     DateTimeOffset? LastCustomerMessageAt,
     CareNoteInput? FollowUpNote,
-    bool BotWillSend = false);
+    bool BotWillSend = false,
+    string? Salutation = null);
 
 /// <summary>AI đề xuất làm gì với khách.</summary>
 public enum CareAction
