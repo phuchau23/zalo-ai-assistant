@@ -189,3 +189,67 @@ Chủ dự án chốt: "AI phải tự nhắn chăm sóc khách như một nhân
 - **Luôn chuyển nhân viên (không tự gửi):** AI đánh giá phàn nàn / sức khỏe-nhạy cảm / cần thông tin chỉ nhân viên có; tin có câu cấm hoặc **có giá tiền** (bot tự nhắn không được nêu giá); **tin quảng cáo** (ưu đãi, kéo khách cũ) vì chưa có dữ liệu "đồng ý nhận tin" — làm cùng GĐ2 (consent, ZNS); nhân viên đang phụ trách hội thoại (mode human).
 - **Kiểm tra lại lúc gửi:** khách vừa nhắn, vừa hủy, nhân viên vừa tiếp quản, DN vừa tắt tự nhắn → không gửi. Chạy lại an toàn (gợi ý đã gửi chỉ gửi nốt tin pending). Job quét mỗi phút đẩy lại tin hẹn giờ bị trễ > 5 phút.
 - **Cần luật sư xác nhận** ranh giới "chăm sóc" (được tự nhắn) và "quảng cáo" (cần đồng ý) trước khi bán thật.
+
+## 2026-10-14 — Giọng "Như nhân viên thật", trả lời nhiều tin ngắn, xưng hô theo từng khách
+
+**Quyết định (chủ dự án chốt):**
+- Giọng văn mới `human` ("Như nhân viên thật"), **mặc định cho tenant mới**: chia 1–4 tin ngắn, đa dạng cách nói, đọc cảm xúc khách, emoji dễ thương tổng 0–3 mỗi lượt (không dùng khi khách bực/lo), từ đệm ("nè, nha, nhé") tối đa 1 lần mỗi tin, "nè" tối đa 1 lần mỗi lượt. Tenant cũ giữ giọng đã chọn (đổi ở trang Giọng văn).
+- AI trả `messages[]` thay cho `reply`. Mỗi phần tử là **một dòng `messages` và một tin Zalo riêng**, gửi cách nhau `Ai:BotMessageGapMs` (mặc định 1,2 giây). Tin đầu giữ `reply_to_message_id` (unique → không trả lời trùng), tin cuối giữ `ai_trace`. Câu báo trợ lý AI là tin riêng đứng đầu; câu nhắc thăm khám (ngành y) là tin riêng ở cuối. Kiểm tra câu cấm, giá không nguồn chạy trên toàn bộ các tin.
+- Xưng hô: bot xưng theo cài đặt DN ("em"). Khách: nhân viên chọn (anh/chị/cô/chú/bác) → giữ nguyên; khách tự xưng khi chat → AI báo `customer_salutation`, hệ thống lưu; chưa biết → **"mình"**. Cấm gọi trống tên và cấm "anh/chị". Áp dụng cho câu cố định của bot, câu chuyển tiếp (`{xung_ho}`) và tin bot tự chăm sóc. Bỏ trường `customerAddress` của mẫu ngành.
+
+**Lý do:** chủ dự án muốn bot nhắn như nhân viên chăm sóc khách hàng thật trên Zalo; "anh/chị" và gọi trống tên bị đánh giá là kém tự nhiên.
+
+**Hệ quả:** migration `CustomerSalutation` (`contacts.salutation`, `contacts.salutation_source`, mặc định `tenants.bot_tone = human`). PATCH `/contacts/{id}` nhận `salutation` (giá trị hợp lệ hoặc `auto`). Tin bot tự nhắn (chăm sóc chủ động) vẫn là 1 tin. Không đoán giới tính từ tên.
+
+## 2026-10-14 — M6 đợt B: dashboard, xuất/xóa dữ liệu, super admin, hạn mức (chủ dự án chốt)
+
+**Quyết định:**
+- Làm theo thứ tự B1 dashboard → B2 xuất/xóa dữ liệu 1 khách → B3 super admin → B4 hạn mức.
+- Hết hạn mức hội thoại/tháng: khách đã nhắn trong tháng vẫn được bot trả lời; khách MỚI → **chuyển nhân viên** (một cách cho mọi DN, không có cột cấu hình riêng). Gói trial tạm **100 hội thoại/tháng**; super admin đặt hạn mức riêng từng DN.
+- Hết hạn thuê: báo trước 7 ngày trên web; quá hạn **3 ngày** chưa gia hạn → tự khóa (bot ngừng), super admin mở lại được.
+- Ngừng thuê: super admin **xuất file** toàn bộ dữ liệu gửi DN rồi **xóa ngay** (gõ tên DN xác nhận), không giữ 30 ngày.
+- Dashboard (B1): chỉ owner; không tính Chat thử; "bot tự xử lý" = hội thoại có khách nhắn trong khoảng mà không có tin bot chuyển người (trace `needsHuman`) và nhân viên không nhắn; "câu bot không trả lời được" = lượt bot chuyển người vì `no_knowledge`/`low_confidence`, nội dung che SĐT/email/giấy tờ trước khi trả về, xem có audit log (1 lần/30 phút/người). Chi phí AI tính từ đầu tháng giờ Việt Nam, gồm cả Chat thử.
+
+**Hệ quả:** B1 không đổi schema. Số liệu ngày gộp trong bộ nhớ từ tối đa 100.000 tin (đủ cho DN nhỏ/vừa; DN lớn sau này chuyển sang truy vấn gộp sẵn trong SQL).
+
+## 2026-10-14 — Super admin (M6 đợt B3)
+
+**Quyết định:**
+- Trang `/admin` chỉ cho user có cờ `is_super_admin` (filter `RequireSuperAdmin`); mở được cả khi tài khoản không thuộc DN nào.
+- Đọc tổng hợp nhiều DN: `SuperAdminRepository` dùng `IgnoreQueryFilters()` có chủ đích, kiểm cờ super admin trong từng hàm, chỉ trả số liệu tổng hợp + thông tin tài khoản (không nội dung tin, không dữ liệu khách).
+- Ghi lên một DN: `TenantAdminService` mở **DI scope riêng** cho từng DN và đặt tenant context = DN đó (TenantContext không cho đổi tenant giữa chừng một scope) → vẫn đi qua global query filter + kiểm tenant khi SaveChanges. Mọi thao tác có audit log.
+- Tạo DN: sinh mật khẩu tạm 14 ký tự cho chủ mới, chỉ trả một lần (lưu dạng hash). Email đã có tài khoản → thêm làm chủ, giữ mật khẩu.
+- Gói thuê đọc từ `Billing:Plans` (mặc định trong code: `trial` 100 hội thoại/tháng); hạn mức riêng ở `tenants.conversation_quota`.
+- Khóa/mở: `tenants.status` + cột mới `suspended_reason` (`manual` | `expired`). Job `tenant-expiry` mỗi giờ: quá hạn > 3 ngày → tự khóa (`expired`); gia hạn qua hôm nay thì tự mở lại. Chủ DN thấy băng nhắc từ 7 ngày trước hạn (`/auth/me` trả `expiresAt`).
+- Xuất dữ liệu DN: zip (khach-hang.xlsx, kho-kien-thuc.xlsx đúng mẫu nhập lại, tai-lieu/ file gốc), dựng trong file tạm tự xóa rồi stream ra.
+- Xóa DN: phải đang khóa + gõ đúng tên. Xóa dòng `tenants` (khóa ngoại CASCADE xóa mọi bảng có tenant_id), xóa file đã tải lên, xóa tài khoản chỉ thuộc DN đó; ghi audit hệ thống `tenant.deleted` (tenant_id rỗng) làm bằng chứng.
+
+**Hệ quả:** migration `TenantBilling`. Quyền của Zalo App trên OA của DN không tự gỡ khi xóa (chưa kiểm chứng API thu hồi) — nhắc DN tự gỡ.
+
+## 2026-10-14 — Hạn mức hội thoại (M6 đợt B4)
+
+**Quyết định:** hội thoại được bot trả lời khi nằm trong N hội thoại **bắt đầu sớm nhất** của tháng (N = hạn mức; tính theo tin khách đầu tiên trong tháng giờ Việt Nam, không tính Chat thử). Nhờ vậy khách đã nhắn trong tháng luôn được trả lời, khách nhắn dồn nhiều tin không lọt hạn mức. Ngoài hạn mức: không gọi AI, chuyển nhân viên (`handoff_reason = quota_exceeded`) với câu chuyển tiếp gắn `reply_to_message_id` (chạy lại không gửi trùng). Báo Telegram khi tới 80% và khi bắt đầu chặn, mỗi mức một lần/tháng (khóa Redis `quota-notify:*`, 40 ngày). Chủ DN thấy băng cảnh báo (`GET /tenant/usage`).
+
+**Hệ quả:** mỗi tin khách thêm 2 truy vấn đếm (đủ nhanh với index hiện có cho DN nhỏ/vừa; DN lớn sau này cache số đếm trong Redis).
+
+## 2026-10-14 — Câu nhắc an toàn sức khỏe nói như người của doanh nghiệp
+
+**Quyết định (chủ dự án yêu cầu):** bỏ câu cứng "cần bác sĩ/chuyên viên thăm khám trực tiếp" gắn sau mọi câu về cơ thể (nghe như đẩy khách đi nơi khác). Thay bằng:
+- Cảm giác thông thường sau dịch vụ (mỏi, uể oải, đau nhẹ): bot tự lồng lời mời khách ghé để **chuyên viên của doanh nghiệp** kiểm tra trực tiếp; không khuyên đi khám bác sĩ. Hệ thống chỉ gắn câu dự phòng (cùng ý, giọng mời về doanh nghiệp) khi bot quên.
+- Bệnh lý / bệnh nền / mang thai / đang dùng thuốc: vẫn khuyên hỏi bác sĩ điều trị, không chẩn đoán. Dấu hiệu nguy hiểm: giữ nguyên (115, chuyển khẩn cấp).
+- Thêm quy tắc chung: bot nói về doanh nghiệp, đội ngũ, dịch vụ với sự trân trọng, mời khách quay lại; không tự khen quá lời nếu dữ liệu không ghi.
+
+**Hệ quả:** docs/INDUSTRIES.md mục 3 cập nhật. Eval an toàn (S07, S09, S11, S13, S17, S21) chạy lại với Gemini: 6/6 đạt.
+
+## 2026-10-14 — Cột "Sau khi làm" trong mẫu dữ liệu + bot chăm sóc tra kho kiến thức
+
+**Quyết định:** thêm trường `afterCare` ("Sau khi làm", không bắt buộc, ≤ 2000 ký tự) cho Dịch vụ và Gói liệu trình: cảm giác thường gặp sau buổi làm, kéo dài bao lâu, nên làm/kiêng gì, khi nào báo lại DN. File cũ vẫn nhập được (vẫn là mẫu phiên bản 1). Bot chăm sóc chủ động (CareAdvisor) tìm trong kho kiến thức của tenant theo ghi chú "đã dùng dịch vụ" + tin gần nhất (đã che dữ liệu cá nhân, tối đa 3 đoạn) để hỏi thăm đúng gói; ngành sức khỏe chỉ dùng phần về cơ thể từ đoạn "Đã duyệt chuyên môn"; tin bot tự gửi vẫn không được nêu giá (báo giá làm ở phần nhập danh sách khách).
+
+## 2026-10-14 — Quản lý nhân viên + đổi mật khẩu
+
+**Quyết định:**
+- Chủ DN quản lý nhân viên ở Cài đặt → Nhân viên (`/tenant/team`, chỉ owner): thêm bằng email (email chưa có tài khoản → tạo + mật khẩu tạm 14 ký tự hiện MỘT lần; đã có → chỉ thêm quyền, giữ mật khẩu), đổi vai trò owner/staff, xóa, cấp lại mật khẩu. Chốt: luôn còn ≥ 1 chủ (`last_owner`), không tự xóa mình, chỉ cấp lại mật khẩu cho tài khoản CHỈ thuộc DN này và không phải super admin (`shared_account` — tránh chủ DN A chiếm tài khoản ở DN B). Xóa người cuối cùng không còn thuộc DN nào → xóa luôn tài khoản. Mọi thao tác có audit log.
+- Mọi người tự đổi mật khẩu ở `/account` (`POST /auth/change-password`, kiểm mật khẩu hiện tại, mật khẩu mới ≥ 8 ký tự, giới hạn tốc độ như đăng nhập).
+- **Dấu vân tay mật khẩu trong cookie** (claim `pst` = 16 hex SHA-256 của chuỗi hash mật khẩu): middleware so với DB mỗi request → đổi/cấp lại mật khẩu là mọi phiên cũ bị đăng xuất; phiên đang đổi được cấp cookie mới.
+
+**Hệ quả:** không đổi schema. Cookie cũ (trước thay đổi) không có `pst` → mọi người phải đăng nhập lại một lần.
