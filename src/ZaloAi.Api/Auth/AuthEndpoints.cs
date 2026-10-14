@@ -6,6 +6,7 @@ using ZaloAi.Core.Entities;
 using ZaloAi.Core.Errors;
 using ZaloAi.Core.Tenancy;
 using ZaloAi.Infrastructure.Repositories;
+using ZaloAi.Infrastructure.Security;
 
 namespace ZaloAi.Api.Auth;
 
@@ -35,7 +36,43 @@ internal static class AuthEndpoints
             .Validate<SwitchTenantRequest>()
             .ProducesProblem(StatusCodes.Status404NotFound);
 
+        group.MapPost("/change-password", ChangePasswordAsync)
+            .RequireAuthorization()
+            .RequireRateLimiting(RateLimitSettings.LoginPolicy)
+            .Validate<ChangePasswordRequest>()
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status429TooManyRequests);
+
         return app;
+    }
+
+    /// <summary>
+    /// Tự đổi mật khẩu (kiểm mật khẩu hiện tại). Đổi xong mọi phiên khác bị đăng xuất (dấu vân tay mật khẩu đổi); phiên này được
+    /// cấp lại cookie mới để không phải đăng nhập lại.
+    /// </summary>
+    private static async Task<NoContent> ChangePasswordAsync(
+        ChangePasswordRequest request,
+        HttpContext httpContext,
+        ITenantContext tenant,
+        UserRepository users,
+        AuditLogRepository audit,
+        IPasswordHasher<User> hasher,
+        CancellationToken cancellationToken)
+    {
+        var userId = tenant.UserId ?? throw new InvalidOperationException("Request đã xác thực nhưng thiếu UserId.");
+        var user = await users.GetAsync(userId, cancellationToken) ?? throw new NotFoundException();
+        if (hasher.VerifyHashedPassword(user, user.PasswordHash, request.CurrentPassword) == PasswordVerificationResult.Failed)
+        {
+            audit.AddAuthEvent(tenant.TenantId, userId, "auth.password_change_failed");
+            await audit.SaveChangesAsync(cancellationToken);
+            throw new InvalidInputException("Mật khẩu hiện tại không đúng.");
+        }
+
+        user.PasswordHash = hasher.HashPassword(user, request.NewPassword);
+        audit.AddAuthEvent(tenant.TenantId, userId, "auth.password_changed");
+        await users.SaveChangesAsync(cancellationToken);
+        await AuthClaims.SignInAsync(httpContext, userId, AuthClaims.GetTenantId(httpContext.User), Passwords.Stamp(user.PasswordHash));
+        return TypedResults.NoContent();
     }
 
     private static async Task<Ok<MeResponse>> LoginAsync(
@@ -72,7 +109,7 @@ internal static class AuthEndpoints
         var tenants = await access.ListTenantsForUserAsync(user.Id, cancellationToken);
         var current = tenants.FirstOrDefault(t => t.Status == TenantStatus.Active);
 
-        await AuthClaims.SignInAsync(httpContext, user.Id, current?.TenantId);
+        await AuthClaims.SignInAsync(httpContext, user.Id, current?.TenantId, Passwords.Stamp(user.PasswordHash));
         audit.AddAuthEvent(current?.TenantId, user.Id, "auth.login");
         await audit.SaveChangesAsync(cancellationToken);
 
@@ -117,11 +154,11 @@ internal static class AuthEndpoints
             throw new NotFoundException();
         }
 
-        await AuthClaims.SignInAsync(httpContext, userId, target.TenantId);
+        var user = await access.GetUserAsync(userId, cancellationToken) ?? throw new InvalidOperationException("User không tồn tại.");
+        await AuthClaims.SignInAsync(httpContext, userId, target.TenantId, user.PasswordStamp);
         audit.AddAuthEvent(target.TenantId, userId, "auth.tenant_switched");
         await audit.SaveChangesAsync(cancellationToken);
 
-        var user = await access.GetUserAsync(userId, cancellationToken) ?? throw new InvalidOperationException("User không tồn tại.");
         var tenants = await access.ListTenantsForUserAsync(userId, cancellationToken);
         return TypedResults.Ok(MeResponse.From(user, tenants, target.TenantId));
     }
