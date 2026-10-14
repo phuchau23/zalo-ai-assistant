@@ -48,6 +48,15 @@ Máy tính mở **Hộp thư**, điện thoại đóng vai khách.
 - [ ] 3.9 Xuất Excel danh sách khách; hồ sơ một khách → "Tải toàn bộ dữ liệu" (4 sheet).
 - [ ] 3.10 Xóa một khách CHAT THỬ (gõ XÓA) → khách biến mất. (Đừng xóa khách thật.)
 
+## Buổi 3b — Nhập danh sách khách (≈ 20 phút)
+- [ ] 3b.1 Khách hàng → "Nhập danh sách" → Tải file mẫu → mở xem sheet "Hướng dẫn".
+- [ ] 3b.2 Điền 3–5 khách (có 1 dòng SĐT sai, 1 dòng trùng SĐT) → chọn file → bản xem trước hiện đúng Khách mới / Cập nhật / Lỗi kèm lý do.
+- [ ] 3b.3 Bấm Nhập → danh sách Khách hàng có khách mới với nhãn "Chỉ có SĐT"; hồ sơ có cách gọi (Nam→anh, Nữ→chị), nhật ký "đã dùng dịch vụ", "Nhận tin ưu đãi".
+- [ ] 3b.4 Nhập lại đúng file đó → không tạo khách/ghi chú trùng (chỉ "cập nhật").
+- [ ] 3b.5 Một khách có "Hẹn nhắn lúc" là vài phút tới → tới giờ, trang Cần chăm sóc hiện mục "Tới hẹn – chưa nhắn OA được" có SĐT (bấm gọi được trên điện thoại) → bấm "Đã liên hệ" → biến mất.
+- [ ] 3b.6 Tài khoản nhân viên cũng nhập được file.
+- [ ] 3b.7 (Khi có Zalo thật) khách trong danh sách nhắn OA và cho SĐT → hồ sơ Zalo tự gộp lịch sử từ danh sách; tới giờ hẹn sau đó bot tự hỏi thăm.
+
 ## Buổi 4 — Kho kiến thức (≈ 20 phút)
 - [ ] 4.1 Tải mẫu Excel → thấy cột mới "Sau khi làm" ở sheet Dịch vụ và Gói liệu trình.
 - [ ] 4.2 Điền "Sau khi làm" cho 1 gói (vd "Buổi đầu hơi uể oải 1–2 ngày là bình thường, nên uống nước ấm…") → nhập file → màn so sánh hiện thay đổi → Áp dụng.
@@ -84,6 +93,6 @@ Máy tính mở **Hộp thư**, điện thoại đóng vai khách.
 ---
 
 ## Chưa có / đang chờ (không cần test)
-- **Nhập danh sách khách** (SĐT, đã làm gì, hẹn nhắn) và **báo giá khi bot chủ động nhắn** — đã duyệt kế hoạch, chưa làm.
+- **Báo giá khi bot chủ động nhắn** — chưa làm.
 - **ZNS / ZBS Template** (nhắn trước theo SĐT/UID) — chờ docs API.
 - **Hạn mức hội thoại** — chỉ thấy khi có khách Zalo thật (đã có test tự động).

@@ -253,3 +253,15 @@ Chủ dự án chốt: "AI phải tự nhắn chăm sóc khách như một nhân
 - **Dấu vân tay mật khẩu trong cookie** (claim `pst` = 16 hex SHA-256 của chuỗi hash mật khẩu): middleware so với DB mỗi request → đổi/cấp lại mật khẩu là mọi phiên cũ bị đăng xuất; phiên đang đổi được cấp cookie mới.
 
 **Hệ quả:** không đổi schema. Cookie cũ (trước thay đổi) không có `pst` → mọi người phải đăng nhập lại một lần.
+
+## 2026-10-14 — Nhập danh sách khách (SĐT, đã làm gì, hẹn nhắn)
+
+**Quyết định (chủ dự án chốt):** chủ và **nhân viên** đều được nhập file Excel danh sách khách (mẫu tải từ hệ thống: SĐT*, Tên, Giới tính, Cách gọi, Đã làm gì, Ngày làm, Hẹn nhắn lúc, Ghi chú cho AI, Đồng ý nhận tin ưu đãi). Hai bước: xem trước (khách mới / cập nhật / lỗi) → nhập (gửi lại đúng file, dòng lỗi bỏ qua). Khách **chỉ có SĐT, chưa nhắn OA**: tới giờ hẹn chỉ **liệt kê** ở trang Cần chăm sóc ("Tới hẹn – chưa nhắn OA được") để nhân viên gọi/nhắn tay, bấm "Đã liên hệ" — không gọi AI.
+
+**Thiết kế:**
+- SĐT chuẩn hóa về "0xxxxxxxxx", lưu mã hóa (`contacts.phone_enc`) + dấu vân tay HMAC-SHA256 (`contacts.phone_hash`, khóa tách từ khóa mã hóa bằng HKDF), unique theo (tenant_id, phone_hash). Khách chưa nhắn kênh nào: `channel = phone`, `external_user_id = phone_hash` (không lưu SĐT dạng đọc được).
+- Giới tính Nam/Nữ → cách gọi anh/chị (nhân viên đặt); "Cách gọi" thắng giới tính. Đồng ý nhận tin: `consent_marketing/consent_at/consent_source = import` (DN tự khai, chịu trách nhiệm).
+- Mỗi dòng tạo ghi chú "đã dùng dịch vụ" (+ "ghi chú cho AI"), giờ hẹn gắn vào ghi chú (dùng lại job hẹn giờ của nhật ký chăm sóc). Nhập lại cùng file không tạo trùng ghi chú. `contact_notes.follow_up_done_at` đánh dấu nhân viên đã liên hệ.
+- Khách cũ đã tự cho SĐT khi chat được điền dấu vân tay lúc nhập để khớp đúng người. Khách đang chat cho SĐT trùng khách nhập → gộp (nhật ký, cách gọi, đồng ý, nhãn, thông tin) vào hồ sơ đang chat, xóa bản nhập; chỉ trong cùng tenant; trùng với khách đang chat khác thì không gắn.
+
+**Hệ quả:** migration `ContactPhoneImport`. Chỉ nhận SĐT di động 10 số. Báo giá khi bot chủ động nhắn + gửi ZNS cho khách chỉ có SĐT: làm sau.

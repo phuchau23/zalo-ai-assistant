@@ -5,6 +5,9 @@ public enum ChannelKind
     /// <summary>Khung chat trong trang quản trị (chat thử) và sau này chat website.</summary>
     Webchat = 0,
     Zalo = 1,
+
+    /// <summary>Khách doanh nghiệp nhập từ danh sách (chỉ có SĐT), chưa nhắn qua kênh nào. ExternalUserId = dấu vân tay SĐT.</summary>
+    Phone = 2,
 }
 
 /// <summary>Khách cuối nhắn tin cho doanh nghiệp qua một kênh. Không trùng (tenant, kênh, mã người dùng của kênh).</summary>
@@ -37,6 +40,20 @@ public sealed class Contact : ITenantOwned
 
     /// <summary>Tin gần nhất của khách trên mọi hội thoại (lọc, sắp xếp danh sách khách).</summary>
     public DateTimeOffset? LastCustomerMessageAt { get; set; }
+
+    /// <summary>Số điện thoại đã chuẩn hóa, MÃ HÓA (dữ liệu cá nhân).</summary>
+    public string? PhoneEnc { get; set; }
+
+    /// <summary>Dấu vân tay SĐT (<see cref="Security.IPhoneHasher"/>) — tìm/ghép khách theo SĐT; không trùng trong một tenant.</summary>
+    public string? PhoneHash { get; set; }
+
+    /// <summary>Khách đồng ý nhận tin ưu đãi/khuyến mãi (CLAUDE.md mục 7). Không có dữ liệu = false.</summary>
+    public bool ConsentMarketing { get; set; }
+
+    public DateTimeOffset? ConsentAt { get; set; }
+
+    /// <summary>Nguồn của lựa chọn đồng ý/từ chối: import (DN tự khai khi nhập danh sách) | staff | customer.</summary>
+    public string? ConsentSource { get; set; }
 
     /// <summary>Cách gọi khách (<see cref="CustomerSalutation.Allowed"/>); null = chưa biết → gọi "mình".</summary>
     public string? Salutation { get; set; }

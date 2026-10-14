@@ -39,6 +39,9 @@ public sealed class ContactNote : ITenantOwned
     /// <summary>Đã tạo gợi ý chăm sóc cho ngày hẹn này (không tạo lại).</summary>
     public DateTimeOffset? FollowUpQueuedAt { get; set; }
 
+    /// <summary>Nhân viên đã liên hệ khách theo lịch hẹn này (khách chỉ có SĐT, chưa nhắn OA → nhân viên gọi/nhắn tay).</summary>
+    public DateTimeOffset? FollowUpDoneAt { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
 }
 

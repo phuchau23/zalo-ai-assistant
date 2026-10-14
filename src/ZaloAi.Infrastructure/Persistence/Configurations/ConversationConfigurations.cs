@@ -22,6 +22,9 @@ internal sealed class ContactConfiguration : IEntityTypeConfiguration<Contact>
         builder.Property(c => c.ProactiveOptOutSource).HasMaxLength(20);
         builder.Property(c => c.Salutation).HasMaxLength(10);
         builder.Property(c => c.SalutationSource).HasMaxLength(20);
+        builder.Property(c => c.PhoneHash).HasMaxLength(64);
+        builder.Property(c => c.ConsentSource).HasMaxLength(20);
+        builder.HasIndex(c => new { c.TenantId, c.PhoneHash }).IsUnique().HasFilter("phone_hash IS NOT NULL");
 
         builder.HasIndex(c => new { c.TenantId, c.Channel, c.ExternalUserId }).IsUnique();
         builder.HasIndex(c => new { c.TenantId, c.LeadStatus });

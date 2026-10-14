@@ -46,6 +46,7 @@ public static class DependencyInjection
         services.AddValidatedOptions<BillingOptions>(configuration, BillingOptions.SectionName);
 
         services.AddSingleton<IFieldEncryptor, AesGcmFieldEncryptor>();
+        services.AddSingleton<IPhoneHasher, HmacPhoneHasher>();
         services.AddSingleton<IPasswordHasher<User>, PasswordHasher<User>>();
 
         services.AddScoped<TenantContext>();
@@ -108,6 +109,8 @@ public static class DependencyInjection
         services.AddScoped<ZaloAi.Infrastructure.Billing.ConversationQuotaService>();
         services.AddScoped<QuotaNotifyJob>();
         services.AddScoped<ZaloAi.Infrastructure.Team.TeamService>();
+        services.AddScoped<ZaloAi.Infrastructure.Customers.ContactImportService>();
+        services.AddScoped<ZaloAi.Infrastructure.Customers.ContactPhoneLinker>();
         services.AddScoped<CareAnalysisJob>();
         services.AddScoped<CareSweepJob>();
         services.AddScoped<CareFollowUpSweepJob>();

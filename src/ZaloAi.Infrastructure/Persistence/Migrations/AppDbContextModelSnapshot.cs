@@ -382,6 +382,19 @@ namespace ZaloAi.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(20)")
                         .HasColumnName("channel");
 
+                    b.Property<DateTimeOffset?>("ConsentAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("consent_at");
+
+                    b.Property<bool>("ConsentMarketing")
+                        .HasColumnType("boolean")
+                        .HasColumnName("consent_marketing");
+
+                    b.Property<string>("ConsentSource")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("consent_source");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -424,6 +437,15 @@ namespace ZaloAi.Infrastructure.Persistence.Migrations
                     b.Property<bool>("LeadStatusManual")
                         .HasColumnType("boolean")
                         .HasColumnName("lead_status_manual");
+
+                    b.Property<string>("PhoneEnc")
+                        .HasColumnType("text")
+                        .HasColumnName("phone_enc");
+
+                    b.Property<string>("PhoneHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("phone_hash");
 
                     b.Property<bool>("ProactiveAwaitingReply")
                         .HasColumnType("boolean")
@@ -470,6 +492,11 @@ namespace ZaloAi.Infrastructure.Persistence.Migrations
                     b.HasIndex("TenantId", "LeadStatus")
                         .HasDatabaseName("ix_contacts_tenant_id_lead_status");
 
+                    b.HasIndex("TenantId", "PhoneHash")
+                        .IsUnique()
+                        .HasDatabaseName("ix_contacts_tenant_id_phone_hash")
+                        .HasFilter("phone_hash IS NOT NULL");
+
                     b.HasIndex("TenantId", "Channel", "ExternalUserId")
                         .IsUnique()
                         .HasDatabaseName("ix_contacts_tenant_id_channel_external_user_id");
@@ -503,6 +530,10 @@ namespace ZaloAi.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset?>("FollowUpAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("follow_up_at");
+
+                    b.Property<DateTimeOffset?>("FollowUpDoneAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("follow_up_done_at");
 
                     b.Property<DateTimeOffset?>("FollowUpQueuedAt")
                         .HasColumnType("timestamp with time zone")
