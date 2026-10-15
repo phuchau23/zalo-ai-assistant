@@ -90,6 +90,29 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
 
     public DbSet<WaitlistEntry> WaitlistEntries => Set<WaitlistEntry>();
 
+    // CRM C3
+    public DbSet<Invoice> Invoices => Set<Invoice>();
+
+    public DbSet<InvoiceLine> InvoiceLines => Set<InvoiceLine>();
+
+    public DbSet<Payment> Payments => Set<Payment>();
+
+    public DbSet<CustomerPackage> CustomerPackages => Set<CustomerPackage>();
+
+    public DbSet<PackageRedemption> PackageRedemptions => Set<PackageRedemption>();
+
+    public DbSet<Wallet> Wallets => Set<Wallet>();
+
+    public DbSet<WalletTransaction> WalletTransactions => Set<WalletTransaction>();
+
+    public DbSet<Voucher> Vouchers => Set<Voucher>();
+
+    public DbSet<CashShift> CashShifts => Set<CashShift>();
+
+    public DbSet<RevenueEntry> RevenueEntries => Set<RevenueEntry>();
+
+    public DbSet<TenantBankAccount> TenantBankAccounts => Set<TenantBankAccount>();
+
     /// <summary>EF đọc lại giá trị này mỗi lần truy vấn (tham số hóa theo instance DbContext).</summary>
     public Guid? CurrentTenantId => tenantContext.TenantId;
 
