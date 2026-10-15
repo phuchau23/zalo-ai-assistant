@@ -13,7 +13,7 @@ Hiện tại: **chỉ Gemini** (chủ dự án chốt 2026-10-04, bỏ Claude). 
    - Implementation trong `src/ZaloAi.Ai/Providers/`, đăng ký trong `src/ZaloAi.Ai/DependencyInjection.cs` (chọn theo `Ai:ChatProvider` / `Ai:EmbedProvider`; `fake` cho test).
 2. **Kiểm tra docs chính thức** (và một request thật bằng script, không in key) trước khi viết request/response; ghi ngày kiểm chứng trong comment class.
 3. Model, key, giá đọc từ `AiOptions` (`src/ZaloAi.Core/Options/AiOptions.cs`, section `Ai`), không hardcode. Key chỉ qua env/user-secrets. Giá ở `Ai:Pricing` trong appsettings (USD/1 triệu token), cập nhật tay theo trang giá.
-4. HTTP qua typed `HttpClient` + `AddStandardResilienceHandler` (timeout, retry, circuit breaker). Model chính quá tải (503) → model dự phòng `Ai:ChatFallbackModel`.
+4. HTTP qua typed `HttpClient` + `AddStandardResilienceHandler` (timeout, retry, circuit breaker). Model chính quá tải (503), hết hạn mức (429) hoặc quá thời gian chờ (không thử lại timeout) → model dự phòng `Ai:ChatFallbackModel`. Đổi model: đo độ trễ thật trước (model "suy nghĩ" mặc định có thể mất hàng chục giây).
 5. Map lỗi về exception chung trong `src/ZaloAi.Core/Errors/AiProviderException.cs`: `AiRateLimitedException` (429), `AiOverloadedException` (503), `AiTimeoutException`, `AiProviderException`. Message không chứa nội dung phản hồi, prompt hay key. `BotEngine` bắt lỗi này → câu dự phòng + chuyển người.
 6. Không log prompt/nội dung tin; nội dung gửi AI đã được `PiiMasker` che trước.
 7. Test với `HttpMessageHandler` giả (xem `tests/ZaloAi.UnitTests/Ai/GeminiChatProviderTests.cs`): định dạng request, key ở header, tách phần "thought", chi phí, fallback, lỗi không lộ nội dung.
