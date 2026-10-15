@@ -134,6 +134,13 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
 
     public DbSet<ServiceConsumable> ServiceConsumables => Set<ServiceConsumable>();
 
+    // CRM C5
+    public DbSet<CommissionRule> CommissionRules => Set<CommissionRule>();
+
+    public DbSet<CommissionEntry> CommissionEntries => Set<CommissionEntry>();
+
+    public DbSet<Attendance> Attendance => Set<Attendance>();
+
     /// <summary>EF đọc lại giá trị này mỗi lần truy vấn (tham số hóa theo instance DbContext).</summary>
     public Guid? CurrentTenantId => tenantContext.TenantId;
 
