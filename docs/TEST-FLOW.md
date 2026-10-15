@@ -469,6 +469,42 @@ Siết chính sách: Cài đặt → Lịch & bán hàng → "Hủy/dời trư�
 💻 mở lịch của 8.2 (hoặc lịch bot khác) → thấy **Tóm tắt cho kỹ thuật viên** (AI viết); bấm Đã đến → Đang làm → Hoàn thành.
 Cài đặt → Chi nhánh → Giường/phòng: thêm 1 giường → đặt 2 lịch cùng giờ với 2 nhân viên khác nhau → lịch thứ 2 báo kín; thêm giường 2 → được.
 
+## Buổi 9 — CRM C3: bán hàng, gói, ví, VietQR (≈ 30 phút)
+Chuẩn bị: Cài đặt → Thanh toán: thêm tài khoản ngân hàng thật của bạn (BIN 6 số, số tài khoản, tên chủ TK). Cài đặt → Lịch & bán hàng: ngưỡng giảm giá cần duyệt `20`%.
+
+### 9.1 Hóa đơn + giảm giá + thu 2 lần
+💻 **Bán hàng** → Tạo hóa đơn: khách `Trần Thị Hoa`, dòng "Trị liệu cổ vai gáy 60 phút" + "Tinh dầu tràm 50ml" x2 → giảm giá `50000` lý do `khách quen` → Thu tiền mặt `300000` → Thu chuyển khoản phần còn lại.
+**Đúng khi:** số hóa đơn `HD-000001`; sau lần thu 1 trạng thái "Thu một phần"; thu đủ → "Đã thanh toán"; không sửa dòng được nữa.
+
+### 9.2 VietQR
+Ở hóa đơn còn nợ → bấm **Mã QR chuyển khoản** → **quét bằng app ngân hàng của bạn**.
+**Đúng khi:** app hiện đúng ngân hàng, số tài khoản, số tiền còn nợ, nội dung `HD000002`. (Chưa chuyển thật; nếu app báo mã không hợp lệ → chụp màn hình gửi Claude.)
+
+### 9.3 Voucher
+Cài đặt → Voucher: tạo `GIAM10`, 10%, tối đa 100.000. Hóa đơn mới → nhập mã `giam10` → giảm đúng 10%; nhập `SAI` → báo mã không tồn tại.
+
+### 9.4 Gói trừ buổi
+Hóa đơn bán "Gói … 10 buổi" cho Hoa → thu đủ. Hồ sơ khách Hoa → mục **Gói** hiện "còn 10/10". Lịch hẹn của Hoa (dịch vụ thuộc gói) → **Thanh toán** → hóa đơn hiện dòng "Dùng buổi gói", tổng 0 → **Chốt (0 đ)** → gói còn 9/10.
+Hủy hóa đơn dùng buổi (chủ) → gói về 10/10.
+
+### 9.5 Hoàn thành lịch tự trừ buổi
+Lịch khác của Hoa (dịch vụ trong gói) → bấm Hoàn thành mà KHÔNG tạo hóa đơn → gói giảm 1 buổi; mở hóa đơn từ lịch đó → không trừ thêm.
+
+### 9.6 Ví trả trước
+Hồ sơ Hoa → Ví → Nạp `1000000` thưởng `100000` → số dư 1.100.000. Hóa đơn mới → thu bằng **Ví** → số dư giảm đúng; thu quá số dư → báo lỗi.
+
+### 9.7 Quyền nhân viên
+Tab ẩn danh nhân viên: tạo hóa đơn → giảm 30% → bị chặn (cần quyền); giảm 10% → được; bấm Hủy hóa đơn → không có quyền. Chủ bật quyền "Hủy hóa đơn" → nhân viên hủy được (phải ghi lý do).
+
+### 9.8 Ca thu ngân
+Bán hàng → **Mở ca** tiền đầu ca `500000` → thu vài hóa đơn tiền mặt → **Chốt ca** nhập tiền đếm → thấy chênh lệch đúng.
+
+### 9.9 Phiếu thu qua chat
+Hóa đơn của khách CHAT THỬ (đã nhắn trước đó) → **Gửi phiếu thu** → 📱 nhận tin "PHIẾU THU HD-…" có tổng và hình thức thanh toán.
+
+### 9.10 Hoàn tiền
+Hóa đơn đã thu → **Hoàn tiền** `100000` tiền mặt lý do `khách không hài lòng` → trạng thái "Đã hoàn"; báo cáo doanh thu (C6) trừ đúng.
+
 ---
 
 ## Mẫu báo kết quả (chép, điền, gửi Claude)

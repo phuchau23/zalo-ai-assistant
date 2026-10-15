@@ -300,3 +300,18 @@ Chủ dự án chốt: "AI phải tự nhắn chăm sóc khách như một nhân
 - **Hàng chờ**: khung kín → ghi `waitlist_entries`; lịch bị hủy → job nhắn khách chờ phù hợp (một khách một lần), còn lại nhân viên xử lý.
 - **Lịch định kỳ**: N buổi cách X ngày tạo ngay, buổi kín báo riêng; `series_id` để hủy cả chuỗi (C8 UI).
 - Dữ liệu `appointment_items` chụp tên/thời lượng/giá tại lúc đặt (C3 dùng cho hóa đơn). Khách đặt lịch → tầng tự lên "Đã chốt" nếu chưa đặt tay.
+
+## 2026-10-15 — CRM C3: bán hàng, gói, ví, voucher, ca thu ngân, VietQR
+
+- **Hóa đơn = phiếu thu nội bộ**, không phải hóa đơn điện tử theo luật (cần nhà cung cấp được cấp phép — chờ kế toán). Số hóa đơn tăng dần theo tenant (`HD-000001`, khóa advisory theo tenant). Số tiền lưu rõ để cộng dồn; ghi chú mã hóa.
+- **Dòng hóa đơn**: dịch vụ / gói / sản phẩm (giá chụp lúc bán, sửa được), dòng tự nhập, **dòng dùng buổi gói** (giá 0, gắn gói của khách). Hóa đơn chỉ sửa khi chưa thu tiền; đã thu thì hủy rồi tạo lại.
+- **Giảm giá**: cấp dòng + cấp hóa đơn + voucher. Tổng giảm (không tính voucher) vượt `CrmSettings.DiscountApprovalPercent` (20%) → cần quyền `apply_discount_over_limit`; người bấm được ghi là người duyệt. Voucher: % (có trần) hoặc số tiền, hạn, số lượt, tối thiểu; tính lượt khi hóa đơn thu đủ, trả lượt khi hủy.
+- **Thu tiền nhiều lần, nhiều cách** (tiền mặt / chuyển khoản / thẻ / ví); không cho thu quá phần còn lại. Thu đủ → `Paid` và **ghi nhận**: doanh thu dịch vụ/sản phẩm (giảm giá hóa đơn chia theo tỷ lệ dòng để tổng doanh thu = tổng thu), **cấp gói** cho khách (dòng gói), **trừ buổi** (dòng dùng buổi) + doanh thu gói = giá gói / số buổi mỗi buổi (`revenue_entries.kind = package_recognized`). Hóa đơn tổng 0 (toàn bộ dùng gói) → `close-zero`.
+- **Hoàn thành lịch hẹn** mà chưa có hóa đơn → tự trừ buổi gói cho dịch vụ gói bao (idempotent theo lịch); dịch vụ không có gói chờ lễ tân tạo hóa đơn từ lịch (`/invoices/from-appointment`).
+- **Hủy hóa đơn** (quyền `void_invoice`, bắt buộc lý do): hoàn buổi đã trừ, hủy gói chưa dùng (gói đã dùng → chặn, dùng hoàn tiền một phần), hoàn ví, doanh thu âm. **Hoàn tiền** (quyền `refund`): payment âm + doanh thu âm, không đụng gói.
+- **Gói của khách**: bảo lưu / kích hoạt / hủy; gia hạn + sửa tổng buổi (quyền manage_catalog); **chuyển nhượng** phần còn lại sang khách khác (gói cũ `transferred`); job mỗi giờ đánh `expired`.
+- **Ví (thẻ trả trước)**: nạp + thưởng, trừ khi thanh toán (không âm), hoàn khi hủy/hoàn; điều chỉnh tay cần quyền `refund`.
+- **Ca thu ngân**: một ca mở/chi nhánh; hóa đơn & payment gắn ca đang mở; chốt ca = đầu ca + tiền mặt thu − tiền mặt hoàn so với tiền đếm.
+- **VietQR**: tài khoản ngân hàng theo DN/chi nhánh (số tài khoản mã hóa, chỉ chủ quản lý); payload EMVCo + CRC tự sinh (`VietQr`), ảnh PNG bằng **QRCoder 1.8.1** (MIT, thuần .NET) — thư viện mới duy nhất của C3, chủ dự án có thể veto. Nội dung chuyển khoản = `HD000123`. Chưa tự đối soát biến động số dư (chờ đối tác).
+- **Phiếu thu** gửi khách dạng chữ qua hội thoại gần nhất (Zalo/chat thử) nếu còn hạn nhắn; khách chỉ có SĐT thì không gửi.
+- `revenue_entries.source` (bot | staff | walk_in | online) lấy từ lịch hẹn gắn hóa đơn → báo cáo "doanh thu bot mang về" (C6).
