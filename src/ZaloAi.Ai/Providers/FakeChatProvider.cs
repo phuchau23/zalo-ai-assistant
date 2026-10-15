@@ -26,6 +26,19 @@ public sealed partial class FakeChatProvider : IChatProvider
         {
             text = $"Tóm tắt (giả lập): {Truncate(last, 120)}";
         }
+        else if (request.JsonSchema.Contains("\"unanswerable\"", StringComparison.Ordinal))
+        {
+            // Hỏi số liệu (C6): "doanh thu" → revenue tháng này; "nhân viên" → staff; "khách" → customers; "thời tiết" → không trả lời được.
+            var lower = last.ToLowerInvariant();
+            var report = lower.Contains("nhân viên", StringComparison.Ordinal) ? "staff"
+                : lower.Contains("khách", StringComparison.Ordinal) ? "customers"
+                : lower.Contains("nợ", StringComparison.Ordinal) ? "outstanding"
+                : lower.Contains("hôm nay", StringComparison.Ordinal) ? "today"
+                : lower.Contains("bot", StringComparison.Ordinal) || lower.Contains("ai", StringComparison.Ordinal) ? "ai"
+                : "revenue";
+            var unanswerable = lower.Contains("thời tiết", StringComparison.Ordinal);
+            text = JsonSerializer.Serialize(new { report, from = (string?)null, to = (string?)null, group_by = "day", focus = (string?)null, unanswerable, explanation = unanswerable ? "Không phải số liệu kinh doanh." : null });
+        }
         else if (request.JsonSchema.Contains("ask_human", StringComparison.Ordinal))
         {
             // Phân tích chăm sóc: khách nói "không cần" → none; có "phàn nàn"/"đau" → cần nhân viên; tới giờ hẹn → follow_up; còn lại → nhắn.
