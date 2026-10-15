@@ -17,7 +17,7 @@ namespace ZaloAi.Ai.Providers;
 /// - body { system_instruction, contents[{role: user|model, parts[{text}]}], generationConfig{ temperature, maxOutputTokens,
 ///   responseMimeType: "application/json", responseJsonSchema } }. ("response_format" bị API từ chối.)
 /// - response candidates[0].content.parts[].text (bỏ part "thought"), usageMetadata{promptTokenCount, candidatesTokenCount, thoughtsTokenCount}.
-/// Model chính quá tải (503) hoặc hết hạn mức (429, ví dụ gói miễn phí 20 request/ngày) sau khi đã thử lại → thử model dự phòng một lần.
+/// Model chính quá tải (503), hết hạn mức (429, ví dụ gói miễn phí 20 request/ngày) hoặc quá thời gian chờ → thử model dự phòng một lần.
 /// Không log key, không đưa nội dung phản hồi lỗi vào message.
 /// </summary>
 public sealed class GeminiChatProvider(HttpClient http, IOptions<AiOptions> options) : IChatProvider
@@ -32,7 +32,7 @@ public sealed class GeminiChatProvider(HttpClient http, IOptions<AiOptions> opti
         {
             return await CallAsync(_options.ChatModel, request, cancellationToken);
         }
-        catch (AiProviderException ex) when (ex is AiOverloadedException or AiRateLimitedException
+        catch (AiProviderException ex) when (ex is AiOverloadedException or AiRateLimitedException or AiTimeoutException
                                              && !string.IsNullOrWhiteSpace(_options.ChatFallbackModel)
                                              && _options.ChatFallbackModel != _options.ChatModel)
         {

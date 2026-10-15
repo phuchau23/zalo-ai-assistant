@@ -58,9 +58,11 @@ public static class DependencyInjection
         resilience.Retry.MaxRetryAttempts = 2;
 
         // 429 (vượt hạn mức, ví dụ gói free hết quota ngày) thử lại vài giây sau cũng vô ích: trả lỗi ngay để
-        // GeminiChatProvider chuyển sang model dự phòng. Các lỗi tạm thời khác (503, 5xx, timeout) vẫn thử lại.
+        // GeminiChatProvider chuyển sang model dự phòng. Quá thời gian chờ cũng vậy: model đang "suy nghĩ" quá lâu thì
+        // chờ thêm 2 lượt chỉ làm khách đợi tới 90 giây. Các lỗi tạm thời khác (503, 5xx) vẫn thử lại.
         resilience.Retry.ShouldHandle = args => ValueTask.FromResult(
             args.Outcome.Result?.StatusCode != HttpStatusCode.TooManyRequests
+            && args.Outcome.Exception is not Polly.Timeout.TimeoutRejectedException
             && HttpClientResiliencePredicates.IsTransient(args.Outcome));
     }
 }

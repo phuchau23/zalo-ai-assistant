@@ -121,6 +121,19 @@ public sealed class GeminiChatProviderTests
     }
 
     [Fact]
+    public async Task Timeout_on_primary_falls_back_to_the_other_model()
+    {
+        var (provider, handler) = Create((request, _) => request.RequestUri!.ToString().Contains("gemini-3.8-flash", StringComparison.Ordinal)
+            ? throw new TaskCanceledException()
+            : Ok("""{"reply":"ok"}"""));
+
+        var result = await provider.ChatAsync(Request, CancellationToken.None);
+
+        handler.Calls.Count.ShouldBe(2);
+        result.Text.ShouldBe("""{"reply":"ok"}""");
+    }
+
+    [Fact]
     public async Task Rate_limit_on_both_models_throws_after_fallback()
     {
         var (provider, handler) = Create((_, _) => new HttpResponseMessage(HttpStatusCode.TooManyRequests));
