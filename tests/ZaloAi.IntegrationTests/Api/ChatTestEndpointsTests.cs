@@ -70,15 +70,14 @@ public sealed class ChatTestEndpointsTests(PostgresFixture db)
         var after = await SendAndProcessAsync(client, tenantId, conversation.Id, "Massage đông y 60 phút giá bao nhiêu? SĐT mình 0912345678");
 
         after.WaitingForBot.ShouldBeFalse();
-        // Câu báo trợ lý AI là tin riêng đứng đầu, rồi các tin ngắn của câu trả lời theo đúng thứ tự; trace gắn ở tin cuối.
-        after.Messages.Count.ShouldBe(4);
+        // Câu báo trợ lý AI gộp vào đầu tin trả lời đầu tiên, rồi các tin ngắn theo đúng thứ tự; trace gắn ở tin cuối.
+        after.Messages.Count.ShouldBe(3);
         after.Messages.Skip(1).ShouldAllBe(m => m.Sender == "bot");
-        after.Messages[1].Text.ShouldContain("trợ lý AI");
+        after.Messages[1].Text.ShouldStartWith("Dạ em là trợ lý AI của");
+        after.Messages[1].Text.ShouldContain("450");
         after.Messages[1].Trace.ShouldBeNull();
-        after.Messages[2].Text.ShouldContain("450");
-        after.Messages[2].Trace.ShouldBeNull();
-        after.Messages[3].Text.ShouldBe("Mình cần em tư vấn thêm gì không ạ?");
-        var reply = after.Messages[3];
+        after.Messages[2].Text.ShouldBe("Mình cần em tư vấn thêm gì không ạ?");
+        var reply = after.Messages[2];
         reply.Trace.ShouldNotBeNull();
         reply.Trace.Chunks.ShouldContain(c => c.Code == "DV-MASSAGE-60" && c.Used);
         reply.Trace.PiiMasked.ShouldBe(1);
@@ -93,7 +92,7 @@ public sealed class ChatTestEndpointsTests(PostgresFixture db)
         // Chạy lại job cho cùng tin → không trả lời lần 2.
         await RunJobAsync<ProcessIncomingMessageJob>(job => job.RunAsync(tenantId, after.Messages[0].Id, CancellationToken.None));
         var again = (await client.GetFromJsonAsync<ChatTestConversationResponse>(new Uri($"/chat-test/conversations/{conversation.Id}", UriKind.Relative)))!;
-        again.Messages.Count.ShouldBe(4);
+        again.Messages.Count.ShouldBe(3);
     }
 
     [Fact]
@@ -107,7 +106,7 @@ public sealed class ChatTestEndpointsTests(PostgresFixture db)
         after.Mode.ShouldBe("human");
         after.Urgency.ShouldBe("urgent");
         after.Messages[1].Text.ShouldContain("trợ lý AI");
-        after.Messages[2].Text.ShouldContain("115");
+        after.Messages[1].Text.ShouldContain("115");
 
         // Đang do nhân viên xử lý: khách vẫn nhắn được, bot không trả lời (job bỏ qua).
         using var whileHuman = await client.PostAsJsonAsync(new Uri($"/chat-test/conversations/{conversation.Id}/messages", UriKind.Relative), new { text = "alo" });

@@ -54,16 +54,27 @@ public sealed class BotMessagesTests
         new(Guid.NewGuid(), Spa, message, [], null, first, null, salutation, byStaff);
 
     [Fact]
-    public async Task Several_short_messages_are_kept_in_order_with_disclosure_as_its_own_first_message()
+    public async Task Several_short_messages_are_kept_in_order_with_disclosure_merged_into_the_first()
     {
         var chat = new ScriptedChat(_ => MessagesJson(["Dạ gói này giá 450.000đ ạ 😊", "  ", "Massage body 60 phút, thư giãn mà không đau.", "Mình muốn em giữ lịch giờ nào ạ?"], ["C1"]));
         var result = await Engine(chat, new StaticSearch(Massage)).ReplyAsync(TurnWith("giá massage 60p", null, false, first: true), CancellationToken.None);
 
-        result.Messages.Count.ShouldBe(4); // câu báo AI + 3 tin (tin rỗng bị bỏ)
-        result.Messages[0].ShouldStartWith("Dạ em là Huyệt Đạo, trợ lý AI");
-        result.Messages[1].ShouldBe("Dạ gói này giá 450.000đ ạ 😊");
-        result.Messages[3].ShouldBe("Mình muốn em giữ lịch giờ nào ạ?");
-        JsonDocument.Parse(result.TraceJson).RootElement.GetProperty("parts").GetInt32().ShouldBe(4);
+        result.Messages.Count.ShouldBe(3); // tin rỗng bị bỏ, câu báo AI không thành tin riêng
+        result.Messages[0].ShouldBe("Dạ em là trợ lý AI của Khoa Học Huyệt Đạo ạ. Gói này giá 450.000đ ạ 😊\nChính sách bảo mật của Khoa Học Huyệt Đạo: https://example.vn/bao-mat");
+        result.Messages[2].ShouldBe("Mình muốn em giữ lịch giờ nào ạ?");
+        JsonDocument.Parse(result.TraceJson).RootElement.GetProperty("parts").GetInt32().ShouldBe(3);
+    }
+
+    [Theory]
+    [InlineData("Vâng, em gửi mình bảng giá nha", "Dạ em là trợ lý AI của Khoa Học Huyệt Đạo ạ. Em gửi mình bảng giá nha")]
+    [InlineData("Dạ vâng ạ, em ghi nhận rồi", "Dạ em là trợ lý AI của Khoa Học Huyệt Đạo ạ. Em ghi nhận rồi")]
+    [InlineData("Dạo này bên em có ưu đãi", "Dạ em là trợ lý AI của Khoa Học Huyệt Đạo ạ. Dạo này bên em có ưu đãi")]
+    public async Task Disclosure_drops_only_a_leading_yes_word(string first, string expected)
+    {
+        var chat = new ScriptedChat(_ => MessagesJson([first], ["C1"]));
+        var result = await Engine(chat, new StaticSearch(Massage)).ReplyAsync(TurnWith("hi", null, false, first: true), CancellationToken.None);
+
+        result.Messages[0].ShouldStartWith(expected);
     }
 
     [Fact]

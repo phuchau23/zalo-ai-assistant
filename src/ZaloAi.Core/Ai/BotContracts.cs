@@ -60,7 +60,7 @@ public sealed record BotUsage(UsageKind Kind, string Provider, string Model, int
 /// <param name="Confidence">high | medium | low</param>
 /// <param name="Sentiment">positive | neutral | negative, null nếu không rõ</param>
 /// <param name="LeadFields">Thông tin khách tự cung cấp (tên, SĐT...) — dữ liệu cá nhân, phải mã hóa khi lưu.</param>
-/// <param name="Messages">Các tin gửi lần lượt (1–4 tin ngắn như người thật nhắn; câu báo trợ lý AI là tin đầu khi cần).</param>
+/// <param name="Messages">Các tin gửi lần lượt (1–4 tin ngắn như người thật nhắn; câu báo trợ lý AI nằm ở đầu tin đầu tiên khi cần).</param>
 /// <param name="DetectedSalutation">Khách tự xưng rõ (anh/chị/cô/chú/bác) trong tin vừa rồi; null nếu không.</param>
 public sealed record BotTurnResult(
     IReadOnlyList<string> Messages,

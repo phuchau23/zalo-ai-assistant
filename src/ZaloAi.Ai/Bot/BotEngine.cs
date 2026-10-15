@@ -319,7 +319,15 @@ public sealed partial class BotEngine(
             .ToList();
         if (request.IsFirstBotReply)
         {
-            messages.Insert(0, texts.Disclosure); // tin riêng, luôn đứng đầu (CLAUDE.md mục 7)
+            // Câu báo trợ lý AI (CLAUDE.md mục 7): gộp vào đầu tin trả lời đầu tiên cho tự nhiên, không bao giờ bỏ.
+            if (messages.Count == 0)
+            {
+                messages.Add(texts.WithDisclosure(""));
+            }
+            else
+            {
+                messages[0] = texts.WithDisclosure(messages[0]);
+            }
         }
 
         var allowedKeys = IndustryTemplateRegistry.Get(request.Profile.IndustrySlug).LeadFields.Select(f => f.Key).ToHashSet(StringComparer.Ordinal);
@@ -492,16 +500,39 @@ internal sealed class BotTexts(BotProfile profile, string salutation, string urg
     /// <summary>Câu dự phòng khi bot nói về cơ thể mà quên mời kiểm tra trực tiếp — mời về chuyên viên của DN, không đẩy khách đi nơi khác.</summary>
     public string MedicalDisclaimer => Fill("Nếu {khach} thấy cảm giác này kéo dài hoặc khó chịu hơn, {khach} ghé {ten_doanh_nghiep} để chuyên viên bên {bot} kiểm tra trực tiếp cho {khach} nha.");
 
-    /// <summary>Câu báo trợ lý AI + link chính sách (CLAUDE.md mục 7) — không tắt được.</summary>
-    public string Disclosure
+    private static readonly string[] LeadingYes = ["dạ vâng", "dạ", "vâng"];
+
+    /// <summary>
+    /// Tin đầu tiên kèm câu báo trợ lý AI + link chính sách (CLAUDE.md mục 7) — không tắt được. Câu báo đứng đầu tin, bỏ "Dạ/Vâng"
+    /// mở đầu của câu trả lời để không thành "Dạ ... ạ. Dạ ...". Link chính sách xuống dòng cuối tin (khi DN có cài).
+    /// </summary>
+    public string WithDisclosure(string firstMessage)
     {
-        get
+        var rest = firstMessage.Trim();
+        foreach (var yes in LeadingYes)
         {
-            var text = Fill($"Dạ {{bot}} là {profile.BotName}, trợ lý AI (trí tuệ nhân tạo) của {{ten_doanh_nghiep}}, hỗ trợ {{khach}} 24/7.");
-            return string.IsNullOrWhiteSpace(profile.PrivacyUrl)
-                ? text
-                : $"{text} {Fill("Thông tin {khach} chia sẻ được bảo vệ theo chính sách bảo mật:")} {profile.PrivacyUrl}";
+            if (rest.StartsWith(yes, StringComparison.OrdinalIgnoreCase)
+                && (rest.Length == yes.Length || !char.IsLetterOrDigit(rest[yes.Length])))
+            {
+                rest = rest[yes.Length..].TrimStart(' ', ',', '.', '!');
+                if (rest.StartsWith("ạ", StringComparison.OrdinalIgnoreCase) && (rest.Length == 1 || !char.IsLetterOrDigit(rest[1])))
+                {
+                    rest = rest[1..].TrimStart(' ', ',', '.', '!');
+                }
+
+                break;
+            }
         }
+
+        var text = Fill("Dạ {bot} là trợ lý AI của {ten_doanh_nghiep} ạ.");
+        if (rest.Length > 0)
+        {
+            text = $"{text} {char.ToUpperInvariant(rest[0])}{rest[1..]}";
+        }
+
+        return string.IsNullOrWhiteSpace(profile.PrivacyUrl)
+            ? text
+            : $"{text}\n{Fill("Chính sách bảo mật của {ten_doanh_nghiep}:")} {profile.PrivacyUrl}";
     }
 
     private string Fill(string text)
