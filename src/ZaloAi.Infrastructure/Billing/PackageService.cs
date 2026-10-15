@@ -12,7 +12,7 @@ namespace ZaloAi.Infrastructure.Billing;
 public sealed record ActivePackage(CustomerPackage Package, IReadOnlyList<Guid> ServiceIds);
 
 /// <summary>Gói liệu trình của khách (CRM C3): cấp khi mua, trừ buổi khi dùng, hoàn khi hủy hóa đơn, bảo lưu/chuyển nhượng, hết hạn.</summary>
-public sealed class PackageService(AppDbContext db, ITenantContext tenantContext, CrmSettingsRepository settingsRepository, TimeProvider time) : TenantScopedRepository(db, tenantContext)
+public sealed class PackageService(AppDbContext db, ITenantContext tenantContext, CrmSettingsRepository settingsRepository, Staffing.CommissionService commissions, TimeProvider time) : TenantScopedRepository(db, tenantContext)
 {
     private readonly ITenantContext _caller = tenantContext;
 
@@ -98,13 +98,19 @@ public sealed class PackageService(AppDbContext db, ITenantContext tenantContext
         Db.PackageRedemptions.Add(redemption);
 
         var settings = await settingsRepository.GetAsync(tenantId, cancellationToken);
+        var perSession = package.TotalSessions > 0 ? package.PricePaid / package.TotalSessions : 0;
+        if (staffMemberId is { } performer)
+        {
+            await commissions.AccrueAsync(tenantId, performer, CatalogKind.Package, package.CatalogItemId, perSession, package.InvoiceId, invoiceLineId, redemption.Id, cancellationToken);
+        }
+
         Db.RevenueEntries.Add(new RevenueEntry
         {
             TenantId = tenantId,
             BranchId = branchId,
             Date = CrmClock.LocalDate(now, CrmClock.Zone(settings.TimeZone)),
             Kind = RevenueKind.PackageRecognized,
-            Amount = package.TotalSessions > 0 ? package.PricePaid / package.TotalSessions : 0,
+            Amount = perSession,
             InvoiceId = package.InvoiceId,
             RedemptionId = redemption.Id,
             CatalogItemId = package.CatalogItemId,
@@ -125,11 +131,33 @@ public sealed class PackageService(AppDbContext db, ITenantContext tenantContext
         var redemptions = await Db.PackageRedemptions
             .Where(r => r.TenantId == tenantId && r.InvoiceLineId != null && lineIds.Contains(r.InvoiceLineId.Value) && r.RevertedAt == null)
             .ToListAsync(cancellationToken);
+        var settings = await settingsRepository.GetAsync(tenantId, cancellationToken);
+        var date = CrmClock.LocalDate(now, CrmClock.Zone(settings.TimeZone));
         foreach (var r in redemptions)
         {
             r.RevertedAt = now;
             var package = await Db.CustomerPackages.FirstAsync(p => p.Id == r.CustomerPackageId, cancellationToken);
             package.UsedSessions = Math.Max(0, package.UsedSessions - 1);
+            // Doanh thu gói đã ghi cho buổi này → ghi âm lại (giữ dòng cũ để đối soát).
+            var recognized = await Db.RevenueEntries.AsNoTracking().FirstOrDefaultAsync(e => e.TenantId == tenantId && e.RedemptionId == r.Id && e.Kind == RevenueKind.PackageRecognized, cancellationToken);
+            if (recognized is not null)
+            {
+                Db.RevenueEntries.Add(new RevenueEntry
+                {
+                    TenantId = tenantId,
+                    BranchId = recognized.BranchId,
+                    Date = date,
+                    Kind = RevenueKind.Refund,
+                    Amount = -recognized.Amount,
+                    InvoiceId = recognized.InvoiceId,
+                    RedemptionId = r.Id,
+                    CatalogItemId = recognized.CatalogItemId,
+                    StaffMemberId = recognized.StaffMemberId,
+                    ContactId = recognized.ContactId,
+                    Source = recognized.Source,
+                    At = now,
+                });
+            }
             if (package.Status == CustomerPackageStatus.Exhausted)
             {
                 package.Status = CustomerPackageStatus.Active;

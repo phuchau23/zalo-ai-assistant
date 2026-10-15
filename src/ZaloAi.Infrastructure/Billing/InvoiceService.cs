@@ -40,6 +40,7 @@ public sealed class InvoiceService(
     PackageService packages,
     WalletService wallets,
     ZaloAi.Infrastructure.Inventory.InventoryService inventory,
+    ZaloAi.Infrastructure.Staffing.CommissionService commissions,
     IFieldEncryptor encryptor,
     TimeProvider time) : TenantScopedRepository(db, tenantContext)
 {
@@ -559,6 +560,11 @@ public sealed class InvoiceService(
                 continue; // doanh thu gói ghi nhận theo buổi dùng
             }
 
+            if (line.PerformerStaffId is { } performer)
+            {
+                await commissions.AccrueAsync(tenantId, performer, line.Kind switch { InvoiceLineKind.Service => CatalogKind.Service, InvoiceLineKind.Product => CatalogKind.Product, _ => null }, line.CatalogItemId, net, invoice.Id, line.Id, null, cancellationToken);
+            }
+
             Db.RevenueEntries.Add(new RevenueEntry
             {
                 TenantId = tenantId,
@@ -617,6 +623,7 @@ public sealed class InvoiceService(
 
         await packages.RevertForInvoiceAsync(tenantId, invoice.Id, cancellationToken);
         await inventory.OnInvoiceVoidedAsync(tenantId, invoice.Id, cancellationToken);
+        await commissions.RevertForInvoiceAsync(tenantId, invoice.Id, cancellationToken);
     }
 
     private async Task<string?> SourceAsync(Guid tenantId, Invoice invoice, CancellationToken cancellationToken)

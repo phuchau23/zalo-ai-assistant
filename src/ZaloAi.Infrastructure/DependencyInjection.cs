@@ -148,6 +148,11 @@ public static class DependencyInjection
         // CRM C4
         services.AddScoped<Inventory.InventoryService>();
 
+        // CRM C5
+        services.AddScoped<Staffing.CommissionService>();
+        services.AddScoped<Staffing.AttendanceService>();
+        services.AddScoped<Staffing.PerformanceService>();
+
         services.AddScoped<KnowledgeImportService>();
         services.AddScoped<KnowledgeIndexer>();
         services.AddScoped<IKnowledgeSearch, KnowledgeSearchService>();
