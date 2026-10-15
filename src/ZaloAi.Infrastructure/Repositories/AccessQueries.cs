@@ -9,7 +9,16 @@ namespace ZaloAi.Infrastructure.Repositories;
 /// <param name="PasswordStamp">Dấu vân tay mật khẩu hiện tại (<see cref="Passwords.Stamp"/>) — so với cookie để đăng xuất phiên cũ khi đổi mật khẩu.</param>
 public sealed record UserAccess(Guid UserId, string Email, string Name, bool IsSuperAdmin, string PasswordStamp = "");
 
-public sealed record TenantAccess(Guid TenantId, string TenantName, TenantRole Role, TenantStatus Status, DateTimeOffset? ExpiresAt = null);
+/// <param name="Permissions">Quyền thêm của nhân viên (<see cref="TenantPermissions"/>).</param>
+/// <param name="BranchId">Chi nhánh làm việc của nhân viên; null = mọi chi nhánh.</param>
+public sealed record TenantAccess(
+    Guid TenantId,
+    string TenantName,
+    TenantRole Role,
+    TenantStatus Status,
+    DateTimeOffset? ExpiresAt = null,
+    string[]? Permissions = null,
+    Guid? BranchId = null);
 
 /// <summary>
 /// Truy vấn phục vụ xác thực: user đang đăng nhập thuộc những tenant nào, vai trò gì.
@@ -39,5 +48,5 @@ public sealed class AccessQueries(AppDbContext db)
         join t in db.Tenants.IgnoreQueryFilters() on m.TenantId equals t.Id
         where m.UserId == userId && (tenantId == null || m.TenantId == tenantId)
         orderby m.CreatedAt
-        select new TenantAccess(t.Id, t.Name, m.Role, t.Status, t.ExpiresAt);
+        select new TenantAccess(t.Id, t.Name, m.Role, t.Status, t.ExpiresAt, m.Permissions, m.BranchId);
 }

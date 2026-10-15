@@ -30,6 +30,8 @@ internal sealed class TenantContextMiddleware(RequestDelegate next)
             {
                 Guid? tenantId = null;
                 TenantRole? role = null;
+                string[]? permissions = null;
+                Guid? branchId = null;
                 if (AuthClaims.GetTenantId(httpContext.User) is { } claimedTenantId)
                 {
                     var tenant = await access.GetTenantAccessAsync(userId, claimedTenantId, httpContext.RequestAborted);
@@ -37,10 +39,12 @@ internal sealed class TenantContextMiddleware(RequestDelegate next)
                     {
                         tenantId = tenant.TenantId;
                         role = tenant.Role;
+                        permissions = tenant.Permissions;
+                        branchId = tenant.BranchId;
                     }
                 }
 
-                tenantContext.Set(tenantId, userId, role, user.IsSuperAdmin);
+                tenantContext.Set(tenantId, userId, role, user.IsSuperAdmin, permissions, branchId);
             }
         }
 

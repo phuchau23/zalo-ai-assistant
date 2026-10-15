@@ -10,7 +10,16 @@ public sealed record LoginRequest(string Email, string Password);
 public sealed record SwitchTenantRequest(Guid TenantId);
 
 /// <param name="ExpiresAt">Hạn thuê; null = không thời hạn. Web nhắc chủ DN từ 7 ngày trước, quá hạn 3 ngày thì tự khóa.</param>
-public sealed record TenantSummary(Guid Id, string Name, string Role, bool IsActive, DateTimeOffset? ExpiresAt);
+/// <param name="Permissions">Quyền chi tiết của nhân viên (CRM); chủ: đầy đủ danh sách để FE không phải phân nhánh.</param>
+/// <param name="BranchId">Chi nhánh bị giới hạn; null = xem mọi chi nhánh.</param>
+public sealed record TenantSummary(
+    Guid Id,
+    string Name,
+    string Role,
+    bool IsActive,
+    DateTimeOffset? ExpiresAt,
+    IReadOnlyList<string> Permissions,
+    Guid? BranchId);
 
 public sealed record MeResponse(
     Guid UserId,
@@ -23,7 +32,14 @@ public sealed record MeResponse(
     internal static MeResponse From(UserAccess user, IReadOnlyList<TenantAccess> tenants, Guid? currentTenantId)
     {
         var summaries = tenants
-            .Select(t => new TenantSummary(t.TenantId, t.TenantName, t.Role.ToString().ToLowerInvariant(), t.Status == TenantStatus.Active, t.ExpiresAt))
+            .Select(t => new TenantSummary(
+                t.TenantId,
+                t.TenantName,
+                t.Role.ToString().ToLowerInvariant(),
+                t.Status == TenantStatus.Active,
+                t.ExpiresAt,
+                t.Role == Core.Tenancy.TenantRole.Owner ? Core.Tenancy.TenantPermissions.All : (t.Permissions ?? []).Where(Core.Tenancy.TenantPermissions.IsKnown).ToList(),
+                t.Role == Core.Tenancy.TenantRole.Staff && !(t.Permissions ?? []).Contains(Core.Tenancy.TenantPermissions.ViewAllBranches) ? t.BranchId : null))
             .ToList();
         return new MeResponse(
             user.UserId,

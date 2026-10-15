@@ -14,6 +14,15 @@ public interface ITenantContext
 
     bool IsSuperAdmin { get; }
 
+    /// <summary>Quyền thêm của nhân viên (<see cref="TenantPermissions"/>). Chủ DN: rỗng nhưng <see cref="Can"/> luôn true.</summary>
+    IReadOnlySet<string> Permissions { get; }
+
+    /// <summary>Chi nhánh người này được xem khi KHÔNG có quyền xem mọi chi nhánh; null = mọi chi nhánh (chủ, job hệ thống).</summary>
+    Guid? BranchId { get; }
+
+    /// <summary>Chủ DN hoặc job hệ thống (không có vai trò) → true; nhân viên → có trong <see cref="Permissions"/>.</summary>
+    bool Can(string permission);
+
     /// <exception cref="InvalidOperationException">Chưa có tenant (lỗi lập trình, không phải lỗi người dùng).</exception>
     Guid RequireTenantId();
 }

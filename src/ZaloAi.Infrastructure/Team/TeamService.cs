@@ -9,7 +9,16 @@ using ZaloAi.Infrastructure.Security;
 
 namespace ZaloAi.Infrastructure.Team;
 
-public sealed record TeamMember(Guid UserId, string Email, string Name, TenantRole Role, DateTimeOffset JoinedAt);
+/// <param name="Permissions">Quyền thêm của nhân viên (<see cref="TenantPermissions"/>); rỗng với chủ.</param>
+/// <param name="BranchId">Chi nhánh làm việc; null = mọi chi nhánh.</param>
+public sealed record TeamMember(
+    Guid UserId,
+    string Email,
+    string Name,
+    TenantRole Role,
+    DateTimeOffset JoinedAt,
+    IReadOnlyList<string> Permissions,
+    Guid? BranchId);
 
 /// <param name="TemporaryPassword">Mật khẩu tạm (chỉ trả một lần); null khi email đã có tài khoản (giữ mật khẩu cũ).</param>
 public sealed record AddedMember(TeamMember Member, string? TemporaryPassword);
@@ -31,7 +40,29 @@ public sealed class TeamService(AppDbContext db, ITenantContext tenantContext, I
             join u in Db.Users on m.UserId equals u.Id
             where m.TenantId == tenantId
             orderby m.Role descending, m.CreatedAt
-            select new TeamMember(u.Id, u.Email, u.Name, m.Role, m.CreatedAt)).ToListAsync(cancellationToken);
+            select new TeamMember(u.Id, u.Email, u.Name, m.Role, m.CreatedAt, m.Permissions, m.BranchId)).ToListAsync(cancellationToken);
+    }
+
+    /// <summary>Công tắc quyền + chi nhánh của một nhân viên (CRM C1). Với chủ chỉ lưu chi nhánh (quyền luôn đầy đủ).</summary>
+    public async Task SetPermissionsAsync(Guid tenantId, Guid userId, IReadOnlyList<string> permissions, Guid? branchId, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(permissions);
+        var membership = await RequireAsync(tenantId, userId, cancellationToken);
+        var unknown = permissions.FirstOrDefault(p => !TenantPermissions.IsKnown(p));
+        if (unknown is not null)
+        {
+            throw new InvalidInputException($"Quyền không hợp lệ: {unknown}.");
+        }
+
+        if (branchId is { } b && !await Db.Branches.AnyAsync(x => x.TenantId == tenantId && x.Id == b, cancellationToken))
+        {
+            throw new NotFoundException();
+        }
+
+        membership.Permissions = permissions.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
+        membership.BranchId = branchId;
+        Audit(tenantId, "team.permissions_changed", $"{userId}:{string.Join(',', membership.Permissions)}:{branchId}");
+        await Db.SaveChangesAsync(cancellationToken);
     }
 
     public async Task<AddedMember> AddAsync(Guid tenantId, string email, string name, TenantRole role, CancellationToken cancellationToken)
@@ -56,7 +87,7 @@ public sealed class TeamService(AppDbContext db, ITenantContext tenantContext, I
         Db.Memberships.Add(membership);
         Audit(tenantId, "team.member_added", $"{user.Id}:{Lower(role)}");
         await Db.SaveChangesAsync(cancellationToken);
-        return new AddedMember(new TeamMember(user.Id, user.Email, user.Name, role, membership.CreatedAt), temporaryPassword);
+        return new AddedMember(new TeamMember(user.Id, user.Email, user.Name, role, membership.CreatedAt, [], null), temporaryPassword);
     }
 
     public async Task ChangeRoleAsync(Guid tenantId, Guid userId, TenantRole role, CancellationToken cancellationToken)
