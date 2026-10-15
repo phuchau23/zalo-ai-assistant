@@ -125,6 +125,16 @@ public static class DependencyInjection
         services.AddScoped<Crm.StaffService>();
         services.AddScoped<Crm.CrmSettingsRepository>();
 
+        // CRM C2
+        services.AddScoped<Crm.AvailabilityService>();
+        services.AddScoped<Crm.AppointmentService>();
+        services.AddScoped<Crm.ResourceService>();
+        services.AddScoped<Crm.BookingOrchestrator>();
+        services.AddScoped<AppointmentReminderSweepJob>();
+        services.AddScoped<AppointmentReminderJob>();
+        services.AddScoped<AppointmentBriefJob>();
+        services.AddScoped<WaitlistMatchJob>();
+
         services.AddScoped<KnowledgeImportService>();
         services.AddScoped<KnowledgeIndexer>();
         services.AddScoped<IKnowledgeSearch, KnowledgeSearchService>();

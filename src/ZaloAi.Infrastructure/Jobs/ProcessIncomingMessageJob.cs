@@ -36,6 +36,7 @@ public sealed partial class ProcessIncomingMessageJob(
     InboxService inbox,
     ConversationQuotaService quota,
     ContactPhoneLinker phoneLinker,
+    Crm.BookingOrchestrator booking,
     IFieldEncryptor encryptor,
     IOptions<AiOptions> options,
     TimeProvider time,
@@ -122,6 +123,26 @@ public sealed partial class ProcessIncomingMessageJob(
             return;
         }
 
+        // Khách trả lời "ok" sau tin nhắc lịch → xác nhận lịch, không gọi AI (CRM C2).
+        {
+            var confirmReply = await booking.TryConfirmByReplyAsync(tenantId, tenant, contact, encryptor.Decrypt(message.ContentEnc), cancellationToken);
+            if (confirmReply is not null)
+            {
+                var ack = delivery.AddOutgoing(tenantId, conversation, MessageSender.Bot, confirmReply, replyToMessageId: message.Id);
+                try
+                {
+                    await conversations.SaveChangesAsync(cancellationToken);
+                }
+                catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+                {
+                    return;
+                }
+
+                await delivery.DeliverAsync(tenantId, conversation, contact, ack, cancellationToken);
+                return;
+            }
+        }
+
         var unsummarized = await conversations.ListMessagesAsync(tenantId, conversation.Id, conversation.SummarizedUntil, cancellationToken);
         var history = unsummarized
             .TakeWhile(m => m.Id != message.Id)
@@ -138,11 +159,9 @@ public sealed partial class ProcessIncomingMessageJob(
                 IsFirstBotReply: !await conversations.HasBotReplyAsync(tenantId, conversation.Id, cancellationToken),
                 CustomerName: contact.DisplayName,
                 Salutation: contact.Salutation,
-                SalutationByStaff: contact.SalutationSource == CustomerSalutation.SourceStaff),
+                SalutationByStaff: contact.SalutationSource == CustomerSalutation.SourceStaff,
+                Booking: await booking.ContextAsync(tenantId, contact.Id, cancellationToken)),
             cancellationToken);
-
-        var replies = AddReplies(tenantId, conversation, message.Id, result);
-        AddUsage(tenantId, conversation.Id, result.Usage);
 
         // Khách tự xưng (anh/chị/cô/chú/bác) → nhớ để lần sau gọi đúng; cách gọi nhân viên đã đặt thì giữ nguyên.
         if (result.DetectedSalutation is { } detected && contact.SalutationSource != CustomerSalutation.SourceStaff && contact.Salutation != detected)
@@ -150,6 +169,21 @@ public sealed partial class ProcessIncomingMessageJob(
             contact.Salutation = detected;
             contact.SalutationSource = CustomerSalutation.SourceCustomer;
         }
+
+        // AI chỉ đề xuất đặt/dời/hủy; hệ thống lịch kiểm tra chỗ trống và soạn câu xác nhận (CLAUDE.md: AI chỉ đề xuất, hệ thống mới chốt).
+        if (result.Booking is not null && !result.NeedsHuman)
+        {
+            var outcome = await booking.HandleAsync(tenantId, tenant, conversation, contact, result.Booking, cancellationToken);
+            result = result with
+            {
+                Messages = [.. result.Messages, .. outcome.Messages],
+                NeedsHuman = outcome.HandoffReason is not null,
+                HandoffReason = outcome.HandoffReason ?? result.HandoffReason,
+            };
+        }
+
+        var replies = AddReplies(tenantId, conversation, message.Id, result);
+        AddUsage(tenantId, conversation.Id, result.Usage);
 
         if (result.NeedsHuman)
         {

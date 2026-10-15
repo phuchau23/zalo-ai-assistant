@@ -38,6 +38,7 @@ public static class DependencyInjection
         services.TryAddSingleton(TimeProvider.System);
         services.AddScoped<IBotEngine, BotEngine>();
         services.AddScoped<ICareAdvisor, CareAdvisor>();
+        services.AddScoped<IAppointmentBriefWriter, Care.AppointmentBriefWriter>();
 
         return services;
     }
