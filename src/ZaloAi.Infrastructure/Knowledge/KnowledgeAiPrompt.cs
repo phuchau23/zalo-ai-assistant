@@ -17,7 +17,8 @@ public static partial class KnowledgeTemplate
           "services": [ { "code", "group", "name", "durationMinutes", "price", "priceUnit", "priceNote", "description", "suitableFor", "notSuitableFor", "afterCare", "branches", "note" } ],
           "packages": [ { "code", "group", "name", "sessions", "minutesPerSession", "price", "priceNote", "description", "suitableFor", "notSuitableFor", "afterCare", "note" } ],
           "faqs":     [ { "code", "question", "answer" } ],
-          "policies": [ { "code", "topic", "content" } ]
+          "policies": [ { "code", "topic", "content" } ],
+          "products": [ { "code", "group", "name", "price", "unit", "sku", "description", "usage", "note" } ]
         }
 
         Quy tắc:
@@ -30,5 +31,6 @@ public static partial class KnowledgeTemplate
         7. Giữ nguyên nội dung gốc, không thêm thông tin không có trong tài liệu. Trường không có thông tin → null.
         8. "afterCare" (Sau khi làm): cảm giác khách thường gặp sau buổi làm, kéo dài bao lâu, nên làm/kiêng gì, khi nào cần báo lại doanh nghiệp — chỉ chép từ tài liệu, không tự viết.
         9. Nội dung tiếng Việt có dấu.
+        10. Sản phẩm bán lẻ (tinh dầu, kem, thuốc bôi, thực phẩm...) → "products" (tiền tố SP-), "unit" là đơn vị bán (chai, hộp...), "usage" là cách dùng.
         """;
 }

@@ -36,7 +36,7 @@ public sealed class KnowledgeTemplateEndpointsTests(PostgresFixture db)
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
         response.Content.Headers.ContentDisposition!.FileNameStar.ShouldBe("mau-du-lieu-kien-thuc.xlsx");
         using var workbook = new XLWorkbook(await response.Content.ReadAsStreamAsync());
-        workbook.Worksheets.Count.ShouldBe(6);
+        workbook.Worksheets.Count.ShouldBe(7);
     }
 
     [Fact]

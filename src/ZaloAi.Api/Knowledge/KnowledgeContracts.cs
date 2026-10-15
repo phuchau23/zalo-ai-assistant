@@ -8,7 +8,7 @@ namespace ZaloAi.Api.Knowledge;
 public sealed record KnowledgeFieldChangeResponse(string Field, string Label, string FieldType, string? Old, string? New);
 
 /// <param name="Type">added | changed | possibleDuplicate | missing</param>
-/// <param name="Kind">info | service | package | faq | policy</param>
+/// <param name="Kind">info | service | package | faq | policy | product</param>
 public sealed record KnowledgeDiffItemResponse(
     string Key,
     string Type,

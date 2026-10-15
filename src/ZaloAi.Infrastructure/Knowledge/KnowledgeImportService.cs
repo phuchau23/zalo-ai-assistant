@@ -38,7 +38,8 @@ public sealed class KnowledgeImportService(
     KnowledgeImportRepository imports,
     ChunkRepository chunks,
     AuditLogRepository audit,
-    IBackgroundJobClient jobs)
+    IBackgroundJobClient jobs,
+    Crm.CatalogKnowledgeSync catalogSync)
 {
     public const long MaxFileBytes = 5 * 1024 * 1024;
 
@@ -118,6 +119,7 @@ public sealed class KnowledgeImportService(
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
 
         var toIndex = new List<KnowledgeItem>();
+        var removedCodes = new List<string>();
         int added = 0, updated = 0, merged = 0, deleted = 0;
 
         foreach (var (entry, resolution) in chosen)
@@ -153,7 +155,9 @@ public sealed class KnowledgeImportService(
                     break;
 
                 case KnowledgeChangeType.Missing:
-                    items.Remove(tenantId, CurrentUnchanged(current, entry));
+                    var missing = CurrentUnchanged(current, entry);
+                    items.Remove(tenantId, missing);
+                    removedCodes.Add(missing.Code);
                     deleted++;
                     break;
             }
@@ -161,6 +165,9 @@ public sealed class KnowledgeImportService(
 
         // Đoạn mới chưa có embedding; bước đánh chỉ mục (job) sẽ tạo vector.
         chunks.AddRange(tenantId, toIndex.Select(BuildChunk));
+
+        // CRM: danh mục bán theo kịp dịch vụ / gói / sản phẩm vừa nhập (cùng transaction).
+        await catalogSync.SyncFromKnowledgeAsync(tenantId, toIndex, removedCodes, cancellationToken);
 
         import.Status = KnowledgeImportStatus.Applied;
         import.AppliedBy = userId;

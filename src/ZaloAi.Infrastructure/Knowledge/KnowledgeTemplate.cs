@@ -95,6 +95,19 @@ public static partial class KnowledgeTemplate
             new("topic", "Chủ đề", KnowledgeFieldType.Text, true, 200),
             new("content", "Nội dung", KnowledgeFieldType.Text, true, 4000),
         ]),
+        // Sản phẩm bán lẻ (CRM C1, 2026-10-15): bot tư vấn được sản phẩm; đồng bộ với danh mục bán (catalog_items).
+        new(KnowledgeKind.Product, "Sản phẩm", "products", "Sản phẩm",
+        [
+            Code,
+            new("group", "Nhóm", KnowledgeFieldType.Text, false, 100),
+            new("name", "Tên sản phẩm", KnowledgeFieldType.Text, true, 200),
+            new("price", "Giá (VNĐ)", KnowledgeFieldType.Money, false),
+            new("unit", "Đơn vị", KnowledgeFieldType.Text, false, 50),
+            new("sku", "Mã hàng (SKU)", KnowledgeFieldType.Text, false, 100),
+            new("description", "Mô tả", KnowledgeFieldType.Text, false, 4000),
+            new("usage", "Cách dùng", KnowledgeFieldType.Text, false, 2000),
+            new("note", "Ghi chú", KnowledgeFieldType.Text, false, 2000),
+        ]),
     ];
 
     public static KnowledgeKindDefinition For(KnowledgeKind kind) => Kinds.First(k => k.Kind == kind);

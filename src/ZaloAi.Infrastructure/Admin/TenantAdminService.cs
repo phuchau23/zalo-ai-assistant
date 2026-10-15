@@ -74,6 +74,14 @@ public sealed partial class TenantAdminService(
             }
 
             db.Memberships.Add(new Membership { TenantId = tenantId, UserId = owner.Id, Role = TenantRole.Owner });
+            // CRM C1: chi nhánh mặc định (giờ mở cửa 8:00–20:00 mọi ngày, chủ DN sửa sau).
+            var branch = new Branch { TenantId = tenantId, Code = Crm.BranchService.DefaultCode, Name = request.Name.Trim(), IsDefault = true };
+            db.Branches.Add(branch);
+            for (var day = 0; day < 7; day++)
+            {
+                db.BranchHours.Add(new BranchHour { TenantId = tenantId, BranchId = branch.Id, DayOfWeek = (DayOfWeek)day, OpenTime = new TimeOnly(8, 0), CloseTime = new TimeOnly(20, 0) });
+            }
+
             Audit(db, tenantId, adminId, "tenant.created", $"owner:{owner.Id}");
             await db.SaveChangesAsync(cancellationToken);
             return new CreatedTenant(tenantId, email, temporaryPassword);

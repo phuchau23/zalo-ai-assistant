@@ -118,6 +118,13 @@ public static class DependencyInjection
         services.AddScoped<TelegramLinkService>();
         services.AddHttpClient<TelegramUpdatesClient>(http => http.Timeout = TimeSpan.FromSeconds(TelegramUpdatesClient.PollSeconds + 15));
 
+        // CRM C1
+        services.AddScoped<Crm.BranchService>();
+        services.AddScoped<Crm.CatalogKnowledgeSync>();
+        services.AddScoped<Crm.CatalogService>();
+        services.AddScoped<Crm.StaffService>();
+        services.AddScoped<Crm.CrmSettingsRepository>();
+
         services.AddScoped<KnowledgeImportService>();
         services.AddScoped<KnowledgeIndexer>();
         services.AddScoped<IKnowledgeSearch, KnowledgeSearchService>();
