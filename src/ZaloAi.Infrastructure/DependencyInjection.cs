@@ -135,6 +135,16 @@ public static class DependencyInjection
         services.AddScoped<AppointmentBriefJob>();
         services.AddScoped<WaitlistMatchJob>();
 
+        // CRM C3
+        services.AddScoped<Billing.InvoiceService>();
+        services.AddScoped<Billing.PackageService>();
+        services.AddScoped<Billing.WalletService>();
+        services.AddScoped<Billing.VoucherService>();
+        services.AddScoped<Billing.CashShiftService>();
+        services.AddScoped<Billing.BankAccountService>();
+        services.AddScoped<Billing.ReceiptService>();
+        services.AddScoped<PackageExpiryJob>();
+
         services.AddScoped<KnowledgeImportService>();
         services.AddScoped<KnowledgeIndexer>();
         services.AddScoped<IKnowledgeSearch, KnowledgeSearchService>();

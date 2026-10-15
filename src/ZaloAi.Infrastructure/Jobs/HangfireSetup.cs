@@ -89,6 +89,10 @@ public static class HangfireSetup
             AppointmentReminderSweepJob.RecurringId,
             job => job.RunAsync(CancellationToken.None),
             "* * * * *");
+        recurring.AddOrUpdate<PackageExpiryJob>(
+            PackageExpiryJob.RecurringId,
+            job => job.RunAsync(CancellationToken.None),
+            "15 * * * *");
     }
 
     /// <summary>Tạo/nâng cấp bảng Hangfire (dùng cho lệnh seed và test, để Api dùng được hàng đợi khi Worker chưa chạy lần nào).</summary>
