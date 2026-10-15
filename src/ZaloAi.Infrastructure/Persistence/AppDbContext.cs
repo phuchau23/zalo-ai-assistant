@@ -77,6 +77,19 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
 
     public DbSet<CrmSettings> CrmSettings => Set<CrmSettings>();
 
+    // CRM C2
+    public DbSet<Resource> Resources => Set<Resource>();
+
+    public DbSet<Appointment> Appointments => Set<Appointment>();
+
+    public DbSet<AppointmentItem> AppointmentItems => Set<AppointmentItem>();
+
+    public DbSet<AppointmentEvent> AppointmentEvents => Set<AppointmentEvent>();
+
+    public DbSet<AppointmentSeries> AppointmentSeries => Set<AppointmentSeries>();
+
+    public DbSet<WaitlistEntry> WaitlistEntries => Set<WaitlistEntry>();
+
     /// <summary>EF đọc lại giá trị này mỗi lần truy vấn (tham số hóa theo instance DbContext).</summary>
     public Guid? CurrentTenantId => tenantContext.TenantId;
 

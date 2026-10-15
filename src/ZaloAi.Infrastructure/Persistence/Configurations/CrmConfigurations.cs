@@ -181,6 +181,8 @@ internal sealed class CrmSettingsConfiguration : IEntityTypeConfiguration<CrmSet
         builder.ToTable("crm_settings");
         builder.HasKey(s => s.TenantId);
         builder.Property(s => s.TimeZone).HasMaxLength(64);
+        builder.Property(s => s.Reminder1Hours).HasColumnName("reminder1_hours");
+        builder.Property(s => s.Reminder2Hours).HasColumnName("reminder2_hours");
         builder.HasOne<Tenant>().WithMany().HasForeignKey(s => s.TenantId).OnDelete(DeleteBehavior.Cascade);
     }
 }

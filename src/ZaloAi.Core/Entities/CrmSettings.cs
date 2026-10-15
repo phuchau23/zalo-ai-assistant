@@ -21,6 +21,29 @@ public sealed class CrmSettings : ITenantOwned
     /// <summary>Phút dọn dẹp mặc định giữa hai khách khi dịch vụ không đặt riêng.</summary>
     public int DefaultBufferMinutes { get; set; }
 
+    // Đặt lịch (C2)
+
+    /// <summary>Bot được tự chốt lịch qua chat (tắt → bot chỉ ghi nhận, chuyển nhân viên như trước).</summary>
+    public bool BotBookingEnabled { get; set; } = true;
+
+    /// <summary>Khách đặt nhóm từ số người này trở lên → bot không tự chốt, chuyển nhân viên.</summary>
+    public int BotMaxPartySize { get; set; } = 2;
+
+    /// <summary>Phải đặt trước ít nhất bao nhiêu phút so với giờ bắt đầu.</summary>
+    public int BookingLeadMinutes { get; set; } = 60;
+
+    /// <summary>Đặt xa nhất bao nhiêu ngày.</summary>
+    public int MaxBookingDaysAhead { get; set; } = 60;
+
+    /// <summary>Khách tự hủy/dời qua chat phải trước giờ hẹn ít nhất bấy nhiêu giờ (theo chính sách DN).</summary>
+    public int CancelLeadHours { get; set; } = 2;
+
+    /// <summary>Nhắc lịch lần 1 trước giờ hẹn (giờ); 0 = tắt.</summary>
+    public int Reminder1Hours { get; set; } = 24;
+
+    /// <summary>Nhắc lịch lần 2 trước giờ hẹn (giờ); 0 = tắt.</summary>
+    public int Reminder2Hours { get; set; } = 2;
+
     public DateTimeOffset CreatedAt { get; set; }
 
     public DateTimeOffset UpdatedAt { get; set; }
