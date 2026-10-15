@@ -194,7 +194,7 @@ Chủ dự án chốt: "AI phải tự nhắn chăm sóc khách như một nhân
 
 **Quyết định (chủ dự án chốt):**
 - Giọng văn mới `human` ("Như nhân viên thật"), **mặc định cho tenant mới**: chia 1–4 tin ngắn, đa dạng cách nói, đọc cảm xúc khách, emoji dễ thương tổng 0–3 mỗi lượt (không dùng khi khách bực/lo), từ đệm ("nè, nha, nhé") tối đa 1 lần mỗi tin, "nè" tối đa 1 lần mỗi lượt. Tenant cũ giữ giọng đã chọn (đổi ở trang Giọng văn).
-- AI trả `messages[]` thay cho `reply`. Mỗi phần tử là **một dòng `messages` và một tin Zalo riêng**, gửi cách nhau `Ai:BotMessageGapMs` (mặc định 1,2 giây). Tin đầu giữ `reply_to_message_id` (unique → không trả lời trùng), tin cuối giữ `ai_trace`. Câu báo trợ lý AI là tin riêng đứng đầu; câu nhắc thăm khám (ngành y) là tin riêng ở cuối. Kiểm tra câu cấm, giá không nguồn chạy trên toàn bộ các tin.
+- AI trả `messages[]` thay cho `reply`. Mỗi phần tử là **một dòng `messages` và một tin Zalo riêng**, gửi cách nhau `Ai:BotMessageGapMs` (mặc định 1,2 giây). Tin đầu giữ `reply_to_message_id` (unique → không trả lời trùng), tin cuối giữ `ai_trace`. Câu báo trợ lý AI nằm ở đầu tin đầu tiên (sửa 2026-10-15, xem mục cuối); câu nhắc thăm khám (ngành y) là tin riêng ở cuối. Kiểm tra câu cấm, giá không nguồn chạy trên toàn bộ các tin.
 - Xưng hô: bot xưng theo cài đặt DN ("em"). Khách: nhân viên chọn (anh/chị/cô/chú/bác) → giữ nguyên; khách tự xưng khi chat → AI báo `customer_salutation`, hệ thống lưu; chưa biết → **"mình"**. Cấm gọi trống tên và cấm "anh/chị". Áp dụng cho câu cố định của bot, câu chuyển tiếp (`{xung_ho}`) và tin bot tự chăm sóc. Bỏ trường `customerAddress` của mẫu ngành.
 
 **Lý do:** chủ dự án muốn bot nhắn như nhân viên chăm sóc khách hàng thật trên Zalo; "anh/chị" và gọi trống tên bị đánh giá là kém tự nhiên.
@@ -265,3 +265,26 @@ Chủ dự án chốt: "AI phải tự nhắn chăm sóc khách như một nhân
 - Khách cũ đã tự cho SĐT khi chat được điền dấu vân tay lúc nhập để khớp đúng người. Khách đang chat cho SĐT trùng khách nhập → gộp (nhật ký, cách gọi, đồng ý, nhãn, thông tin) vào hồ sơ đang chat, xóa bản nhập; chỉ trong cùng tenant; trùng với khách đang chat khác thì không gắn.
 
 **Hệ quả:** migration `ContactPhoneImport`. Chỉ nhận SĐT di động 10 số. Báo giá khi bot chủ động nhắn + gửi ZNS cho khách chỉ có SĐT: làm sau.
+
+## 2026-10-15 — Câu báo trợ lý AI gộp vào tin trả lời đầu tiên
+
+- Chủ dự án thấy tin riêng "Dạ em là …, trợ lý AI (trí tuệ nhân tạo) … 24/7" máy móc, muốn bỏ. Bỏ hẳn trái nguyên tắc mục 2.5/7 (luật bảo vệ người tiêu dùng, dữ liệu cá nhân, quy định AI, chính sách Zalo) → chủ dự án chọn **gộp**.
+- Tin đầu tiên của bot trong hội thoại: `Dạ {bot} là trợ lý AI của {DN} ạ. <câu trả lời>` (bỏ "Dạ/Vâng/Dạ vâng" mở đầu của câu trả lời để không lặp). DN có link chính sách → xuống dòng cuối tin đó: `Chính sách bảo mật của {DN}: <link>`.
+- Vẫn không tắt được; khách hỏi "có phải người thật không" bot vẫn nói thật là trợ lý AI (prompt quy tắc 11).
+
+## 2026-10-15 — Model chat chính: gemini-3.5-flash-lite (dev)
+
+- Đo thật: `gemini-3.8-flash` để suy nghĩ mặc định mất ~85 giây cho một câu ngắn (mức "low" ~19 giây) → vượt thời gian chờ 30 giây, thử lại 3 lần, khách đợi 1–2 phút. `gemini-3.5-flash-lite`: 1–3 giây, rẻ hơn ~2,5 lần.
+- Chủ dự án chốt: `Ai:ChatModel = gemini-3.5-flash-lite`, `Ai:ChatFallbackModel = gemini-3.8-flash`. Quá thời gian chờ **không thử lại** mà chuyển ngay sang model dự phòng (như 429/503).
+- Eval với flash-lite: câu thường + ngoài phạm vi 30/30, bịa giá 0, an toàn 23/24 lần đầu (S13 trượt do bộ chấm bắt cụm "hết u" trong câu phủ định "không cam kết làm hết u"; chạy lại 2 lần đều đạt).
+- Xem lại khi lên gói trả phí: so flash-lite với model lớn hơn (độ tự nhiên, xưng hô) và độ trễ.
+
+## 2026-10-15 — CRM C1: nền (chi nhánh, danh mục, nhân viên, quyền)
+
+- **Quyền chi tiết** lưu `memberships.permissions text[]` (mã chuỗi, danh sách ở `TenantPermissions`) + `memberships.branch_id`. Chủ DN luôn đủ quyền; nhân viên mặc định không có quyền thêm. `ITenantContext` có `Permissions`, `BranchId`, `Can()`; endpoint dùng `.RequirePermission(...)`. Thêm quyền mới không cần migration.
+- **Nhân viên (staff_members) tách khỏi tài khoản đăng nhập (memberships)**: kỹ thuật viên có thể không đăng nhập; gắn `user_id` khi cần. SĐT nhân viên mã hóa.
+- **Chi nhánh mặc định tạo lười** (lần đầu gọi API chi nhánh, hoặc khi super admin tạo DN) — tenant cũ không cần migration dữ liệu. Giờ mở cửa mặc định 8:00–20:00 mọi ngày.
+- **Danh mục bán (catalog_items) là nguồn sự thật về giá/thời lượng/số buổi**, đồng bộ hai chiều theo MÃ với kho kiến thức: nhập file → upsert danh mục (mục bị xóa → ngừng bán); sửa ở Danh mục → ghi ngược mục kiến thức + đánh chỉ mục lại, giữ cờ duyệt chuyên môn. Tenant cũ: danh mục tự tạo từ kho kiến thức lần đầu mở trang. Không đổi mã/loại sau khi tạo.
+- Thêm loại kiến thức **Sản phẩm** (sheet `Sản phẩm` / `products`) để bot tư vấn sản phẩm bán lẻ.
+- Giờ dạng chuỗi `HH:mm` / ngày `yyyy-MM-dd` trong API CRM (tránh phụ thuộc cách .NET serialize TimeOnly/DateOnly).
+- Entity CRM mới gán `Id = Guid.CreateVersion7()` ngay khi tạo (thêm nhiều dòng trong một SaveChanges không đụng khóa rỗng).

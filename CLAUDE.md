@@ -11,6 +11,8 @@
 
 Trợ lý AI chăm sóc khách hàng trên **Zalo Official Account (OA)**, cho doanh nghiệp **thuê theo tháng** (SaaS, multi-tenant).
 
+**Mở rộng (chủ dự án chốt 2026-10-15):** sản phẩm trở thành **CRM đầy đủ cho doanh nghiệp dịch vụ** (lịch hẹn, bán hàng, gói liệu trình, kho, nhân viên, báo cáo, nhiều chi nhánh) kết hợp AI chăm sóc khách. Kế hoạch và đợt làm: `docs/CRM-PLAN.md`; danh sách tính năng: `docs/CRM-FEATURES.md`. Quy tắc thêm: **AI chỉ đề xuất, hệ thống mới chốt** việc liên quan lịch và tiền.
+
 - Khách cuối nhắn tin vào Zalo OA của doanh nghiệp → bot trả lời 24/7 **dựa trên dữ liệu riêng** doanh nghiệp nạp vào (RAG).
 - Bot không chỉ trả lời mà còn **chủ động chăm sóc** qua flow: chào khách mới, nhắc lịch, hỏi thăm sau mua, xin đánh giá, kéo khách cũ.
 - Chủ doanh nghiệp và nhân viên dùng **trang quản trị web** để nạp dữ liệu, xem hội thoại, tiếp quản chat, xem khách tiềm năng và báo cáo.
@@ -128,6 +130,9 @@ C:\Zalo_Tool\
 │   ├── INDUSTRIES.md          # mẫu ngành, mức rủi ro, bộ an toàn y tế, quy trình mở ngành
 │   ├── PROGRESS.md            # tiến độ, cập nhật sau mỗi task
 │   ├── DECISIONS.md           # ghi lại quyết định kỹ thuật quan trọng
+│   ├── CRM-FEATURES.md        # danh sách tính năng CRM (đầy đủ, theo nhóm)
+│   ├── CRM-PLAN.md            # đợt C1–C8 của CRM, schema từng đợt
+│   ├── TEST-PLAN.md / TEST-FLOW.md  # checklist + kịch bản test tay
 │   └── zalo-api-notes.md      # ghi chú API Zalo đã kiểm chứng từ docs chính thức
 ├── .claude/skills/            # skills (mục 10) tách ra từ file này ở M1
 ├── ZaloAi.sln
@@ -441,6 +446,18 @@ Tiêu chí xong: DN dùng thử xem được lead và báo cáo tuần; nhân vi
 - Thanh toán tự động (QR chuyển khoản, cổng thanh toán), hóa đơn.
 - Zalo Mini App (đặt lịch, xem sản phẩm), PWA cho admin.
 - Kênh Facebook Messenger, chat website (adapter mới trong `src/ZaloAi.Channels`).
+
+### Giai đoạn CRM (chốt 2026-10-15, làm TRƯỚC tuần 7–8 và trước Giai đoạn 2/3)
+Thứ tự bắt buộc C1 → C8, chi tiết và schema ở `docs/CRM-PLAN.md`. Mỗi đợt: kế hoạch → duyệt → code → test → chủ dự án test tay.
+- [x] C1 Nền CRM: chi nhánh, danh mục (dịch vụ/gói/sản phẩm ↔ kho kiến thức), nhân viên + ca làm, quyền chi tiết. (2026-10-15)
+- [ ] C2 Lịch hẹn: lịch theo nhân viên/giường, đặt tay, bot tự chốt/đổi/hủy (hệ thống kiểm tra chỗ), nhắc lịch, check-in, tóm tắt khách, định kỳ, hàng chờ.
+- [ ] C3 Bán hàng & gói: hóa đơn, giảm giá có duyệt, thanh toán + VietQR, phiếu thu qua Zalo, gói trừ buổi, thẻ trả trước, voucher, cọc, chốt ca.
+- [ ] C4 Kho hàng: tồn kho theo chi nhánh, nhập/xuất/kiểm kê/chuyển, định mức vật tư, cảnh báo.
+- [ ] C5 Nhân viên nâng cao: hoa hồng, hiệu suất, chấm công.
+- [ ] C6 Báo cáo: hôm nay, doanh thu đủ chiều, hiệu quả AI, lấp đầy, giữ chân, công nợ, báo cáo tuần, hỏi số liệu tiếng Việt.
+- [ ] C7 AI dùng CRM: chăm sóc sau buổi theo hóa đơn, khảo sát, gói sắp hết, kéo khách, sinh nhật, giới thiệu, báo giá chủ động.
+- [ ] C8 Trải nghiệm: PWA + push, đặt lịch online, hạng thành viên, ảnh trước/sau, phiếu cam kết.
+Các tính năng GĐ2/GĐ3 trùng với CRM (đặt lịch, nhắc lịch, sinh nhật, kéo khách, nhiều nhân viên) được làm trong CRM.
 
 ---
 
