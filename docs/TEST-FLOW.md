@@ -524,6 +524,24 @@ Chuyển 5 chai tinh dầu sang chi nhánh Q12 → Q12 tồn 5, CN1 tồn 15. Ki
 ### 10.5 Quyền
 Nhân viên không có "Quản lý kho": xem được tồn, không nhập/điều chỉnh được.
 
+## Buổi 11 — CRM C5: hoa hồng, chấm công, hiệu suất (≈ 20 phút)
+Chuẩn bị: Nhân viên → Lan gắn tài khoản `nhanvien1@khoahochuyetdao.local`.
+
+### 11.1 Quy tắc hoa hồng
+💻 Nhân viên → tab **Hoa hồng** → thêm quy tắc chung: Dịch vụ 10%; quy tắc riêng Lan: Dịch vụ 20%; Gói: 50.000/buổi.
+
+### 11.2 Phát sinh & thu hồi
+Bán hàng → hóa đơn trị liệu 550.000, người thực hiện Lan → thu đủ → Hoa hồng tháng này của Lan = 110.000. Hóa đơn khác, người thực hiện Mai → 55.000. Hủy hóa đơn của Mai → bảng hoa hồng Mai về 0.
+
+### 11.3 Gói theo buổi
+Hóa đơn "Dùng buổi gói" cho khách có gói, người thực hiện Lan → Chốt (0 đ) → Lan +50.000.
+
+### 11.4 Chấm công
+Tab ẩn danh nhân viên (Lan) → góc trên "Vào ca" → bấm lần 2 báo đang trong ca → "Ra ca". Chủ: Chấm công → ghi hộ cho Mai, sửa giờ.
+
+### 11.5 Hiệu suất & quyền
+Chủ: Nhân viên → tab **Hiệu suất** (khoảng 30 ngày): Lan có lịch hoàn thành, doanh thu, hoa hồng, giờ làm. Nhân viên Lan chỉ thấy dòng của mình; đánh dấu "Đã trả" (chủ) → cột Đã trả cập nhật.
+
 ---
 
 ## Mẫu báo kết quả (chép, điền, gửi Claude)

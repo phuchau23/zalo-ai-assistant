@@ -322,3 +322,9 @@ Chủ dự án chốt: "AI phải tự nhắn chăm sóc khách như một nhân
 - **Giá vốn bình quân gia quyền** cập nhật mỗi phiếu nhập (tồn âm → lấy giá nhập mới); chuyển kho mang theo giá vốn chi nhánh gửi.
 - **Trừ kho tự động**: hóa đơn thu đủ → trừ sản phẩm; **vật tư theo định mức dịch vụ** (`service_consumables`) trừ khi **hoàn thành lịch hẹn** (idempotent theo lịch); hóa đơn dịch vụ không gắn lịch (bán lẻ tại quầy) → trừ vật tư lúc thu đủ. Hủy hóa đơn → trả lại đúng các dòng đã trừ bởi hóa đơn đó.
 - Phiếu nhập (nháp → nhận / hủy, số tăng dần theo tenant), chuyển kho (hai dòng ra/vào), kiểm kê (đếm thực tế → dòng điều chỉnh chênh lệch), mức tối thiểu → `lowOnly` cho cảnh báo. Ghi: quyền `manage_inventory`; xem: mọi thành viên (giới hạn chi nhánh).
+
+## 2026-10-15 — CRM C5: hoa hồng, chấm công, hiệu suất
+
+- **Quy tắc hoa hồng** theo (nhân viên hoặc chung) × (mọi mục / dịch vụ / gói / sản phẩm / mục cụ thể), % hoặc số tiền cố định; ưu tiên cụ thể hơn thắng (`CommissionService.Resolve`, có test). Khoản phát sinh khi **hóa đơn thu đủ** (dòng có người thực hiện, cơ sở = doanh thu dòng sau chia giảm giá) và khi **dùng buổi gói** (người làm buổi, cơ sở = giá gói / số buổi). Hủy hóa đơn → thu hồi (`reverted_at`). Kỳ `yyyy-MM` giờ DN; "đánh dấu đã trả" theo nhân viên + kỳ (quyền view_company_revenue).
+- **Chấm công**: tài khoản gắn hồ sơ nhân viên tự vào/ra ca (một ca mở/người); quản lý (manage_staff) chấm/sửa hộ (ghi `source = manager` + audit).
+- **Hiệu suất** theo khoảng thời gian: lịch hoàn thành, không đến, doanh thu ghi nhận cho người thực hiện, hoa hồng, số khách, khách quay lại (đã làm với người đó trước kỳ), giờ chấm công. Nhân viên không có `view_company_revenue`/`manage_staff` chỉ xem chính mình (tài khoản phải gắn nhân viên).

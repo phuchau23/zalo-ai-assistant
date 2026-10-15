@@ -453,7 +453,7 @@ Thứ tự bắt buộc C1 → C8, chi tiết và schema ở `docs/CRM-PLAN.md`.
 - [x] C2 Lịch hẹn: lịch theo nhân viên/giường, đặt tay, bot tự chốt/đổi/hủy (hệ thống kiểm tra chỗ), nhắc lịch, check-in, tóm tắt khách, định kỳ, hàng chờ. (2026-10-15)
 - [x] C3 Bán hàng & gói: hóa đơn, giảm giá có duyệt, thanh toán + VietQR, phiếu thu qua Zalo, gói trừ buổi, thẻ trả trước, voucher, chốt ca. (2026-10-15; cọc giữ chỗ → C8 cùng trang đặt lịch online)
 - [x] C4 Kho hàng: tồn kho theo chi nhánh, nhập/xuất/kiểm kê/chuyển, định mức vật tư, cảnh báo. (2026-10-15)
-- [ ] C5 Nhân viên nâng cao: hoa hồng, hiệu suất, chấm công.
+- [x] C5 Nhân viên nâng cao: hoa hồng, hiệu suất, chấm công. (2026-10-15)
 - [ ] C6 Báo cáo: hôm nay, doanh thu đủ chiều, hiệu quả AI, lấp đầy, giữ chân, công nợ, báo cáo tuần, hỏi số liệu tiếng Việt.
 - [ ] C7 AI dùng CRM: chăm sóc sau buổi theo hóa đơn, khảo sát, gói sắp hết, kéo khách, sinh nhật, giới thiệu, báo giá chủ động.
 - [ ] C8 Trải nghiệm: PWA + push, đặt lịch online, hạng thành viên, ảnh trước/sau, phiếu cam kết.
