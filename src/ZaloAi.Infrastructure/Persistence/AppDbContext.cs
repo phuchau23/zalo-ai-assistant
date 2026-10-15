@@ -52,6 +52,31 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
 
     public DbSet<CareSuggestion> CareSuggestions => Set<CareSuggestion>();
 
+    // CRM C1
+    public DbSet<Branch> Branches => Set<Branch>();
+
+    public DbSet<BranchHour> BranchHours => Set<BranchHour>();
+
+    public DbSet<BranchClosure> BranchClosures => Set<BranchClosure>();
+
+    public DbSet<CatalogItem> CatalogItems => Set<CatalogItem>();
+
+    public DbSet<CatalogItemBranch> CatalogItemBranches => Set<CatalogItemBranch>();
+
+    public DbSet<PackageContent> PackageContents => Set<PackageContent>();
+
+    public DbSet<StaffMember> StaffMembers => Set<StaffMember>();
+
+    public DbSet<StaffSkill> StaffSkills => Set<StaffSkill>();
+
+    public DbSet<StaffShiftTemplate> StaffShiftTemplates => Set<StaffShiftTemplate>();
+
+    public DbSet<StaffShift> StaffShifts => Set<StaffShift>();
+
+    public DbSet<StaffTimeOff> StaffTimeOffs => Set<StaffTimeOff>();
+
+    public DbSet<CrmSettings> CrmSettings => Set<CrmSettings>();
+
     /// <summary>EF đọc lại giá trị này mỗi lần truy vấn (tham số hóa theo instance DbContext).</summary>
     public Guid? CurrentTenantId => tenantContext.TenantId;
 
