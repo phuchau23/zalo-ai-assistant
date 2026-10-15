@@ -542,6 +542,24 @@ Tab ẩn danh nhân viên (Lan) → góc trên "Vào ca" → bấm lần 2 báo 
 ### 11.5 Hiệu suất & quyền
 Chủ: Nhân viên → tab **Hiệu suất** (khoảng 30 ngày): Lan có lịch hoàn thành, doanh thu, hoa hồng, giờ làm. Nhân viên Lan chỉ thấy dòng của mình; đánh dấu "Đã trả" (chủ) → cột Đã trả cập nhật.
 
+## Buổi 12 — CRM C6: báo cáo (≈ 15 phút)
+Làm sau Buổi 9–11 (đã có hóa đơn, lịch).
+
+### 12.1 Hôm nay
+💻 **Báo cáo** → Hôm nay: số lịch / hoàn thành / không đến, doanh thu, tiền mặt, chuyển khoản, hóa đơn còn nợ khớp với những gì đã làm trong ngày.
+
+### 12.2 Doanh thu
+Tab Doanh thu, 30 ngày, theo ngày → tổng khớp tổng các hóa đơn đã thu (trừ hoàn). Đổi "theo tuần" / "theo tháng". Xem theo dịch vụ, nhân viên, nguồn khách ("Bot Zalo chốt" nếu có lịch bot), hình thức thanh toán. Bấm **Xuất Excel** → file mở được, sheet "Theo dịch vụ" đúng.
+
+### 12.3 Hiệu quả AI, Lấp đầy, Khách, Công nợ
+Mỗi tab mở không lỗi; Công nợ liệt kê hóa đơn còn nợ (Buổi 9.2) và buổi gói chưa dùng.
+
+### 12.4 Hỏi bằng tiếng Việt
+Ô "Hỏi số liệu": `Tháng này dịch vụ nào bán chạy nhất?` → câu trả lời nêu đúng dịch vụ và số tiền như tab Doanh thu. Hỏi `Thời tiết hôm nay thế nào?` → báo không thuộc báo cáo.
+
+### 12.5 Báo cáo tuần
+Nếu đã kết nối Telegram: Cài đặt → bấm "Gửi thử báo cáo tuần" (nếu có) hoặc đợi 08:00 thứ 2 → nhóm Telegram nhận tóm tắt.
+
 ---
 
 ## Mẫu báo kết quả (chép, điền, gửi Claude)
