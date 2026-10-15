@@ -153,6 +153,7 @@ internal static class ApiSetup
         app.MapStaffEndpoints();
         app.MapCrmSettingsEndpoints();
         app.MapAppointmentEndpoints();
+        app.MapBillingEndpoints();
 
         app.MapHangfireDashboard("/hangfire", new DashboardOptions
         {

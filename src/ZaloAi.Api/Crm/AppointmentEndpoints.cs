@@ -303,9 +303,20 @@ internal static class AppointmentEndpoints
         return TypedResults.NoContent();
     }
 
-    private static async Task<NoContent> SetStatusAsync(Guid appointmentId, SetAppointmentStatusRequest request, ITenantContext tenant, AppointmentService appointments, CancellationToken cancellationToken)
+    /// <summary>Hoàn thành mà chưa có hóa đơn → tự trừ buổi gói cho dịch vụ gói còn bao (C3); phần còn lại lễ tân tạo hóa đơn.</summary>
+    private static async Task<NoContent> SetStatusAsync(
+        Guid appointmentId, SetAppointmentStatusRequest request, ITenantContext tenant, AppointmentService appointments,
+        ZaloAi.Infrastructure.Billing.PackageService packages, CancellationToken cancellationToken)
     {
-        await appointments.SetStatusAsync(tenant.RequireTenantId(), appointmentId, ParseStatus(request.Status)!.Value, Actor.Staff(tenant.UserId), cancellationToken);
+        var tenantId = tenant.RequireTenantId();
+        var status = ParseStatus(request.Status)!.Value;
+        var appointment = await appointments.SetStatusAsync(tenantId, appointmentId, status, Actor.Staff(tenant.UserId), cancellationToken);
+        if (status == AppointmentStatus.Done)
+        {
+            await packages.AutoRedeemForAppointmentAsync(tenantId, appointment, AppointmentResponse.Snake(appointment.Source), cancellationToken);
+            await appointments.SaveChangesAsync(cancellationToken);
+        }
+
         return TypedResults.NoContent();
     }
 
