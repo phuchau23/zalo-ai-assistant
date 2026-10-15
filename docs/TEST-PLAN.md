@@ -1,11 +1,11 @@
 # Kế hoạch test bằng tay (cập nhật 2026-10-14)
 
-Cách dùng: làm lần lượt từng buổi; mỗi dòng đạt thì đổi `[ ]` thành `[x]`. Chưa đạt → ghi chú ngắn ngay dưới dòng đó + chụp màn hình gửi Claude.
+Kịch bản chi tiết từng bước + câu để chép: [TEST-FLOW.md](TEST-FLOW.md). Cách dùng: làm lần lượt từng buổi; mỗi dòng đạt thì đổi `[ ]` thành `[x]`. Chưa đạt → ghi chú ngắn ngay dưới dòng đó + chụp màn hình gửi Claude.
 
 **Chuẩn bị mỗi buổi**
 - Chạy `.\stop` rồi `.\dev` → phải có đủ 3 cửa sổ API, Worker, Portal (thiếu Worker là bot không trả lời).
 - Tài khoản (mật khẩu `Dev@123456`): chủ DN `owner@khoahochuyetdao.local` · super admin `admin@zaloai.local`. Lần đầu sau bản cập nhật này mọi người phải đăng nhập lại.
-- "Khách" = trang điện thoại http://localhost:3000/phone-test (hoặc trên điện thoại cùng Wi-Fi: http://192.168.100.192:3000/phone-test). Mỗi kịch bản bấm nút bút ✎ để mở **cuộc chat mới** (= khách mới).
+- "Khách" = trang điện thoại http://localhost:3000/phone-test (hoặc trên điện thoại cùng Wi-Fi: `http://<IP máy>:3000/phone-test` — IP máy đổi theo mạng, xem bằng `ipconfig` dòng "IPv4 Address" của Wi-Fi; 2026-10-15 là 192.168.100.191). Mỗi kịch bản bấm nút bút ✎ để mở **cuộc chat mới** (= khách mới).
 - Nên test trong 8:00–20:00 (giờ bot được chủ động nhắn).
 
 ---
@@ -13,7 +13,7 @@ Cách dùng: làm lần lượt từng buổi; mỗi dòng đạt thì đổi `[
 ## Buổi 1 — Bot trả lời khách (≈ 30 phút)
 Trước khi bắt đầu: Chat thử → Giọng văn → chọn "Như nhân viên thật" → Lưu.
 
-- [ ] 1.1 Hỏi giá: "gói bấm huyệt giá bao nhiêu" → tin đầu báo là trợ lý AI (tin riêng), sau đó 2–4 tin ngắn hiện lần lượt, giá ĐÚNG như kho kiến thức.
+- [ ] 1.1 Hỏi giá: "gói bấm huyệt giá bao nhiêu" → tin đầu mở bằng "Dạ em là trợ lý AI của … ạ." rồi trả lời luôn (không còn tin riêng), tổng 1–4 tin ngắn hiện lần lượt, giá ĐÚNG như kho kiến thức.
 - [ ] 1.2 Xưng hô: bot gọi "mình", không có "anh/chị", không gọi trống tên.
 - [ ] 1.3 Nhắn "chị muốn đặt lịch chiều mai" → từ đó bot gọi "chị".
 - [ ] 1.4 Giọng văn: emoji 0–3 cái, không lặp "nè", câu tự nhiên, không máy móc.
