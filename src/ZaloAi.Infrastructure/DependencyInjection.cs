@@ -145,6 +145,9 @@ public static class DependencyInjection
         services.AddScoped<Billing.ReceiptService>();
         services.AddScoped<PackageExpiryJob>();
 
+        // CRM C4
+        services.AddScoped<Inventory.InventoryService>();
+
         services.AddScoped<KnowledgeImportService>();
         services.AddScoped<KnowledgeIndexer>();
         services.AddScoped<IKnowledgeSearch, KnowledgeSearchService>();

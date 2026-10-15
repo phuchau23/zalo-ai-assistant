@@ -306,7 +306,7 @@ internal static class AppointmentEndpoints
     /// <summary>Hoàn thành mà chưa có hóa đơn → tự trừ buổi gói cho dịch vụ gói còn bao (C3); phần còn lại lễ tân tạo hóa đơn.</summary>
     private static async Task<NoContent> SetStatusAsync(
         Guid appointmentId, SetAppointmentStatusRequest request, ITenantContext tenant, AppointmentService appointments,
-        ZaloAi.Infrastructure.Billing.PackageService packages, CancellationToken cancellationToken)
+        ZaloAi.Infrastructure.Billing.PackageService packages, ZaloAi.Infrastructure.Inventory.InventoryService inventory, CancellationToken cancellationToken)
     {
         var tenantId = tenant.RequireTenantId();
         var status = ParseStatus(request.Status)!.Value;
@@ -314,6 +314,7 @@ internal static class AppointmentEndpoints
         if (status == AppointmentStatus.Done)
         {
             await packages.AutoRedeemForAppointmentAsync(tenantId, appointment, AppointmentResponse.Snake(appointment.Source), cancellationToken);
+            await inventory.OnAppointmentDoneAsync(tenantId, appointment, cancellationToken); // vật tư theo định mức (C4)
             await appointments.SaveChangesAsync(cancellationToken);
         }
 

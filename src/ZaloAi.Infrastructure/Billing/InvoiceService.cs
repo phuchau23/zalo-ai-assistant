@@ -39,6 +39,7 @@ public sealed class InvoiceService(
     CrmSettingsRepository settingsRepository,
     PackageService packages,
     WalletService wallets,
+    ZaloAi.Infrastructure.Inventory.InventoryService inventory,
     IFieldEncryptor encryptor,
     TimeProvider time) : TenantScopedRepository(db, tenantContext)
 {
@@ -584,6 +585,9 @@ public sealed class InvoiceService(
         {
             await Db.Vouchers.Where(v => v.TenantId == tenantId && v.Id == voucherId).ExecuteUpdateAsync(s => s.SetProperty(v => v.UsedCount, v => v.UsedCount + 1), cancellationToken);
         }
+
+        // Kho (C4): trừ sản phẩm; hóa đơn không gắn lịch hẹn thì trừ cả vật tư dịch vụ (có lịch → trừ khi hoàn thành lịch).
+        await inventory.OnInvoiceSettledAsync(tenantId, invoice.Id, invoice.BranchId, consumeServices: invoice.AppointmentId is null, cancellationToken);
     }
 
     private async Task UnsettleAsync(Guid tenantId, Invoice invoice, CancellationToken cancellationToken)
@@ -612,6 +616,7 @@ public sealed class InvoiceService(
         }
 
         await packages.RevertForInvoiceAsync(tenantId, invoice.Id, cancellationToken);
+        await inventory.OnInvoiceVoidedAsync(tenantId, invoice.Id, cancellationToken);
     }
 
     private async Task<string?> SourceAsync(Guid tenantId, Invoice invoice, CancellationToken cancellationToken)
