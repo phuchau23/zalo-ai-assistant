@@ -315,3 +315,10 @@ Chủ dự án chốt: "AI phải tự nhắn chăm sóc khách như một nhân
 - **VietQR**: tài khoản ngân hàng theo DN/chi nhánh (số tài khoản mã hóa, chỉ chủ quản lý); payload EMVCo + CRC tự sinh (`VietQr`), ảnh PNG bằng **QRCoder 1.8.1** (MIT, thuần .NET) — thư viện mới duy nhất của C3, chủ dự án có thể veto. Nội dung chuyển khoản = `HD000123`. Chưa tự đối soát biến động số dư (chờ đối tác).
 - **Phiếu thu** gửi khách dạng chữ qua hội thoại gần nhất (Zalo/chat thử) nếu còn hạn nhắn; khách chỉ có SĐT thì không gửi.
 - `revenue_entries.source` (bot | staff | walk_in | online) lấy từ lịch hẹn gắn hóa đơn → báo cáo "doanh thu bot mang về" (C6).
+
+## 2026-10-15 — CRM C4: kho hàng
+
+- **Tồn kho theo chi nhánh** cho sản phẩm có bật "theo dõi tồn kho"; mọi thay đổi là một dòng `stock_movements` có số dư sau, không sửa/xóa (đối soát). Tồn **được phép âm** (bán trước nhập sau) — trang kho cảnh báo thay vì chặn bán.
+- **Giá vốn bình quân gia quyền** cập nhật mỗi phiếu nhập (tồn âm → lấy giá nhập mới); chuyển kho mang theo giá vốn chi nhánh gửi.
+- **Trừ kho tự động**: hóa đơn thu đủ → trừ sản phẩm; **vật tư theo định mức dịch vụ** (`service_consumables`) trừ khi **hoàn thành lịch hẹn** (idempotent theo lịch); hóa đơn dịch vụ không gắn lịch (bán lẻ tại quầy) → trừ vật tư lúc thu đủ. Hủy hóa đơn → trả lại đúng các dòng đã trừ bởi hóa đơn đó.
+- Phiếu nhập (nháp → nhận / hủy, số tăng dần theo tenant), chuyển kho (hai dòng ra/vào), kiểm kê (đếm thực tế → dòng điều chỉnh chênh lệch), mức tối thiểu → `lowOnly` cho cảnh báo. Ghi: quyền `manage_inventory`; xem: mọi thành viên (giới hạn chi nhánh).

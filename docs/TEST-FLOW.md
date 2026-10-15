@@ -505,6 +505,25 @@ Hóa đơn của khách CHAT THỬ (đã nhắn trước đó) → **Gửi phi�
 ### 9.10 Hoàn tiền
 Hóa đơn đã thu → **Hoàn tiền** `100000` tiền mặt lý do `khách không hài lòng` → trạng thái "Đã hoàn"; báo cáo doanh thu (C6) trừ đúng.
 
+## Buổi 10 — CRM C4: kho hàng (≈ 20 phút)
+Chuẩn bị: Danh mục → Sản phẩm: "Tinh dầu tràm 50ml" bật **Theo dõi tồn kho**; thêm sản phẩm `Dầu massage 1L` (đơn vị chai, giá 300.000, bật theo dõi).
+
+### 10.1 Nhập hàng + giá vốn
+💻 **Kho** → Nhập hàng: 10 chai tinh dầu @100.000 → Nhận; nhập tiếp 10 chai @120.000 → Nhận.
+**Đúng khi:** tồn 20, giá vốn bình quân 110.000.
+
+### 10.2 Bán trừ kho, hủy trả kho
+Bán hàng → hóa đơn 3 chai tinh dầu → thu đủ → Kho: tồn 17. Hủy hóa đơn đó → tồn 20. Lịch sử kho có dòng "Bán" và "Trả lại".
+
+### 10.3 Định mức vật tư
+Kho → Định mức → dịch vụ "Trị liệu cổ vai gáy 60 phút" dùng `0.05` chai Dầu massage 1L. Nhập 2 chai dầu. Lịch hẹn → Hoàn thành một lịch trị liệu → Kho: dầu còn 1.95.
+
+### 10.4 Chuyển kho, kiểm kê, cảnh báo
+Chuyển 5 chai tinh dầu sang chi nhánh Q12 → Q12 tồn 5, CN1 tồn 15. Kiểm kê Q12 đếm 4 → tồn 4, có dòng điều chỉnh −1. Đặt mức tối thiểu Q12 = 5 → bộ lọc "Sắp hết" hiện tinh dầu Q12.
+
+### 10.5 Quyền
+Nhân viên không có "Quản lý kho": xem được tồn, không nhập/điều chỉnh được.
+
 ---
 
 ## Mẫu báo kết quả (chép, điền, gửi Claude)
