@@ -2347,6 +2347,120 @@ namespace ZaloAi.Infrastructure.Persistence.Migrations
                     b.ToTable("payments", (string)null);
                 });
 
+            modelBuilder.Entity("ZaloAi.Core.Entities.PurchaseOrder", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("BranchId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("branch_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by_user_id");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("note");
+
+                    b.Property<int>("Number")
+                        .HasColumnType("integer")
+                        .HasColumnName("number");
+
+                    b.Property<DateTimeOffset?>("ReceivedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("received_at");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<Guid?>("SupplierId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("supplier_id");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<long>("Total")
+                        .HasColumnType("bigint")
+                        .HasColumnName("total");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_purchase_orders");
+
+                    b.HasIndex("BranchId")
+                        .HasDatabaseName("ix_purchase_orders_branch_id");
+
+                    b.HasIndex("SupplierId")
+                        .HasDatabaseName("ix_purchase_orders_supplier_id");
+
+                    b.HasIndex("TenantId", "Number")
+                        .IsUnique()
+                        .HasDatabaseName("ix_purchase_orders_tenant_id_number");
+
+                    b.HasIndex("TenantId", "BranchId", "CreatedAt")
+                        .HasDatabaseName("ix_purchase_orders_tenant_id_branch_id_created_at");
+
+                    b.ToTable("purchase_orders", (string)null);
+                });
+
+            modelBuilder.Entity("ZaloAi.Core.Entities.PurchaseOrderLine", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("CatalogItemId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("catalog_item_id");
+
+                    b.Property<Guid>("PurchaseOrderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("purchase_order_id");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(14, 3)
+                        .HasColumnType("numeric(14,3)")
+                        .HasColumnName("quantity");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<long>("UnitCost")
+                        .HasColumnType("bigint")
+                        .HasColumnName("unit_cost");
+
+                    b.HasKey("Id")
+                        .HasName("pk_purchase_order_lines");
+
+                    b.HasIndex("CatalogItemId")
+                        .HasDatabaseName("ix_purchase_order_lines_catalog_item_id");
+
+                    b.HasIndex("PurchaseOrderId")
+                        .HasDatabaseName("ix_purchase_order_lines_purchase_order_id");
+
+                    b.HasIndex("TenantId", "PurchaseOrderId")
+                        .HasDatabaseName("ix_purchase_order_lines_tenant_id_purchase_order_id");
+
+                    b.ToTable("purchase_order_lines", (string)null);
+                });
+
             modelBuilder.Entity("ZaloAi.Core.Entities.Resource", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2478,6 +2592,45 @@ namespace ZaloAi.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_revenue_entries_tenant_id_branch_id_date");
 
                     b.ToTable("revenue_entries", (string)null);
+                });
+
+            modelBuilder.Entity("ZaloAi.Core.Entities.ServiceConsumable", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("product_id");
+
+                    b.Property<decimal>("QuantityPerSession")
+                        .HasPrecision(14, 3)
+                        .HasColumnType("numeric(14,3)")
+                        .HasColumnName("quantity_per_session");
+
+                    b.Property<Guid>("ServiceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("service_id");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_service_consumables");
+
+                    b.HasIndex("ProductId")
+                        .HasDatabaseName("ix_service_consumables_product_id");
+
+                    b.HasIndex("ServiceId")
+                        .HasDatabaseName("ix_service_consumables_service_id");
+
+                    b.HasIndex("TenantId", "ServiceId", "ProductId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_service_consumables_tenant_id_service_id_product_id");
+
+                    b.ToTable("service_consumables", (string)null);
                 });
 
             modelBuilder.Entity("ZaloAi.Core.Entities.StaffMember", b =>
@@ -2716,6 +2869,363 @@ namespace ZaloAi.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_staff_time_off_tenant_id_staff_member_id_from_at");
 
                     b.ToTable("staff_time_off", (string)null);
+                });
+
+            modelBuilder.Entity("ZaloAi.Core.Entities.StockCount", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("AppliedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("applied_at");
+
+                    b.Property<Guid>("BranchId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("branch_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by_user_id");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("note");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_stock_counts");
+
+                    b.HasIndex("BranchId")
+                        .HasDatabaseName("ix_stock_counts_branch_id");
+
+                    b.HasIndex("TenantId", "BranchId", "CreatedAt")
+                        .HasDatabaseName("ix_stock_counts_tenant_id_branch_id_created_at");
+
+                    b.ToTable("stock_counts", (string)null);
+                });
+
+            modelBuilder.Entity("ZaloAi.Core.Entities.StockCountLine", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("CatalogItemId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("catalog_item_id");
+
+                    b.Property<decimal>("CountedQuantity")
+                        .HasPrecision(14, 3)
+                        .HasColumnType("numeric(14,3)")
+                        .HasColumnName("counted_quantity");
+
+                    b.Property<decimal>("ExpectedQuantity")
+                        .HasPrecision(14, 3)
+                        .HasColumnType("numeric(14,3)")
+                        .HasColumnName("expected_quantity");
+
+                    b.Property<Guid>("StockCountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("stock_count_id");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_stock_count_lines");
+
+                    b.HasIndex("CatalogItemId")
+                        .HasDatabaseName("ix_stock_count_lines_catalog_item_id");
+
+                    b.HasIndex("StockCountId")
+                        .HasDatabaseName("ix_stock_count_lines_stock_count_id");
+
+                    b.HasIndex("TenantId", "StockCountId")
+                        .HasDatabaseName("ix_stock_count_lines_tenant_id_stock_count_id");
+
+                    b.ToTable("stock_count_lines", (string)null);
+                });
+
+            modelBuilder.Entity("ZaloAi.Core.Entities.StockLevel", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<long>("AvgCost")
+                        .HasColumnType("bigint")
+                        .HasColumnName("avg_cost");
+
+                    b.Property<Guid>("BranchId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("branch_id");
+
+                    b.Property<Guid>("CatalogItemId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("catalog_item_id");
+
+                    b.Property<decimal?>("MinQuantity")
+                        .HasPrecision(14, 3)
+                        .HasColumnType("numeric(14,3)")
+                        .HasColumnName("min_quantity");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(14, 3)
+                        .HasColumnType("numeric(14,3)")
+                        .HasColumnName("quantity");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_stock_levels");
+
+                    b.HasIndex("BranchId")
+                        .HasDatabaseName("ix_stock_levels_branch_id");
+
+                    b.HasIndex("CatalogItemId")
+                        .HasDatabaseName("ix_stock_levels_catalog_item_id");
+
+                    b.HasIndex("TenantId", "BranchId", "CatalogItemId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_stock_levels_tenant_id_branch_id_catalog_item_id");
+
+                    b.ToTable("stock_levels", (string)null);
+                });
+
+            modelBuilder.Entity("ZaloAi.Core.Entities.StockMovement", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("At")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("at");
+
+                    b.Property<decimal>("BalanceAfter")
+                        .HasPrecision(14, 3)
+                        .HasColumnType("numeric(14,3)")
+                        .HasColumnName("balance_after");
+
+                    b.Property<Guid>("BranchId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("branch_id");
+
+                    b.Property<Guid?>("ByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("by_user_id");
+
+                    b.Property<Guid>("CatalogItemId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("catalog_item_id");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("note");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(14, 3)
+                        .HasColumnType("numeric(14,3)")
+                        .HasColumnName("quantity");
+
+                    b.Property<Guid?>("RefId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("ref_id");
+
+                    b.Property<string>("RefType")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("ref_type");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<long?>("UnitCost")
+                        .HasColumnType("bigint")
+                        .HasColumnName("unit_cost");
+
+                    b.HasKey("Id")
+                        .HasName("pk_stock_movements");
+
+                    b.HasIndex("BranchId")
+                        .HasDatabaseName("ix_stock_movements_branch_id");
+
+                    b.HasIndex("CatalogItemId")
+                        .HasDatabaseName("ix_stock_movements_catalog_item_id");
+
+                    b.HasIndex("TenantId", "RefType", "RefId")
+                        .HasDatabaseName("ix_stock_movements_tenant_id_ref_type_ref_id");
+
+                    b.HasIndex("TenantId", "BranchId", "CatalogItemId", "At")
+                        .HasDatabaseName("ix_stock_movements_tenant_id_branch_id_catalog_item_id_at");
+
+                    b.ToTable("stock_movements", (string)null);
+                });
+
+            modelBuilder.Entity("ZaloAi.Core.Entities.StockTransfer", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("At")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("at");
+
+                    b.Property<Guid?>("ByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("by_user_id");
+
+                    b.Property<Guid>("FromBranchId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("from_branch_id");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("note");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<Guid>("ToBranchId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("to_branch_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_stock_transfers");
+
+                    b.HasIndex("FromBranchId")
+                        .HasDatabaseName("ix_stock_transfers_from_branch_id");
+
+                    b.HasIndex("ToBranchId")
+                        .HasDatabaseName("ix_stock_transfers_to_branch_id");
+
+                    b.HasIndex("TenantId", "At")
+                        .HasDatabaseName("ix_stock_transfers_tenant_id_at");
+
+                    b.ToTable("stock_transfers", (string)null);
+                });
+
+            modelBuilder.Entity("ZaloAi.Core.Entities.StockTransferLine", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("CatalogItemId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("catalog_item_id");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(14, 3)
+                        .HasColumnType("numeric(14,3)")
+                        .HasColumnName("quantity");
+
+                    b.Property<Guid>("StockTransferId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("stock_transfer_id");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_stock_transfer_lines");
+
+                    b.HasIndex("CatalogItemId")
+                        .HasDatabaseName("ix_stock_transfer_lines_catalog_item_id");
+
+                    b.HasIndex("StockTransferId")
+                        .HasDatabaseName("ix_stock_transfer_lines_stock_transfer_id");
+
+                    b.HasIndex("TenantId", "StockTransferId")
+                        .HasDatabaseName("ix_stock_transfer_lines_tenant_id_stock_transfer_id");
+
+                    b.ToTable("stock_transfer_lines", (string)null);
+                });
+
+            modelBuilder.Entity("ZaloAi.Core.Entities.Supplier", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("note");
+
+                    b.Property<string>("Phone")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("phone");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_suppliers");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_suppliers_tenant_id");
+
+                    b.ToTable("suppliers", (string)null);
                 });
 
             modelBuilder.Entity("ZaloAi.Core.Entities.Tenant", b =>
@@ -3883,6 +4393,53 @@ namespace ZaloAi.Infrastructure.Persistence.Migrations
                         .HasConstraintName("fk_payments_tenants_tenant_id");
                 });
 
+            modelBuilder.Entity("ZaloAi.Core.Entities.PurchaseOrder", b =>
+                {
+                    b.HasOne("ZaloAi.Core.Entities.Branch", null)
+                        .WithMany()
+                        .HasForeignKey("BranchId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_purchase_orders_branches_branch_id");
+
+                    b.HasOne("ZaloAi.Core.Entities.Supplier", null)
+                        .WithMany()
+                        .HasForeignKey("SupplierId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_purchase_orders_suppliers_supplier_id");
+
+                    b.HasOne("ZaloAi.Core.Entities.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_purchase_orders_tenants_tenant_id");
+                });
+
+            modelBuilder.Entity("ZaloAi.Core.Entities.PurchaseOrderLine", b =>
+                {
+                    b.HasOne("ZaloAi.Core.Entities.CatalogItem", null)
+                        .WithMany()
+                        .HasForeignKey("CatalogItemId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_purchase_order_lines_catalog_items_catalog_item_id");
+
+                    b.HasOne("ZaloAi.Core.Entities.PurchaseOrder", null)
+                        .WithMany()
+                        .HasForeignKey("PurchaseOrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_purchase_order_lines_purchase_orders_purchase_order_id");
+
+                    b.HasOne("ZaloAi.Core.Entities.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_purchase_order_lines_tenants_tenant_id");
+                });
+
             modelBuilder.Entity("ZaloAi.Core.Entities.Resource", b =>
                 {
                     b.HasOne("ZaloAi.Core.Entities.Branch", null)
@@ -3915,6 +4472,30 @@ namespace ZaloAi.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_revenue_entries_tenants_tenant_id");
+                });
+
+            modelBuilder.Entity("ZaloAi.Core.Entities.ServiceConsumable", b =>
+                {
+                    b.HasOne("ZaloAi.Core.Entities.CatalogItem", null)
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_service_consumables_catalog_items_product_id");
+
+                    b.HasOne("ZaloAi.Core.Entities.CatalogItem", null)
+                        .WithMany()
+                        .HasForeignKey("ServiceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_service_consumables_catalog_items_service_id");
+
+                    b.HasOne("ZaloAi.Core.Entities.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_service_consumables_tenants_tenant_id");
                 });
 
             modelBuilder.Entity("ZaloAi.Core.Entities.StaffMember", b =>
@@ -4020,6 +4601,153 @@ namespace ZaloAi.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_staff_time_off_tenants_tenant_id");
+                });
+
+            modelBuilder.Entity("ZaloAi.Core.Entities.StockCount", b =>
+                {
+                    b.HasOne("ZaloAi.Core.Entities.Branch", null)
+                        .WithMany()
+                        .HasForeignKey("BranchId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_stock_counts_branches_branch_id");
+
+                    b.HasOne("ZaloAi.Core.Entities.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_stock_counts_tenants_tenant_id");
+                });
+
+            modelBuilder.Entity("ZaloAi.Core.Entities.StockCountLine", b =>
+                {
+                    b.HasOne("ZaloAi.Core.Entities.CatalogItem", null)
+                        .WithMany()
+                        .HasForeignKey("CatalogItemId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_stock_count_lines_catalog_items_catalog_item_id");
+
+                    b.HasOne("ZaloAi.Core.Entities.StockCount", null)
+                        .WithMany()
+                        .HasForeignKey("StockCountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_stock_count_lines_stock_counts_stock_count_id");
+
+                    b.HasOne("ZaloAi.Core.Entities.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_stock_count_lines_tenants_tenant_id");
+                });
+
+            modelBuilder.Entity("ZaloAi.Core.Entities.StockLevel", b =>
+                {
+                    b.HasOne("ZaloAi.Core.Entities.Branch", null)
+                        .WithMany()
+                        .HasForeignKey("BranchId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_stock_levels_branches_branch_id");
+
+                    b.HasOne("ZaloAi.Core.Entities.CatalogItem", null)
+                        .WithMany()
+                        .HasForeignKey("CatalogItemId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_stock_levels_catalog_items_catalog_item_id");
+
+                    b.HasOne("ZaloAi.Core.Entities.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_stock_levels_tenants_tenant_id");
+                });
+
+            modelBuilder.Entity("ZaloAi.Core.Entities.StockMovement", b =>
+                {
+                    b.HasOne("ZaloAi.Core.Entities.Branch", null)
+                        .WithMany()
+                        .HasForeignKey("BranchId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_stock_movements_branches_branch_id");
+
+                    b.HasOne("ZaloAi.Core.Entities.CatalogItem", null)
+                        .WithMany()
+                        .HasForeignKey("CatalogItemId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_stock_movements_catalog_items_catalog_item_id");
+
+                    b.HasOne("ZaloAi.Core.Entities.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_stock_movements_tenants_tenant_id");
+                });
+
+            modelBuilder.Entity("ZaloAi.Core.Entities.StockTransfer", b =>
+                {
+                    b.HasOne("ZaloAi.Core.Entities.Branch", null)
+                        .WithMany()
+                        .HasForeignKey("FromBranchId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_stock_transfers_branches_from_branch_id");
+
+                    b.HasOne("ZaloAi.Core.Entities.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_stock_transfers_tenants_tenant_id");
+
+                    b.HasOne("ZaloAi.Core.Entities.Branch", null)
+                        .WithMany()
+                        .HasForeignKey("ToBranchId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_stock_transfers_branches_to_branch_id");
+                });
+
+            modelBuilder.Entity("ZaloAi.Core.Entities.StockTransferLine", b =>
+                {
+                    b.HasOne("ZaloAi.Core.Entities.CatalogItem", null)
+                        .WithMany()
+                        .HasForeignKey("CatalogItemId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_stock_transfer_lines_catalog_items_catalog_item_id");
+
+                    b.HasOne("ZaloAi.Core.Entities.StockTransfer", null)
+                        .WithMany()
+                        .HasForeignKey("StockTransferId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_stock_transfer_lines_stock_transfers_stock_transfer_id");
+
+                    b.HasOne("ZaloAi.Core.Entities.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_stock_transfer_lines_tenants_tenant_id");
+                });
+
+            modelBuilder.Entity("ZaloAi.Core.Entities.Supplier", b =>
+                {
+                    b.HasOne("ZaloAi.Core.Entities.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_suppliers_tenants_tenant_id");
                 });
 
             modelBuilder.Entity("ZaloAi.Core.Entities.TenantBankAccount", b =>

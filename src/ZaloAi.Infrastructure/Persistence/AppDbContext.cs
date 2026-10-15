@@ -113,6 +113,27 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
 
     public DbSet<TenantBankAccount> TenantBankAccounts => Set<TenantBankAccount>();
 
+    // CRM C4
+    public DbSet<Supplier> Suppliers => Set<Supplier>();
+
+    public DbSet<StockLevel> StockLevels => Set<StockLevel>();
+
+    public DbSet<StockMovement> StockMovements => Set<StockMovement>();
+
+    public DbSet<PurchaseOrder> PurchaseOrders => Set<PurchaseOrder>();
+
+    public DbSet<PurchaseOrderLine> PurchaseOrderLines => Set<PurchaseOrderLine>();
+
+    public DbSet<StockTransfer> StockTransfers => Set<StockTransfer>();
+
+    public DbSet<StockTransferLine> StockTransferLines => Set<StockTransferLine>();
+
+    public DbSet<StockCount> StockCounts => Set<StockCount>();
+
+    public DbSet<StockCountLine> StockCountLines => Set<StockCountLine>();
+
+    public DbSet<ServiceConsumable> ServiceConsumables => Set<ServiceConsumable>();
+
     /// <summary>EF đọc lại giá trị này mỗi lần truy vấn (tham số hóa theo instance DbContext).</summary>
     public Guid? CurrentTenantId => tenantContext.TenantId;
 
