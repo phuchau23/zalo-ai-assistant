@@ -9,13 +9,39 @@ using ZaloAi.Infrastructure.Repositories;
 
 namespace ZaloAi.Api.Crm;
 
-public sealed record CrmSettingsResponse(string TimeZone, int SlotMinutes, int DiscountApprovalPercent, int DefaultBufferMinutes, IReadOnlyList<string> AllPermissions)
+public sealed record CrmSettingsResponse(
+    string TimeZone,
+    int SlotMinutes,
+    int DiscountApprovalPercent,
+    int DefaultBufferMinutes,
+    bool BotBookingEnabled,
+    int BotMaxPartySize,
+    int BookingLeadMinutes,
+    int MaxBookingDaysAhead,
+    int CancelLeadHours,
+    int Reminder1Hours,
+    int Reminder2Hours,
+    IReadOnlyList<string> AllPermissions)
 {
-    internal static CrmSettingsResponse From(CrmSettings s) =>
-        new(s.TimeZone, s.SlotMinutes, s.DiscountApprovalPercent, s.DefaultBufferMinutes, TenantPermissions.All);
+    internal static CrmSettingsResponse From(CrmSettings s) => new(
+        s.TimeZone, s.SlotMinutes, s.DiscountApprovalPercent, s.DefaultBufferMinutes, s.BotBookingEnabled, s.BotMaxPartySize, s.BookingLeadMinutes,
+        s.MaxBookingDaysAhead, s.CancelLeadHours, s.Reminder1Hours, s.Reminder2Hours, TenantPermissions.All);
 }
 
-public sealed record UpdateCrmSettingsRequest(string TimeZone, int SlotMinutes, int DiscountApprovalPercent, int DefaultBufferMinutes);
+/// <param name="Reminder1Hours">0 = tắt.</param>
+/// <param name="Reminder2Hours">0 = tắt.</param>
+public sealed record UpdateCrmSettingsRequest(
+    string TimeZone,
+    int SlotMinutes,
+    int DiscountApprovalPercent,
+    int DefaultBufferMinutes,
+    bool BotBookingEnabled = true,
+    int BotMaxPartySize = 2,
+    int BookingLeadMinutes = 60,
+    int MaxBookingDaysAhead = 60,
+    int CancelLeadHours = 2,
+    int Reminder1Hours = 24,
+    int Reminder2Hours = 2);
 
 internal sealed class UpdateCrmSettingsRequestValidator : AbstractValidator<UpdateCrmSettingsRequest>
 {
@@ -25,6 +51,12 @@ internal sealed class UpdateCrmSettingsRequestValidator : AbstractValidator<Upda
         RuleFor(x => x.SlotMinutes).Must(m => m is 15 or 30 or 60).WithMessage("Bước lịch 15, 30 hoặc 60 phút.");
         RuleFor(x => x.DiscountApprovalPercent).InclusiveBetween(0, 100);
         RuleFor(x => x.DefaultBufferMinutes).InclusiveBetween(0, 120);
+        RuleFor(x => x.BotMaxPartySize).InclusiveBetween(1, 20);
+        RuleFor(x => x.BookingLeadMinutes).InclusiveBetween(0, 1440);
+        RuleFor(x => x.MaxBookingDaysAhead).InclusiveBetween(1, 365);
+        RuleFor(x => x.CancelLeadHours).InclusiveBetween(0, 168);
+        RuleFor(x => x.Reminder1Hours).InclusiveBetween(0, 168);
+        RuleFor(x => x.Reminder2Hours).InclusiveBetween(0, 48);
     }
 }
 
@@ -51,6 +83,13 @@ internal static class CrmSettingsEndpoints
         s.SlotMinutes = request.SlotMinutes;
         s.DiscountApprovalPercent = request.DiscountApprovalPercent;
         s.DefaultBufferMinutes = request.DefaultBufferMinutes;
+        s.BotBookingEnabled = request.BotBookingEnabled;
+        s.BotMaxPartySize = request.BotMaxPartySize;
+        s.BookingLeadMinutes = request.BookingLeadMinutes;
+        s.MaxBookingDaysAhead = request.MaxBookingDaysAhead;
+        s.CancelLeadHours = request.CancelLeadHours;
+        s.Reminder1Hours = request.Reminder1Hours;
+        s.Reminder2Hours = request.Reminder2Hours;
         audit.Add(tenantId, tenant.UserId, "tenant.crm_settings_updated", tenantId.ToString());
         await settings.SaveChangesAsync(cancellationToken);
         return TypedResults.Ok(CrmSettingsResponse.From(s));
