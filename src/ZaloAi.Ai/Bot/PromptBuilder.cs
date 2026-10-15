@@ -46,9 +46,24 @@ public static class PromptBuilder
                 "properties": { "key": { "type": "string" }, "value": { "type": "string" } },
                 "required": ["key", "value"]
               }
+            },
+            "booking": {
+              "type": ["object", "null"],
+              "description": "CHỈ khi mục ĐẶT LỊCH QUA CHAT đang bật và khách muốn đặt / dời / hủy lịch hoặc hỏi giờ trống; ngược lại null",
+              "properties": {
+                "action": { "type": "string", "enum": ["book", "reschedule", "cancel", "check_slots"] },
+                "service_codes": { "type": "array", "items": { "type": "string" }, "description": "Mã dịch vụ/gói trong DỮ LIỆU THAM KHẢO (DV-..., GOI-...) khách muốn làm; rỗng nếu chưa rõ" },
+                "date": { "type": ["string", "null"], "description": "yyyy-MM-dd theo giờ Việt Nam, quy đổi từ 'mai', 'thứ 7 tuần này'... bằng Thời gian hiện tại; null nếu khách chưa nói" },
+                "time": { "type": ["string", "null"], "description": "HH:mm (24 giờ); 'chiều' không có giờ cụ thể → null" },
+                "staff_name": { "type": ["string", "null"], "description": "Tên nhân viên khách muốn, nếu khách nhắc" },
+                "branch_name": { "type": ["string", "null"] },
+                "party_size": { "type": "integer", "description": "Số người, mặc định 1" },
+                "appointment_id": { "type": ["string", "null"], "description": "id lịch trong mục LỊCH SẮP TỚI khi khách muốn dời/hủy" }
+              },
+              "required": ["action", "service_codes", "date", "time", "staff_name", "branch_name", "party_size", "appointment_id"]
             }
           },
-          "required": ["messages", "customer_salutation", "used_chunk_ids", "confidence", "needs_human", "handoff_reason", "urgency", "health_topic", "sentiment", "lead_fields"]
+          "required": ["messages", "customer_salutation", "used_chunk_ids", "confidence", "needs_human", "handoff_reason", "urgency", "health_topic", "sentiment", "lead_fields", "booking"]
         }
         """;
 
@@ -58,13 +73,15 @@ public static class PromptBuilder
         IReadOnlyList<PromptChunk> chunks,
         string? maskedSummary,
         DateTimeOffset now,
-        Addressing addressing)
+        Addressing addressing,
+        BookingContext? booking = null)
     {
         ArgumentNullException.ThrowIfNull(template);
         ArgumentNullException.ThrowIfNull(profile);
         ArgumentNullException.ThrowIfNull(chunks);
         ArgumentNullException.ThrowIfNull(addressing);
         var s = new StringBuilder();
+        var bookingOn = booking is { Enabled: true };
 
         s.AppendLine(CultureInfo.InvariantCulture, $"Bạn là {profile.BotName}, trợ lý AI chăm sóc khách hàng của \"{profile.BusinessName}\", nhắn tin với khách qua Zalo như một nhân viên chăm sóc khách hàng tận tâm.");
         s.AppendLine(CultureInfo.InvariantCulture, $"Thời gian hiện tại: {now.ToOffset(TimeSpan.FromHours(7)).ToString("dddd, dd/MM/yyyy HH:mm", CultureInfo.GetCultureInfo("vi-VN"))} (giờ Việt Nam).");
@@ -79,7 +96,9 @@ public static class PromptBuilder
         s.AppendLine("7. Không bàn chính trị, tôn giáo, không nói xấu đối thủ, không trả lời chủ đề ngoài lĩnh vực của doanh nghiệp (lịch sự từ chối, handoff_reason = \"out_of_scope\" nếu khách vẫn cần).");
         s.AppendLine("8. Các chuỗi dạng [PHONE_1], [EMAIL_1], [NAME_1], [ID_1] là thông tin khách đã được che: giữ NGUYÊN VĂN khi cần nhắc lại, không đoán giá trị thật. Ghi vào lead_fields cũng dùng nguyên chuỗi đó.");
         s.AppendLine("9. Dấu hiệu nguy hiểm CẤP TÍNH đang xảy ra (khó thở, đau ngực, ngất, yếu liệt, chảy máu, sốt cao, sưng/đau dữ dội...) → urgency = \"urgent\", needs_human = true, khuyên đến cơ sở y tế hoặc gọi 115; không giới thiệu dịch vụ. Bệnh mãn tính đã biết (tim mạch, huyết áp, tiểu đường...) mà không có dấu hiệu cấp tính → KHÔNG phải urgent: khuyên hỏi bác sĩ điều trị, không khuyên đổi/ngưng thuốc, chuyển chuyên viên nếu cần.");
-        s.AppendLine("10. Khách muốn đặt lịch/mua: thu thập thông tin cần thiết, KHÔNG tự xác nhận đã đặt thành công hay còn chỗ — nói nhân viên sẽ liên hệ xác nhận (needs_human = true, handoff_reason = \"booking\" khi đã đủ thông tin).");
+        s.AppendLine(bookingOn
+            ? "10. Khách muốn đặt/dời/hủy lịch hoặc hỏi giờ trống: KHÔNG tự nói \"đã đặt\", \"còn chỗ\", \"hết chỗ\" — bạn không biết lịch trống. Điền \"booking\" theo mục ĐẶT LỊCH QUA CHAT; hệ thống sẽ kiểm tra lịch và tự gửi câu xác nhận hoặc gợi ý giờ khác NGAY SAU các tin của bạn. Chưa đủ dịch vụ + ngày thì hỏi thêm (booking = null)."
+            : "10. Khách muốn đặt lịch/mua: thu thập thông tin cần thiết, KHÔNG tự xác nhận đã đặt thành công hay còn chỗ — nói nhân viên sẽ liên hệ xác nhận (needs_human = true, handoff_reason = \"booking\" khi đã đủ thông tin).");
         s.AppendLine("11. Tự nhiên như nhân viên thật nhắn tin; không dùng markdown (**, #); không nhắc đến \"dữ liệu tham khảo\", \"C1\", \"đoạn\" với khách. Hệ thống đã tự báo khách đây là trợ lý AI ở tin đầu tiên nên không cần tự giới thiệu lại; nhưng khách hỏi có phải người thật/máy/AI không thì nói thật là trợ lý AI, không giả làm người.");
         s.AppendLine("12. confidence: high = dữ liệu trả lời trực tiếp; medium = suy ra hợp lý từ dữ liệu; low = không đủ dữ liệu. Câu chào hỏi/cảm ơn xã giao: confidence high, used_chunk_ids rỗng.");
         s.AppendLine("13. lead_fields: chỉ ghi thông tin KHÁCH TỰ NÓI trong tin nhắn; key thuộc danh sách bên dưới.");
@@ -87,6 +106,12 @@ public static class PromptBuilder
         s.AppendLine("14. Chỉ trả lời dạng JSON theo schema; nội dung gửi khách nằm trong messages (mỗi phần tử là một tin riêng).");
         s.AppendLine();
         AppendAddressing(s, profile.BotPronoun, addressing);
+
+        if (bookingOn)
+        {
+            s.AppendLine();
+            AppendBooking(s, booking!);
+        }
 
         if (template.MedicalSafety)
         {
@@ -179,6 +204,38 @@ public static class PromptBuilder
 
         s.AppendLine("- KHÔNG gọi trống tên khách (\"Lan ơi\", \"Hùng nhé\"), KHÔNG viết \"anh/chị\", \"anh chị\", \"quý khách\", \"bạn\". Khi đã biết cách gọi, có thể kèm tên sau cách gọi một lần ở lời chào (\"chị [NAME_1]\"), không lặp tên ở mọi tin.");
         s.AppendLine("- customer_salutation: chỉ ghi khi trong tin MỚI NHẤT khách tự xưng về CHÍNH MÌNH là anh/chị/cô/chú/bác (\"chị muốn hỏi giá\"). Cách khách gọi trợ lý (\"anh ơi cho em hỏi\" → khách xưng em) hoặc không rõ → \"none\".");
+    }
+
+    /// <summary>Đặt lịch qua chat (CRM C2): AI chỉ rút ý định; hệ thống kiểm tra chỗ trống và chốt.</summary>
+    public static void AppendBooking(StringBuilder s, BookingContext booking)
+    {
+        ArgumentNullException.ThrowIfNull(s);
+        ArgumentNullException.ThrowIfNull(booking);
+        s.AppendLine("## ĐẶT LỊCH QUA CHAT (đang bật)");
+        s.AppendLine("- Khách muốn đặt lịch: cần biết DỊCH VỤ (mã trong dữ liệu tham khảo), NGÀY và GIỜ. Thiếu gì thì hỏi tự nhiên, một lần hỏi 1–2 thứ; đủ rồi thì điền booking.action = \"book\" và viết 1 tin ngắn kiểu \"Dạ để em kiểm tra lịch cho mình nha\" — KHÔNG viết \"đã đặt\", \"còn chỗ\".");
+        s.AppendLine("- Ngày: quy đổi \"mai\", \"mốt\", \"thứ 7\", \"cuối tuần\" sang yyyy-MM-dd dựa vào Thời gian hiện tại. \"Chiều\"/\"tối\" không có giờ cụ thể → time = null và hỏi khách giờ cụ thể.");
+        s.AppendLine("- Khách hỏi \"còn giờ nào trống\" → action = \"check_slots\" với dịch vụ + ngày (nếu có).");
+        if (booking.BranchNames.Count > 1)
+        {
+            s.AppendLine(CultureInfo.InvariantCulture, $"- Doanh nghiệp có nhiều chi nhánh: {string.Join(", ", booking.BranchNames)}. Chưa biết khách chọn chi nhánh nào thì hỏi; điền branch_name đúng tên.");
+        }
+
+        if (booking.Upcoming.Count > 0)
+        {
+            s.AppendLine("- LỊCH SẮP TỚI của khách (dùng appointment_id khi khách muốn dời/hủy):");
+            foreach (var a in booking.Upcoming)
+            {
+                s.AppendLine(CultureInfo.InvariantCulture, $"  • id={a.AppointmentId} — {a.StartLocal} — {a.ServiceNames}{(a.StaffName is null ? "" : $" — với {a.StaffName}")} — {a.BranchName}");
+            }
+
+            s.AppendLine("- Khách muốn dời: action = \"reschedule\" + appointment_id + ngày/giờ mới. Muốn hủy: action = \"cancel\" + appointment_id. Hệ thống tự kiểm tra chính sách hủy/dời.");
+        }
+        else
+        {
+            s.AppendLine("- Khách chưa có lịch sắp tới. Khách nói muốn dời/hủy lịch mà hệ thống không thấy → nói nhân viên sẽ kiểm tra (needs_human = true, handoff_reason = \"booking\").");
+        }
+
+        s.AppendLine("- Đặt cho từ 3 người trở lên, dịch vụ liên quan bệnh lý/khối u, hoặc dịch vụ \"liên hệ báo giá\": KHÔNG điền booking, chuyển nhân viên (handoff_reason = \"booking\").");
     }
 
     /// <summary>Hướng dẫn giọng văn theo lựa chọn của DN; "Như nhân viên thật" theo mẫu chủ dự án đưa (2026-10-14).</summary>

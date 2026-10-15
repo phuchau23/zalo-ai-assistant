@@ -15,6 +15,7 @@ public sealed partial class FakeChatProvider : IChatProvider
     public const string ModelName = "fake-chat";
 
     private static readonly string[] NoKnowledgeMessages = ["Dạ câu này em chưa có thông tin, em chuyển nhân viên hỗ trợ mình nhé."];
+    private static readonly string[] BookingLeadIn = ["Dạ để em kiểm tra lịch cho mình nha."];
 
     public Task<ChatResult> ChatAsync(ChatRequest request, CancellationToken cancellationToken)
     {
@@ -48,7 +49,22 @@ public sealed partial class FakeChatProvider : IChatProvider
             var chunk = ChunkHeader().Match(request.System);
             var self = SelfReference().Match(last);
             var salutation = self.Success ? self.Groups["s"].Value.ToLowerInvariant() : "none";
-            text = chunk.Success
+            var booking = FakeBooking(request.System, last);
+            text = booking is not null
+                ? JsonSerializer.Serialize(new
+                {
+                    messages = BookingLeadIn,
+                    customer_salutation = salutation,
+                    used_chunk_ids = chunk.Success ? new[] { chunk.Groups["id"].Value } : Array.Empty<string>(),
+                    confidence = "high",
+                    needs_human = false,
+                    handoff_reason = (string?)null,
+                    urgency = "none",
+                    sentiment = "neutral",
+                    lead_fields = Array.Empty<object>(),
+                    booking,
+                })
+                : chunk.Success
                 ? JsonSerializer.Serialize(new
                 {
                     messages = new[]
@@ -84,6 +100,69 @@ public sealed partial class FakeChatProvider : IChatProvider
     }
 
     private static string Truncate(string value, int max) => value.Length <= max ? value : value[..max];
+
+    /// <summary>
+    /// Ý định đặt lịch giả lập (CRM C2), chỉ khi prompt có mục ĐẶT LỊCH QUA CHAT: "đặt lịch ... 15h mai" → book (mã dịch vụ = mã của
+    /// đoạn đầu tiên trong prompt, ngày mai giờ VN); "hủy lịch" → cancel lịch đầu trong LỊCH SẮP TỚI; "dời ... 16h" → reschedule.
+    /// </summary>
+    private static object? FakeBooking(string system, string last)
+    {
+        if (!system.Contains("## ĐẶT LỊCH QUA CHAT", StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        var lower = last.ToLowerInvariant();
+        var hour = HourMention().Match(lower);
+        var upcoming = UpcomingId().Match(system);
+        var code = ChunkCode().Match(system);
+        var tomorrow = DateTime.UtcNow.AddHours(7).AddDays(1).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+        var time = hour.Success ? $"{int.Parse(hour.Groups["h"].Value, System.Globalization.CultureInfo.InvariantCulture):00}:00" : null;
+
+        if (lower.Contains("hủy lịch", StringComparison.Ordinal) && upcoming.Success)
+        {
+            return Intent("cancel", [], null, null, upcoming.Groups["id"].Value);
+        }
+
+        if (lower.Contains("dời", StringComparison.Ordinal) && upcoming.Success && time is not null)
+        {
+            return Intent("reschedule", [], tomorrow, time, upcoming.Groups["id"].Value);
+        }
+
+        if (lower.Contains("giờ nào trống", StringComparison.Ordinal) && code.Success)
+        {
+            return Intent("check_slots", [code.Groups["code"].Value], tomorrow, null, null);
+        }
+
+        if ((lower.Contains("đặt lịch", StringComparison.Ordinal) || lower.Contains("đặt cho", StringComparison.Ordinal)) && code.Success && time is not null)
+        {
+            var party = lower.Contains("3 người", StringComparison.Ordinal) ? 3 : 1;
+            return Intent("book", [code.Groups["code"].Value], tomorrow, time, null, party);
+        }
+
+        return null;
+
+        static object Intent(string action, string[] codes, string? date, string? time, string? appointmentId, int party = 1) => new
+        {
+            action,
+            service_codes = codes,
+            date,
+            time,
+            staff_name = (string?)null,
+            branch_name = (string?)null,
+            party_size = party,
+            appointment_id = appointmentId,
+        };
+    }
+
+    [GeneratedRegex(@"(?<h>\d{1,2})\s*(?:h|giờ)", RegexOptions.IgnoreCase)]
+    private static partial Regex HourMention();
+
+    [GeneratedRegex(@"id=(?<id>[0-9a-fA-F-]{36})")]
+    private static partial Regex UpcomingId();
+
+    [GeneratedRegex(@"\(mã (?<code>[A-Z0-9-]+)")]
+    private static partial Regex ChunkCode();
 
     /// <summary>Dòng tiêu đề "[C1] ..." rồi nội dung đến dòng trống (định dạng của PromptBuilder).</summary>
     [GeneratedRegex(@"^\[(?<id>C\d+)\][^\n]*\r?\n(?<body>(?:[^\r\n]+\r?\n?)+)", RegexOptions.Multiline)]

@@ -78,6 +78,29 @@ public sealed class BotMessagesTests
     }
 
     [Fact]
+    public async Task Booking_intent_is_parsed_and_dropped_when_handing_off()
+    {
+        const string Booking = """{"action":"book","service_codes":["dv-massage-60"],"date":"2026-10-20","time":"15:00","staff_name":null,"branch_name":null,"party_size":2,"appointment_id":null}""";
+        var chat = new ScriptedChat(_ => MessagesJson(["Dạ để em kiểm tra lịch cho chị nha."], ["C1"]).Replace("\"lead_fields\":[]", "\"lead_fields\":[],\"booking\":" + Booking, StringComparison.Ordinal));
+        var context = new BookingContext(true, ["Spa Hoa Mai"], []);
+        var result = await Engine(chat, new StaticSearch(Massage)).ReplyAsync(TurnWith("đặt lịch 15h", null, false) with { Booking = context }, CancellationToken.None);
+
+        result.Booking.ShouldNotBeNull();
+        (result.Booking.Action, result.Booking.ServiceCodes[0], result.Booking.Date, result.Booking.Time, result.Booking.PartySize)
+            .ShouldBe(("book", "DV-MASSAGE-60", "2026-10-20", "15:00", 2));
+        chat.Requests[0].System.ShouldContain("## ĐẶT LỊCH QUA CHAT");
+
+        // Chuyển người (không có dữ liệu) → bỏ ý định đặt lịch.
+        var handoff = new ScriptedChat(_ => MessagesJson(["Dạ em chưa rõ, em chuyển nhân viên ạ."])
+            .Replace("\"needs_human\":false", "\"needs_human\":true", StringComparison.Ordinal)
+            .Replace("\"handoff_reason\":null", "\"handoff_reason\":\"no_knowledge\"", StringComparison.Ordinal)
+            .Replace("\"lead_fields\":[]", "\"lead_fields\":[],\"booking\":" + Booking, StringComparison.Ordinal));
+        var handedOff = await Engine(handoff, new StaticSearch()).ReplyAsync(TurnWith("đặt lịch 15h", null, false) with { Booking = context }, CancellationToken.None);
+        handedOff.NeedsHuman.ShouldBeTrue();
+        handedOff.Booking.ShouldBeNull();
+    }
+
+    [Fact]
     public async Task More_than_four_messages_are_merged_into_the_last_one()
     {
         var chat = new ScriptedChat(_ => MessagesJson(["1", "2", "3", "4", "5"]));

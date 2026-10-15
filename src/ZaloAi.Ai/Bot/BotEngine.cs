@@ -74,7 +74,7 @@ public sealed partial class BotEngine(
         var chunks = await SearchAsync(request.TenantId, maskedMessage, maskedHistory, trace, cancellationToken);
 
         // 3. Gọi AI.
-        var system = PromptBuilder.BuildSystem(template, request.Profile, chunks, maskedSummary, time.GetUtcNow(), addressing);
+        var system = PromptBuilder.BuildSystem(template, request.Profile, chunks, maskedSummary, time.GetUtcNow(), addressing, request.Booking);
         var turns = BuildTurns(maskedHistory, maskedMessage);
         BotAnswer? answer;
         try
@@ -290,7 +290,14 @@ public sealed partial class BotEngine(
             reason = "other";
         }
 
-        return new Decision(messages, needsHuman, needsHuman ? reason : null, urgency, answer.Confidence, answer.Sentiment, answer.LeadFields, answer.CustomerSalutation);
+        // Ý định đặt lịch chỉ được thực thi khi bot vẫn tự xử lý (không chuyển người).
+        if (answer.Booking is not null && !needsHuman)
+        {
+            trace.Guards.Add("booking_intent");
+        }
+
+        return new Decision(messages, needsHuman, needsHuman ? reason : null, urgency, answer.Confidence, answer.Sentiment, answer.LeadFields, answer.CustomerSalutation,
+            needsHuman ? null : answer.Booking);
     }
 
     /// <summary>Câu trả lời đã mời khách kiểm tra/thăm khám trực tiếp (chuyên viên của DN, hoặc bác sĩ với bệnh lý) chưa.</summary>
@@ -361,7 +368,8 @@ public sealed partial class BotEngine(
             leads,
             trace.ToJson(),
             usage,
-            decision.DetectedSalutation);
+            decision.DetectedSalutation,
+            decision.Booking);
     }
 
     /// <summary>Lịch sử (đã che) + tin mới → lượt chat cho AI: bắt đầu bằng khách, gộp các tin liên tiếp cùng phía.</summary>
@@ -406,7 +414,8 @@ public sealed partial class BotEngine(
         string Confidence,
         string? Sentiment,
         IReadOnlyList<KeyValuePair<string, string>> LeadFields,
-        string? DetectedSalutation = null);
+        string? DetectedSalutation = null,
+        BookingIntent? Booking = null);
 
     /// <summary>Thông tin chẩn đoán cho màn "Vì sao bot trả lời vậy?" — KHÔNG chứa nội dung tin hay dữ liệu cá nhân của khách.</summary>
     private sealed class TurnTrace(IndustryTemplate template)
@@ -583,9 +592,12 @@ internal sealed record BotAnswer(
     bool HealthTopic,
     string? Sentiment,
     IReadOnlyList<KeyValuePair<string, string>> LeadFields,
-    string? CustomerSalutation = null)
+    string? CustomerSalutation = null,
+    BookingIntent? Booking = null)
 {
     public const int MaxMessages = 4;
+
+    private static readonly string[] BookingActions = ["book", "reschedule", "cancel", "check_slots"];
 
     private static readonly string[] Confidences = ["high", "medium", "low"];
     private static readonly string[] Sentiments = ["positive", "neutral", "negative"];
@@ -648,12 +660,36 @@ internal sealed record BotAnswer(
                 Bool("health_topic"),
                 Sentiments.Contains(sentiment) ? sentiment : null,
                 leads,
-                ZaloAi.Core.Entities.CustomerSalutation.IsAllowed(salutation) ? salutation : null);
+                ZaloAi.Core.Entities.CustomerSalutation.IsAllowed(salutation) ? salutation : null,
+                ReadBooking(root));
         }
         catch (JsonException)
         {
             return null;
         }
+    }
+
+    /// <summary>"booking" (CRM C2): action hợp lệ mới tính; các trường khác thiếu/sai kiểu → null hoặc mặc định.</summary>
+    private static BookingIntent? ReadBooking(JsonElement root)
+    {
+        if (!root.TryGetProperty("booking", out var b) || b.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        string? Str(string name) => b.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(v.GetString()) ? v.GetString()!.Trim() : null;
+        var action = Str("action");
+        if (action is null || !BookingActions.Contains(action))
+        {
+            return null;
+        }
+
+        var codes = b.TryGetProperty("service_codes", out var array) && array.ValueKind == JsonValueKind.Array
+            ? array.EnumerateArray().Where(c => c.ValueKind == JsonValueKind.String).Select(c => c.GetString()!.Trim().ToUpperInvariant()).Where(c => c.Length > 0).Distinct(StringComparer.Ordinal).ToList()
+            : [];
+        var party = b.TryGetProperty("party_size", out var p) && p.ValueKind == JsonValueKind.Number && p.TryGetInt32(out var n) && n > 0 ? n : 1;
+        Guid? appointmentId = Guid.TryParse(Str("appointment_id"), out var id) ? id : null;
+        return new BookingIntent(action, codes, Str("date"), Str("time"), Str("staff_name"), Str("branch_name"), party, appointmentId);
     }
 
     /// <summary>"messages" (bỏ tin rỗng, tối đa <see cref="MaxMessages"/>) hoặc "reply". null = không có nội dung đúng kiểu.</summary>
