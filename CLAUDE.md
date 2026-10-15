@@ -450,7 +450,7 @@ Tiêu chí xong: DN dùng thử xem được lead và báo cáo tuần; nhân vi
 ### Giai đoạn CRM (chốt 2026-10-15, làm TRƯỚC tuần 7–8 và trước Giai đoạn 2/3)
 Thứ tự bắt buộc C1 → C8, chi tiết và schema ở `docs/CRM-PLAN.md`. Mỗi đợt: kế hoạch → duyệt → code → test → chủ dự án test tay.
 - [x] C1 Nền CRM: chi nhánh, danh mục (dịch vụ/gói/sản phẩm ↔ kho kiến thức), nhân viên + ca làm, quyền chi tiết. (2026-10-15)
-- [ ] C2 Lịch hẹn: lịch theo nhân viên/giường, đặt tay, bot tự chốt/đổi/hủy (hệ thống kiểm tra chỗ), nhắc lịch, check-in, tóm tắt khách, định kỳ, hàng chờ.
+- [x] C2 Lịch hẹn: lịch theo nhân viên/giường, đặt tay, bot tự chốt/đổi/hủy (hệ thống kiểm tra chỗ), nhắc lịch, check-in, tóm tắt khách, định kỳ, hàng chờ. (2026-10-15)
 - [ ] C3 Bán hàng & gói: hóa đơn, giảm giá có duyệt, thanh toán + VietQR, phiếu thu qua Zalo, gói trừ buổi, thẻ trả trước, voucher, cọc, chốt ca.
 - [ ] C4 Kho hàng: tồn kho theo chi nhánh, nhập/xuất/kiểm kê/chuyển, định mức vật tư, cảnh báo.
 - [ ] C5 Nhân viên nâng cao: hoa hồng, hiệu suất, chấm công.

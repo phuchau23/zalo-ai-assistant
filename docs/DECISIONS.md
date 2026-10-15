@@ -288,3 +288,15 @@ Chủ dự án chốt: "AI phải tự nhắn chăm sóc khách như một nhân
 - Thêm loại kiến thức **Sản phẩm** (sheet `Sản phẩm` / `products`) để bot tư vấn sản phẩm bán lẻ.
 - Giờ dạng chuỗi `HH:mm` / ngày `yyyy-MM-dd` trong API CRM (tránh phụ thuộc cách .NET serialize TimeOnly/DateOnly).
 - Entity CRM mới gán `Id = Guid.CreateVersion7()` ngay khi tạo (thêm nhiều dòng trong một SaveChanges không đụng khóa rỗng).
+
+## 2026-10-15 — CRM C2: lịch hẹn + bot tự chốt
+
+- **AI chỉ rút ý định** (`booking` trong JSON: book / reschedule / cancel / check_slots + mã dịch vụ, ngày, giờ, nhân viên, số người, id lịch). `BookingOrchestrator` kiểm tra qua `AvailabilityService` rồi **hệ thống soạn câu** xác nhận / gợi ý 3 giờ gần nhất / từ chối theo chính sách (`AppointmentTexts`). AI không bao giờ được viết "đã đặt". Ý định bị bỏ khi AI chuyển người.
+- **Chỗ trống** = giờ mở cửa ∩ ca nhân viên (ca cố định, ca tay ghi đè, nghỉ phép) − lịch đã có (+ phút dọn dẹp) − sức chứa giường/phòng (số `resources` đang hoạt động của chi nhánh; không có = không giới hạn). Thuần túy trong `SlotCalculator` (test đơn vị). Bước lịch theo `CrmSettings.SlotMinutes`.
+- **Chống trùng**: tạo/dời lịch trong transaction có `pg_advisory_xact_lock(hash(tenant, chi nhánh, ngày))`, kiểm tra lại chỗ trống bên trong khóa. Giờ lưu UTC tròn phút; hiển thị theo `CrmSettings.TimeZone` (IANA).
+- **Chính sách**: đặt trước ≥ `BookingLeadMinutes` (60), tối đa `MaxBookingDaysAhead` (60) ngày; khách tự hủy/dời qua chat phải trước `CancelLeadHours` (2) giờ, muộn hơn → bot từ chối lịch sự + chuyển nhân viên. Nhóm > `BotMaxPartySize` (2), dịch vụ "liên hệ báo giá" hoặc không rõ → chuyển nhân viên. Nhân viên có thể xếp chồng cố ý (`AllowOverlap`, cần quyền manage_staff).
+- **Nhắc lịch**: job quét mỗi phút → mốc 1 (`Reminder1Hours`, 24) và mốc 2 (`Reminder2Hours`, 2) qua hội thoại đã chốt lịch (hoặc hội thoại gần nhất), chỉ trong hạn nhắn Zalo và khung giờ gửi (mốc 1); khách chỉ có SĐT → sự kiện `reminder_skipped` để nhân viên gọi. Khách trả lời "ok/đồng ý/xác nhận" → lịch `confirmed`, không gọi AI.
+- **Tóm tắt khách cho kỹ thuật viên** (`ai_brief_enc`, mã hóa): job viết ngay sau khi bot chốt lịch từ nhật ký chăm sóc + tóm tắt hội thoại + buổi trước, PII che trước khi gọi AI.
+- **Hàng chờ**: khung kín → ghi `waitlist_entries`; lịch bị hủy → job nhắn khách chờ phù hợp (một khách một lần), còn lại nhân viên xử lý.
+- **Lịch định kỳ**: N buổi cách X ngày tạo ngay, buổi kín báo riêng; `series_id` để hủy cả chuỗi (C8 UI).
+- Dữ liệu `appointment_items` chụp tên/thời lượng/giá tại lúc đặt (C3 dùng cho hóa đơn). Khách đặt lịch → tầng tự lên "Đã chốt" nếu chưa đặt tay.

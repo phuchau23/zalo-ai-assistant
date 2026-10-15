@@ -433,6 +433,42 @@ Tab Sản phẩm → Thêm: mã `SP-TINH-DAU-TRAM`, tên `Tinh dầu tràm 50ml`
 💻 Cài đặt → Nhân viên (tài khoản) → với `nhanvien1` bấm **Quyền** → bật `Quản lý danh mục bán`, chi nhánh `Q12` → Lưu. Tab ẩn danh đăng nhập nhân viên.
 **Đúng khi:** nhân viên sửa được giá ở Danh mục; ở Cài đặt → Chi nhánh chỉ thấy `Q12` và không có nút sửa; trang Nhân viên không có nút thêm/sửa. Chủ tắt quyền → nhân viên tải lại trang mất nút sửa Danh mục.
 
+## Buổi 8 — CRM C2: lịch hẹn & bot tự chốt (≈ 30 phút)
+Chuẩn bị: Nhân viên Lan có ca cố định T2–CN `08:00–20:00` và làm được dịch vụ "Trị liệu cổ vai gáy / lưng eo 60 phút" (hoặc mọi dịch vụ). Cài đặt → Lịch & bán hàng: "Bot tự chốt lịch" đang bật.
+
+### 8.1 Xem chỗ trống & đặt tay
+💻 Trang **Lịch hẹn** → ngày mai → "Đặt lịch": khách mới `Trần Thị Hoa`, SĐT `0905111222`, dịch vụ trị liệu 60 phút, giờ `15:00`.
+**Đúng khi:** lịch hiện ô 15:00–16:00 của Lan; đặt thêm khách khác cũng 15:00 → báo "kín"; chọn 16:00 → được.
+
+### 8.2 Bot tự chốt qua chat
+📱 ✎ → gửi:
+```
+chị muốn đặt lịch trị liệu cổ vai gáy 60 phút 10h sáng mai
+```
+**Đúng khi:** bot nhắn "để em kiểm tra lịch" rồi **"đã giữ lịch cho chị: Thứ … lúc 10:00, Trị liệu cổ vai gáy…"** (câu này do hệ thống soạn). 💻 Lịch hẹn ngày mai có ô 10:00, nguồn "Bot".
+
+### 8.3 Kín giờ → gợi ý giờ khác
+📱 ✎ (khách mới) → gửi `đặt lịch trị liệu cổ vai gáy 60 phút 10h sáng mai`.
+**Đúng khi:** bot báo 10:00 kín và đưa 2–3 giờ gần nhất để chọn; không tạo lịch trùng.
+
+### 8.4 Hỏi giờ trống
+📱 gửi `ngày mai còn giờ nào trống trị liệu cổ vai gáy` → bot liệt kê các giờ còn trống (không có 10:00).
+
+### 8.5 Dời & hủy qua chat
+📱 (cuộc chat 8.2) gửi `chị muốn dời lịch sang 14h` → bot báo đã dời. Gửi `hủy lịch giúp chị` → bot báo đã hủy; 💻 lịch chuyển trạng thái Đã hủy.
+Siết chính sách: Cài đặt → Lịch & bán hàng → "Hủy/dời trước" = `100` giờ → đặt lại lịch → `hủy lịch` → bot từ chối ("báo trước 100 giờ") và chuyển nhân viên. (Xong đặt lại 2.)
+
+### 8.6 Nhóm đông → nhân viên
+📱 ✎ → `đặt lịch trị liệu cổ vai gáy 60 phút 16h mai cho 3 người` → bot không tự chốt, chuyển nhân viên.
+
+### 8.7 Nhắc lịch & xác nhận
+💻 Cài đặt → Lịch & bán hàng: nhắc lần 2 = `2` giờ. Đặt tay cho khách CHAT THỬ (chọn khách từ danh sách) một lịch **sau 1,5 giờ** nữa. Đợi ≤ 1 phút.
+**Đúng khi:** 📱 nhận tin "nhắc lịch…"; gửi `ok` → bot "đã ghi nhận … xác nhận lịch"; 💻 lịch thành Đã xác nhận.
+
+### 8.8 Check-in, tóm tắt khách, giường
+💻 mở lịch của 8.2 (hoặc lịch bot khác) → thấy **Tóm tắt cho kỹ thuật viên** (AI viết); bấm Đã đến → Đang làm → Hoàn thành.
+Cài đặt → Chi nhánh → Giường/phòng: thêm 1 giường → đặt 2 lịch cùng giờ với 2 nhân viên khác nhau → lịch thứ 2 báo kín; thêm giường 2 → được.
+
 ---
 
 ## Mẫu báo kết quả (chép, điền, gửi Claude)
