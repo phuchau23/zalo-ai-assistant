@@ -15,6 +15,9 @@ public interface IReportQuestionInterpreter
 {
     Task<(ReportQuery Query, IReadOnlyList<BotUsage> Usage)> InterpretAsync(string question, DateTimeOffset nowLocal, CancellationToken cancellationToken);
 
-    /// <summary>Soạn câu trả lời ngắn từ số liệu (JSON) — chỉ diễn giải, không thêm số ngoài dữ liệu.</summary>
-    Task<(string Answer, IReadOnlyList<BotUsage> Usage)> NarrateAsync(string question, string dataJson, CancellationToken cancellationToken);
+    /// <summary>
+    /// Soạn câu trả lời ngắn từ số liệu (JSON) — chỉ diễn giải, không thêm số ngoài dữ liệu. <paramref name="customerNames"/>: tên khách có
+    /// trong dữ liệu, được che trước khi gửi AI và ghép lại trong câu trả lời.
+    /// </summary>
+    Task<(string Answer, IReadOnlyList<BotUsage> Usage)> NarrateAsync(string question, string dataJson, IReadOnlyList<string> customerNames, CancellationToken cancellationToken);
 }

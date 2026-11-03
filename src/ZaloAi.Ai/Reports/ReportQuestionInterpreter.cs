@@ -1,11 +1,15 @@
 using System.Globalization;
 using System.Text.Json;
+using ZaloAi.Ai.Privacy;
 using ZaloAi.Core.Ai;
 using ZaloAi.Core.Entities;
 
 namespace ZaloAi.Ai.Reports;
 
-/// <summary>AI chọn báo cáo + tham số từ câu hỏi tiếng Việt (CRM C6); sau đó diễn giải số liệu hệ thống tính. Không có PII trong prompt.</summary>
+/// <summary>
+/// AI chọn báo cáo + tham số từ câu hỏi tiếng Việt (CRM C6); sau đó diễn giải số liệu hệ thống tính. Tên khách trong số liệu (khách chi nhiều
+/// nhất, công nợ) và SĐT/email được che trước khi gửi AI.
+/// </summary>
 public sealed class ReportQuestionInterpreter(IChatProvider chat) : IReportQuestionInterpreter
 {
     public const string Schema = """
@@ -45,15 +49,25 @@ public sealed class ReportQuestionInterpreter(IChatProvider chat) : IReportQuest
         return (Parse(result.Text), [usage]);
     }
 
-    public async Task<(string Answer, IReadOnlyList<BotUsage> Usage)> NarrateAsync(string question, string dataJson, CancellationToken cancellationToken)
+    public async Task<(string Answer, IReadOnlyList<BotUsage> Usage)> NarrateAsync(
+        string question, string dataJson, IReadOnlyList<string> customerNames, CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(customerNames);
         const string System = """
             Bạn diễn giải số liệu cho chủ doanh nghiệp. Trả lời tiếng Việt, 2–5 câu, nêu con số CHÍNH XÁC như trong dữ liệu (tiền ghi dạng 1.250.000 đ),
             nhận xét ngắn gọn (tăng/giảm, nổi bật). TUYỆT ĐỐI không thêm số liệu không có trong dữ liệu; thiếu thì nói "chưa có dữ liệu". Không dùng markdown.
+            Giữ NGUYÊN các chuỗi dạng [NAME_1], [PHONE_1] (thông tin khách đã được che).
             """;
-        var result = await chat.ChatAsync(new ChatRequest(System, [new ChatTurn(ChatRole.User, $"Câu hỏi: {question}\nDữ liệu (JSON):\n{dataJson}")], null, 0.2, 600), cancellationToken);
+        var vault = new PiiVault();
+        foreach (var name in customerNames)
+        {
+            vault.AddKnown(PiiMasker.Name, name);
+        }
+
+        var input = PiiMasker.Mask($"Câu hỏi: {question}\nDữ liệu (JSON):\n{dataJson}", vault);
+        var result = await chat.ChatAsync(new ChatRequest(System, [new ChatTurn(ChatRole.User, input)], null, 0.2, 600), cancellationToken);
         var usage = new BotUsage(UsageKind.Chat, result.Provider, result.Model, result.InputTokens, result.OutputTokens, result.CostUsd);
-        return (result.Text.Trim(), [usage]);
+        return (PiiMasker.Restore(result.Text.Trim(), vault), [usage]);
     }
 
     public static ReportQuery Parse(string text)

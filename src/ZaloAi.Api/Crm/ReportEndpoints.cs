@@ -132,7 +132,13 @@ internal static class ReportEndpoints
             _ => await reports.RevenueAsync(tenantId, f, t, null, query.GroupBy is "week" or "month" ? query.GroupBy : "day", cancellationToken),
         };
         var json = JsonSerializer.Serialize(data, Json);
-        var (answer, narrateUsage) = await interpreter.NarrateAsync(request.Question, json.Length > 12000 ? json[..12000] : json, cancellationToken);
+        IReadOnlyList<string> customerNames = data switch
+        {
+            CustomerReport c => c.TopCustomers.Select(x => x.Name).ToList(),
+            OutstandingReport o => o.Invoices.Select(i => i.ContactName).OfType<string>().ToList(),
+            _ => [],
+        };
+        var (answer, narrateUsage) = await interpreter.NarrateAsync(request.Question, json.Length > 12000 ? json[..12000] : json, customerNames, cancellationToken);
         allUsage.AddRange(narrateUsage);
         Record(conversations, tenantId, allUsage);
         await conversations.SaveChangesAsync(cancellationToken);
