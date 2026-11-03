@@ -84,7 +84,7 @@ Kết nối OA:
 | Auth | Email + mật khẩu (`PasswordHasher` của ASP.NET Core Identity), cookie authentication httpOnly | |
 | Rate limit | Middleware rate limiting có sẵn của ASP.NET Core | |
 | Gọi HTTP ra ngoài | `HttpClientFactory` + `Microsoft.Extensions.Http.Resilience` (Polly) | Timeout, retry, circuit breaker |
-| AI chat | `IChatProvider`: chỉ Gemini (chốt 2026-10-04), gọi REST qua HttpClient | Model đặt trong config, không hardcode. Dev có thể dùng gói free; **production bắt buộc gói trả phí** (gói free cho Google dùng dữ liệu) |
+| AI chat | `IChatProvider`: Gemini, **Groq dự phòng** khi Gemini hết lượt/lỗi (chốt 2026-11-03, trước đó chỉ Gemini), gọi REST qua HttpClient | Model + thứ tự đặt trong config, không hardcode. Dev có thể dùng gói free; **production bắt buộc Gemini gói trả phí** (gói free cho Google dùng dữ liệu); Groq bật Zero Data Retention |
 | Embedding | Qua `IEmbeddingProvider` (Gemini embedding) | Số chiều vector đặt trong config. Đổi model = tạo lại toàn bộ vector |
 | Parse file | PdfPig (pdf), DocumentFormat.OpenXml (docx), ClosedXML (xlsx) | Chạy trong worker |
 | Logging | Serilog (JSON) | Không log token, không log PII; có destructuring policy để redact |
