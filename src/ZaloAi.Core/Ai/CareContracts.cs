@@ -9,6 +9,8 @@ public sealed record CareNoteInput(string Kind, DateOnly HappenedOn, DateTimeOff
 /// <param name="Messages">Các tin gần nhất (cũ → mới), nội dung gốc.</param>
 /// <param name="FollowUpNote">Có giá trị khi phân tích vì tới giờ hẹn chăm sóc lại trong ghi chú này.</param>
 /// <param name="BotWillSend">true = tin nháp do BOT tự gửi (viết bằng giọng trợ lý AI); false = nhân viên sửa rồi gửi.</param>
+/// <param name="BotCanBook">true = DN bật "Bot tự chốt lịch qua chat": khách cần đặt lịch thì bot mời khách nhắn ngày giờ, hệ thống lịch kiểm tra
+/// chỗ trống rồi mới giữ lịch — không cần chuyển nhân viên chỉ vì đặt lịch.</param>
 public sealed record CareAnalysisRequest(
     Guid TenantId,
     BotProfile Profile,
@@ -20,7 +22,8 @@ public sealed record CareAnalysisRequest(
     DateTimeOffset? LastCustomerMessageAt,
     CareNoteInput? FollowUpNote,
     bool BotWillSend = false,
-    string? Salutation = null);
+    string? Salutation = null,
+    bool BotCanBook = false);
 
 /// <summary>AI đề xuất làm gì với khách.</summary>
 public enum CareAction
