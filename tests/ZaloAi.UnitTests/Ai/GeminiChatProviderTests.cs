@@ -72,7 +72,7 @@ public sealed class GeminiChatProviderTests
     {
         var (provider, handler) = Create((_, _) => Ok("""{"reply":"ok"}"""));
 
-        await provider.ChatAsync(Request, CancellationToken.None);
+        await provider.CallAsync("gemini-3.8-flash", Request, CancellationToken.None);
 
         var (request, body) = handler.Calls.ShouldHaveSingleItem();
         request.RequestUri!.ToString().ShouldBe("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent");
@@ -97,7 +97,7 @@ public sealed class GeminiChatProviderTests
     {
         var (provider, _) = Create((_, _) => Ok("""{"reply":"ok"}""", prompt: 1_000_000, candidates: 100_000, thoughts: 100_000));
 
-        var result = await provider.ChatAsync(Request, CancellationToken.None);
+        var result = await provider.CallAsync("gemini-3.8-flash", Request, CancellationToken.None);
 
         result.Text.ShouldBe("""{"reply":"ok"}""");
         result.InputTokens.ShouldBe(1_000_000);
@@ -107,40 +107,55 @@ public sealed class GeminiChatProviderTests
     }
 
     [Fact]
-    public async Task Overloaded_primary_falls_back_to_lite_model()
+    public async Task Uses_the_requested_model_and_its_price()
     {
-        var (provider, handler) = Create((request, _) => request.RequestUri!.ToString().Contains("gemini-3.8-flash", StringComparison.Ordinal)
-            ? new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)
-            : Ok("""{"reply":"ok"}""", prompt: 1_000_000, candidates: 0, thoughts: 0));
+        var (provider, handler) = Create((_, _) => Ok("""{"reply":"ok"}""", prompt: 1_000_000, candidates: 0, thoughts: 0));
 
-        var result = await provider.ChatAsync(Request, CancellationToken.None);
+        var result = await provider.CallAsync("gemini-3.5-flash-lite", Request, CancellationToken.None);
 
-        handler.Calls.Count.ShouldBe(2);
-        handler.Calls[1].Request.RequestUri!.ToString().ShouldContain("gemini-3.5-flash-lite");
+        handler.Calls.ShouldHaveSingleItem().Request.RequestUri!.ToString().ShouldContain("gemini-3.5-flash-lite");
         result.CostUsd.ShouldBe(0.30m);
     }
 
-    [Fact]
-    public async Task Timeout_on_primary_falls_back_to_the_other_model()
+    [Theory]
+    [InlineData(HttpStatusCode.TooManyRequests, typeof(AiRateLimitedException))]
+    [InlineData(HttpStatusCode.ServiceUnavailable, typeof(AiOverloadedException))]
+    [InlineData(HttpStatusCode.InternalServerError, typeof(AiUnavailableException))]
+    [InlineData(HttpStatusCode.BadGateway, typeof(AiUnavailableException))]
+    [InlineData(HttpStatusCode.RequestEntityTooLarge, typeof(AiRequestTooLargeException))]
+    public async Task Temporary_errors_can_fall_back(HttpStatusCode status, Type expected)
     {
-        var (provider, handler) = Create((request, _) => request.RequestUri!.ToString().Contains("gemini-3.8-flash", StringComparison.Ordinal)
-            ? throw new TaskCanceledException()
-            : Ok("""{"reply":"ok"}"""));
+        var (provider, _) = Create((_, _) => new HttpResponseMessage(status));
 
-        var result = await provider.ChatAsync(Request, CancellationToken.None);
+        var ex = await Should.ThrowAsync<AiProviderException>(() => provider.CallAsync("gemini-3.8-flash", Request, CancellationToken.None));
 
-        handler.Calls.Count.ShouldBe(2);
-        result.Text.ShouldBe("""{"reply":"ok"}""");
+        ex.ShouldBeOfType(expected);
+        ex.CanFallback.ShouldBeTrue();
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.BadRequest)]
+    [InlineData(HttpStatusCode.Unauthorized)]
+    [InlineData(HttpStatusCode.Forbidden)]
+    [InlineData(HttpStatusCode.NotFound)]
+    public async Task Request_and_key_errors_do_not_fall_back(HttpStatusCode status)
+    {
+        var (provider, _) = Create((_, _) => new HttpResponseMessage(status));
+
+        var ex = await Should.ThrowAsync<AiRequestRejectedException>(() => provider.CallAsync("gemini-3.8-flash", Request, CancellationToken.None));
+
+        ex.CanFallback.ShouldBeFalse();
+        ex.StatusCode.ShouldBe((int)status);
     }
 
     [Fact]
-    public async Task Rate_limit_on_both_models_throws_after_fallback()
+    public async Task Timeout_and_network_errors_can_fall_back()
     {
-        var (provider, handler) = Create((_, _) => new HttpResponseMessage(HttpStatusCode.TooManyRequests));
+        var (timeout, _) = Create((_, _) => throw new TaskCanceledException());
+        var (network, _) = Create((_, _) => throw new HttpRequestException("dns"));
 
-        await Should.ThrowAsync<AiRateLimitedException>(() => provider.ChatAsync(Request, CancellationToken.None));
-        handler.Calls.Count.ShouldBe(2);
-        handler.Calls[1].Request.RequestUri!.ToString().ShouldContain("gemini-3.5-flash-lite");
+        (await Should.ThrowAsync<AiTimeoutException>(() => timeout.CallAsync("gemini-3.8-flash", Request, CancellationToken.None))).CanFallback.ShouldBeTrue();
+        (await Should.ThrowAsync<AiUnavailableException>(() => network.CallAsync("gemini-3.8-flash", Request, CancellationToken.None))).CanFallback.ShouldBeTrue();
     }
 
     [Fact]
@@ -151,22 +166,36 @@ public sealed class GeminiChatProviderTests
             Content = new StringContent("""{"error":{"message":"bí mật khách hàng 0912345678"}}"""),
         });
 
-        var ex = await Should.ThrowAsync<AiProviderException>(() => provider.ChatAsync(Request, CancellationToken.None));
+        var ex = await Should.ThrowAsync<AiProviderException>(() => provider.CallAsync("gemini-3.8-flash", Request, CancellationToken.None));
         ex.Message.ShouldNotContain("0912345678");
         ex.Message.ShouldNotContain("test-key");
         ex.Message.ShouldContain("400");
     }
 
     [Fact]
-    public async Task Empty_candidates_is_provider_error()
+    public async Task Safety_block_is_provider_error_without_fallback()
     {
         var (provider, _) = Create((_, _) => new HttpResponseMessage(HttpStatusCode.OK)
         {
             Content = new StringContent("""{"candidates":[{"finishReason":"SAFETY"}]}"""),
         });
 
-        var ex = await Should.ThrowAsync<AiProviderException>(() => provider.ChatAsync(Request, CancellationToken.None));
+        var ex = await Should.ThrowAsync<AiProviderException>(() => provider.CallAsync("gemini-3.8-flash", Request, CancellationToken.None));
         ex.Message.ShouldContain("SAFETY");
+        ex.CanFallback.ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Cut_off_answer_is_invalid_output_that_can_fall_back()
+    {
+        var (provider, _) = Create((_, _) => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("""{"candidates":[{"finishReason":"MAX_TOKENS","content":{"parts":[]}}]}"""),
+        });
+
+        var ex = await Should.ThrowAsync<AiInvalidOutputException>(() => provider.CallAsync("gemini-3.8-flash", Request, CancellationToken.None));
+        ex.Message.ShouldContain("MAX_TOKENS");
+        ex.CanFallback.ShouldBeTrue();
     }
 
     [Fact]

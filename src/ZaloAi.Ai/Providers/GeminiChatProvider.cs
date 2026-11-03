@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -11,37 +10,27 @@ using ZaloAi.Core.Options;
 namespace ZaloAi.Ai.Providers;
 
 /// <summary>
-/// Gemini chat qua REST (typed HttpClient + resilience: timeout, retry, circuit breaker).
+/// Gemini chat qua REST (typed HttpClient + resilience: timeout, retry, circuit breaker). Gọi đúng một model; chuyển model / nhà cung cấp
+/// do <see cref="FallbackChatProvider"/> lo.
 /// Định dạng kiểm chứng 2026-10-04 bằng request thật tới API (docs: https://ai.google.dev/gemini-api/docs/structured-output):
 /// - POST {base}models/{model}:generateContent, header x-goog-api-key.
 /// - body { system_instruction, contents[{role: user|model, parts[{text}]}], generationConfig{ temperature, maxOutputTokens,
 ///   responseMimeType: "application/json", responseJsonSchema } }. ("response_format" bị API từ chối.)
 /// - response candidates[0].content.parts[].text (bỏ part "thought"), usageMetadata{promptTokenCount, candidatesTokenCount, thoughtsTokenCount}.
-/// Model chính quá tải (503), hết hạn mức (429, ví dụ gói miễn phí 20 request/ngày) hoặc quá thời gian chờ → thử model dự phòng một lần.
 /// Không log key, không đưa nội dung phản hồi lỗi vào message.
 /// </summary>
-public sealed class GeminiChatProvider(HttpClient http, IOptions<AiOptions> options) : IChatProvider
+public sealed class GeminiChatProvider(HttpClient http, IOptions<AiOptions> options) : IChatModelClient
 {
-    private const string ProviderName = "gemini";
+    /// <summary>Lý do Gemini chặn nội dung: model khác cũng không nên trả lời thay → không chuyển nhà cung cấp.</summary>
+    private static readonly string[] BlockedReasons = ["SAFETY", "PROHIBITED_CONTENT", "BLOCKLIST", "SPII"];
+
     private readonly AiOptions _options = options.Value;
 
-    public async Task<ChatResult> ChatAsync(ChatRequest request, CancellationToken cancellationToken)
+    public string ProviderName => "gemini";
+
+    public async Task<ChatResult> CallAsync(string model, ChatRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
-        try
-        {
-            return await CallAsync(_options.ChatModel, request, cancellationToken);
-        }
-        catch (AiProviderException ex) when (ex is AiOverloadedException or AiRateLimitedException or AiTimeoutException
-                                             && !string.IsNullOrWhiteSpace(_options.ChatFallbackModel)
-                                             && _options.ChatFallbackModel != _options.ChatModel)
-        {
-            return await CallAsync(_options.ChatFallbackModel, request, cancellationToken);
-        }
-    }
-
-    private async Task<ChatResult> CallAsync(string model, ChatRequest request, CancellationToken cancellationToken)
-    {
         var generationConfig = new JsonObject
         {
             ["temperature"] = request.Temperature,
@@ -70,58 +59,33 @@ public sealed class GeminiChatProvider(HttpClient http, IOptions<AiOptions> opti
         {
             Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json"),
         };
-        message.Headers.Add("x-goog-api-key", _options.GeminiApiKey);
+        message.Headers.Add("x-goog-api-key", _options.GeminiApiKey?.Trim());
 
         var stopwatch = Stopwatch.StartNew();
-        HttpResponseMessage response;
-        try
-        {
-            response = await http.SendAsync(message, cancellationToken);
-        }
-        catch (TaskCanceledException ex) when (!cancellationToken.IsCancellationRequested)
-        {
-            throw new AiTimeoutException(ex);
-        }
-        catch (Polly.Timeout.TimeoutRejectedException ex)
-        {
-            throw new AiTimeoutException(ex);
-        }
-        catch (Polly.CircuitBreaker.BrokenCircuitException ex)
-        {
-            throw new AiOverloadedException(ex);
-        }
-        catch (HttpRequestException ex)
-        {
-            throw new AiProviderException("Không kết nối được dịch vụ AI (Gemini).", ex);
-        }
+        using var response = await AiHttp.SendAsync(http, message, cancellationToken);
+        AiHttp.ThrowIfFailed(response);
 
-        using (response)
+        using var json = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(cancellationToken), cancellationToken: cancellationToken);
+        var root = json.RootElement;
+        var text = ExtractText(root, out var finishReason);
+        if (text is null)
         {
-            switch (response.StatusCode)
+            var blocked = root.TryGetProperty("promptFeedback", out var feedback) && feedback.TryGetProperty("blockReason", out var block)
+                ? block.GetString()
+                : null;
+            var reason = blocked ?? finishReason;
+            if (blocked is not null || BlockedReasons.Contains(reason))
             {
-                case HttpStatusCode.TooManyRequests:
-                    throw new AiRateLimitedException();
-                case HttpStatusCode.ServiceUnavailable:
-                    throw new AiOverloadedException();
+                throw new AiProviderException($"Gemini không trả nội dung (lý do: {reason}).");
             }
 
-            if (!response.IsSuccessStatusCode)
-            {
-                throw new AiProviderException($"Gemini trả lỗi HTTP {(int)response.StatusCode}.");
-            }
-
-            using var json = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(cancellationToken), cancellationToken: cancellationToken);
-            var root = json.RootElement;
-            var text = ExtractText(root, out var finishReason);
-            if (text is null)
-            {
-                throw new AiProviderException($"Gemini không trả nội dung (lý do: {finishReason ?? "không rõ"}).");
-            }
-
-            var (input, output) = Usage(root);
-            var usedModel = root.TryGetProperty("modelVersion", out var version) ? version.GetString() ?? model : model;
-            return new ChatResult(text, ProviderName, usedModel, input, output, _options.Cost(model, input, output), stopwatch.ElapsedMilliseconds);
+            // Bị cắt (MAX_TOKENS), rỗng không rõ lý do... → model khác có thể làm được.
+            throw new AiInvalidOutputException(reason ?? "không rõ");
         }
+
+        var (input, output) = Usage(root);
+        var usedModel = root.TryGetProperty("modelVersion", out var version) ? version.GetString() ?? model : model;
+        return new ChatResult(text, ProviderName, usedModel, input, output, _options.Cost(model, input, output), stopwatch.ElapsedMilliseconds);
     }
 
     private static string? ExtractText(JsonElement root, out string? finishReason)
@@ -163,4 +127,3 @@ public sealed class GeminiChatProvider(HttpClient http, IOptions<AiOptions> opti
         return (Read("promptTokenCount"), Read("candidatesTokenCount") + Read("thoughtsTokenCount"));
     }
 }
-
