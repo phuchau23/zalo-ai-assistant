@@ -143,7 +143,7 @@ public sealed partial class CareAdvisor(IChatProvider chat, IKnowledgeSearch sea
         s.AppendLine("## Tin gửi khách (draft_message)");
         var salutation = CustomerSalutation.Resolve(request.Salutation);
         var address = salutation == CustomerSalutation.Unknown
-            ? "gọi khách là \"mình\" (chưa biết giới tính; nếu trong hội thoại khách tự xưng anh/chị/cô/chú/bác thì gọi theo đó)"
+            ? "gọi khách là \"mình\" (chưa biết giới tính; chỉ khi khách TỰ XƯNG anh/chị/cô/chú/bác, ví dụ \"chị muốn hỏi\", mới gọi theo đó; khách gọi mình là \"bé\", \"em\", \"con\" thì vẫn chưa biết, giữ \"mình\")"
             : $"gọi khách là \"{salutation}\"";
         if (request.BotWillSend)
         {
