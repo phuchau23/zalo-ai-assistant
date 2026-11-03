@@ -267,13 +267,18 @@ public sealed class CareDecisionTests
     }
 
     [Fact]
-    public void At_least_24h_between_proactive_messages()
+    public void At_least_24h_between_proactive_messages_except_follow_up_notes()
     {
         var contact = NewContact();
         contact.LastProactiveAt = Morning.AddHours(-2);
-        var d = CareDecision.Decide(Send(), contact, Chat(ChannelKind.Webchat), new HandoffSettings(), true, Morning);
+        var d = CareDecision.Decide(Send(), contact, Chat(ChannelKind.Webchat), new HandoffSettings(), false, Morning);
         d.Kind.ShouldBe(CareDecisionKind.AutoSend);
         d.SendAt.ShouldBe(Morning.AddHours(22));
+
+        // Nhân viên đã chọn giờ hẹn chăm sóc → gửi đúng giờ hẹn, không chờ đủ 24 giờ.
+        var followUp = CareDecision.Decide(Send(), contact, Chat(ChannelKind.Webchat), new HandoffSettings(), true, Morning);
+        followUp.Kind.ShouldBe(CareDecisionKind.AutoSend);
+        followUp.SendAt.ShouldBe(Morning);
     }
 
     [Fact]
