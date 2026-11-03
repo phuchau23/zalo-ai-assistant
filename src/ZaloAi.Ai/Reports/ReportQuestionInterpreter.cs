@@ -61,7 +61,7 @@ public sealed class ReportQuestionInterpreter(IChatProvider chat) : IReportQuest
         ArgumentNullException.ThrowIfNull(text);
         try
         {
-            using var doc = JsonDocument.Parse(text.Trim().Trim('`'));
+            using var doc = JsonDocument.Parse(Providers.JsonOutput.Clean(text));
             var root = doc.RootElement;
             string? Str(string name) => root.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
             var report = Str("report") ?? "revenue";
