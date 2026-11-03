@@ -32,7 +32,7 @@ Ký hiệu: 📱 = làm trên trang khách (phone-test) · 💻 = làm trên tra
 
 ## Buổi 1 — Bot trả lời khách (≈ 30 phút)
 
-**Trước khi bắt đầu:** 💻 Chat thử → Giọng văn → chọn **"Như nhân viên thật"** → Lưu.
+**Trước khi bắt đầu:** 💻 Thiết lập trợ lý → Giọng văn & xưng hô (hoặc tab Giọng văn trong Chat thử) → chọn **"Như nhân viên thật"** → Lưu.
 
 ### 1.1 Hỏi giá + câu báo trợ lý AI
 📱 ✎ rồi gửi:
@@ -168,7 +168,7 @@ Nên làm **sau 2.7** (đã kết nối Telegram) — lời nhắc chủ yếu g
 - Xong nhớ **đặt lại giờ làm việc đúng**.
 
 ### 2.7 Telegram
-💻 Cài đặt → **Kết nối Telegram** → lấy mã kết nối → trong nhóm Telegram có bot, gõ (thay `<bot>` và `MÃ`):
+💻 Cài đặt → **Thông báo** → Kết nối Telegram → lấy mã kết nối → trong nhóm Telegram có bot, gõ (thay `<bot>` và `MÃ`):
 ```
 /ketnoi@<bot> MÃ
 ```
@@ -226,7 +226,7 @@ Khách báo đau lưng nhiều hơn sau buổi bấm hôm qua
 **Đúng khi:** tới giờ bot KHÔNG tự nhắn; khách hiện ở **Cần chăm sóc** cho nhân viên liên hệ, có tin nháp.
 
 ### 3.8 Chế độ "Chỉ gợi ý"
-💻 Cài đặt → mục **"Ai nhắn khách?"** → **Chỉ gợi ý** → Lưu → làm lại 3.3 với khách mới.
+💻 **Thiết lập trợ lý → Chăm sóc chủ động** → **"Ai nhắn khách?"** → **Chỉ gợi ý** → Lưu → làm lại 3.3 với khách mới.
 **Đúng khi:** bot KHÔNG tự gửi; Cần chăm sóc có tin nháp → nhân viên sửa → Gửi → 📱 nhận. Xong **chuyển lại** chế độ cũ.
 
 ### 3.9 Xuất dữ liệu
@@ -316,10 +316,10 @@ Xóa tài liệu vừa tải → tìm lại cụm đó.
 ## Buổi 5 — Quản lý & quản trị (≈ 20 phút)
 
 ### 5.1 Tổng quan
-💻 Tổng quan. **Đúng khi:** có 4 ô số liệu, biểu đồ chuyển 7/30 ngày được, mục "Câu bot chưa trả lời được". (Chat thử không tính nên số liệu gần như trống — bình thường.)
+💻 Tổng quan. **Đúng khi:** thấy lời chào + 3 ô "Cần xử lý ngay" (khách chờ nhân viên, khách cần chăm sóc, hóa đơn còn nợ), khối "Hôm nay" (doanh thu, lịch hẹn, khách mới, hóa đơn + lịch sắp tới), thẻ tím "Trợ lý AI · 30 ngày qua", thẻ "Thiết lập hệ thống" (ẩn khi xong hết), và phần "Hoạt động của bot" (biểu đồ 7/30 ngày, câu bot chưa trả lời được). Chat thử không tính vào số liệu bot — bình thường.
 
 ### 5.2 Link chính sách
-💻 Cài đặt → link chính sách bảo mật:
+💻 Cài đặt → **Doanh nghiệp** → link chính sách bảo mật:
 ```
 https://khoahochuyetdao.com/chinh-sach-bao-mat
 ```
@@ -363,7 +363,7 @@ Super admin → Shop Test → **Tải toàn bộ dữ liệu (.zip)** → **Khó
 ## Buổi 5b — Nhân viên & mật khẩu (≈ 15 phút)
 
 ### 5b.1 Thêm nhân viên
-💻 (chủ DN) Cài đặt → Nhân viên → thêm:
+💻 (chủ DN) Cài đặt → **Tài khoản & phân quyền** → thêm:
 ```
 nhanvien1@khoahochuyetdao.local
 ```
@@ -399,7 +399,7 @@ Chủ xóa nhanvien1. **Đúng khi:** tab nhân viên bị đăng xuất, đăng
 ## Buổi 6 — Zalo thật (khi DNS đã chuyển sang Cloudflare)
 
 1. Tunnel `dev-api.haulp.io.vn` chạy; Zalo App đã khai báo Callback + Webhook; đã lưu OA Secret Key.
-2. 💻 Kết nối kênh → **Kết nối Zalo OA** → trạng thái "Đang hoạt động".
+2. 💻 **Kênh Zalo** → **Kết nối Zalo OA** → trạng thái "Đang hoạt động".
 3. Zalo cá nhân nhắn OA → làm lại 1.1–1.10 với đúng các câu ở trên → bot trả lời trên Zalo trong vài giây.
 4. Nhân viên trả lời từ Hộp thư → khách nhận trên Zalo; nhân viên trả lời trong app OA → bot dừng.
 5. Ngắt kết nối → nhắn OA → bot không trả lời.
@@ -409,7 +409,7 @@ Chủ xóa nhanvien1. **Đúng khi:** tab nhân viên bị đăng xuất, đăng
 ## Buổi 7 — CRM C1: chi nhánh, danh mục, nhân viên, quyền (≈ 25 phút)
 
 ### 7.1 Chi nhánh mặc định
-💻 Cài đặt → mục **Chi nhánh**.
+💻 Cài đặt → **Chi nhánh & giờ mở cửa**.
 **Đúng khi:** có sẵn 1 chi nhánh `CN1` tên doanh nghiệp, nhãn Mặc định, giờ mở cửa 08:00–20:00 cả tuần.
 
 ### 7.2 Thêm chi nhánh + giờ mở cửa
@@ -433,11 +433,11 @@ Tab Sản phẩm → Thêm: mã `SP-TINH-DAU-TRAM`, tên `Tinh dầu tràm 50ml`
 **Đúng khi:** mọi thứ lưu và hiện lại đúng sau khi tải lại trang.
 
 ### 7.7 Quyền nhân viên
-💻 Cài đặt → Nhân viên (tài khoản) → với `nhanvien1` bấm **Quyền** → bật `Quản lý danh mục bán`, chi nhánh `Q12` → Lưu. Tab ẩn danh đăng nhập nhân viên.
-**Đúng khi:** nhân viên sửa được giá ở Danh mục; ở Cài đặt → Chi nhánh chỉ thấy `Q12` và không có nút sửa; trang Nhân viên không có nút thêm/sửa. Chủ tắt quyền → nhân viên tải lại trang mất nút sửa Danh mục.
+💻 Cài đặt → **Tài khoản & phân quyền** → với `nhanvien1` bấm **Quyền** → bật `Quản lý danh mục bán`, chi nhánh `Q12` → Lưu. Tab ẩn danh đăng nhập nhân viên.
+**Đúng khi:** nhân viên sửa được giá ở Danh mục; ở Cài đặt → Chi nhánh & giờ mở cửa chỉ thấy `Q12` và không có nút sửa; trang Nhân viên không có nút thêm/sửa. Chủ tắt quyền → nhân viên tải lại trang mất nút sửa Danh mục.
 
 ## Buổi 8 — CRM C2: lịch hẹn & bot tự chốt (≈ 30 phút)
-Chuẩn bị: Nhân viên Lan có ca cố định T2–CN `08:00–20:00` và làm được dịch vụ "Trị liệu cổ vai gáy / lưng eo 60 phút" (hoặc mọi dịch vụ). Cài đặt → Lịch & bán hàng: "Bot tự chốt lịch" đang bật.
+Chuẩn bị: Nhân viên Lan có ca cố định T2–CN `08:00–20:00` và làm được dịch vụ "Trị liệu cổ vai gáy / lưng eo 60 phút" (hoặc mọi dịch vụ). Cài đặt → **Lịch hẹn & bán hàng**: "Bot tự chốt lịch" đang bật.
 
 ### 8.1 Xem chỗ trống & đặt tay
 💻 Trang **Lịch hẹn** → ngày mai → "Đặt lịch": khách mới `Trần Thị Hoa`, SĐT `0905111222`, dịch vụ trị liệu 60 phút, giờ `15:00`.
@@ -459,21 +459,21 @@ chị muốn đặt lịch trị liệu cổ vai gáy 60 phút 10h sáng mai
 
 ### 8.5 Dời & hủy qua chat
 📱 (cuộc chat 8.2) gửi `chị muốn dời lịch sang 14h` → bot báo đã dời. Gửi `hủy lịch giúp chị` → bot báo đã hủy; 💻 lịch chuyển trạng thái Đã hủy.
-Siết chính sách: Cài đặt → Lịch & bán hàng → "Hủy/dời trước" = `100` giờ → đặt lại lịch → `hủy lịch` → bot từ chối ("báo trước 100 giờ") và chuyển nhân viên. (Xong đặt lại 2.)
+Siết chính sách: Cài đặt → **Lịch hẹn & bán hàng** → "Hủy/dời trước" = `100` giờ → đặt lại lịch → `hủy lịch` → bot từ chối ("báo trước 100 giờ") và chuyển nhân viên. (Xong đặt lại 2.)
 
 ### 8.6 Nhóm đông → nhân viên
 📱 ✎ → `đặt lịch trị liệu cổ vai gáy 60 phút 16h mai cho 3 người` → bot không tự chốt, chuyển nhân viên.
 
 ### 8.7 Nhắc lịch & xác nhận
-💻 Cài đặt → Lịch & bán hàng: nhắc lần 2 = `2` giờ. Đặt tay cho khách CHAT THỬ (chọn khách từ danh sách) một lịch **sau 1,5 giờ** nữa. Đợi ≤ 1 phút.
+💻 Cài đặt → **Lịch hẹn & bán hàng**: nhắc lần 2 = `2` giờ. Đặt tay cho khách CHAT THỬ (chọn khách từ danh sách) một lịch **sau 1,5 giờ** nữa. Đợi ≤ 1 phút.
 **Đúng khi:** 📱 nhận tin "nhắc lịch…"; gửi `ok` → bot "đã ghi nhận … xác nhận lịch"; 💻 lịch thành Đã xác nhận.
 
 ### 8.8 Check-in, tóm tắt khách, giường
 💻 mở lịch của 8.2 (hoặc lịch bot khác) → thấy **Tóm tắt cho kỹ thuật viên** (AI viết); bấm Đã đến → Đang làm → Hoàn thành.
-Cài đặt → Chi nhánh → Giường/phòng: thêm 1 giường → đặt 2 lịch cùng giờ với 2 nhân viên khác nhau → lịch thứ 2 báo kín; thêm giường 2 → được.
+Cài đặt → Chi nhánh & giờ mở cửa → mở chi nhánh → Giường/phòng: thêm 1 giường → đặt 2 lịch cùng giờ với 2 nhân viên khác nhau → lịch thứ 2 báo kín; thêm giường 2 → được.
 
 ## Buổi 9 — CRM C3: bán hàng, gói, ví, VietQR (≈ 30 phút)
-Chuẩn bị: Cài đặt → Thanh toán: thêm tài khoản ngân hàng thật của bạn (BIN 6 số, số tài khoản, tên chủ TK). Cài đặt → Lịch & bán hàng: ngưỡng giảm giá cần duyệt `20`%.
+Chuẩn bị: Cài đặt → Thanh toán: thêm tài khoản ngân hàng thật của bạn (BIN 6 số, số tài khoản, tên chủ TK). Cài đặt → **Lịch hẹn & bán hàng**: ngưỡng giảm giá cần duyệt `20`%.
 
 ### 9.1 Hóa đơn + giảm giá + thu 2 lần
 💻 **Bán hàng** → Tạo hóa đơn: khách `Trần Thị Hoa`, dòng "Trị liệu cổ vai gáy 60 phút" + "Tinh dầu tràm 50ml" x2 → giảm giá `50000` lý do `khách quen` → Thu tiền mặt `300000` → Thu chuyển khoản phần còn lại.
@@ -484,7 +484,7 @@ Chuẩn bị: Cài đặt → Thanh toán: thêm tài khoản ngân hàng thật
 **Đúng khi:** app hiện đúng ngân hàng, số tài khoản, số tiền còn nợ, nội dung `HD000002`. (Chưa chuyển thật; nếu app báo mã không hợp lệ → chụp màn hình gửi Claude.)
 
 ### 9.3 Voucher
-Cài đặt → Voucher: tạo `GIAM10`, 10%, tối đa 100.000. Hóa đơn mới → nhập mã `giam10` → giảm đúng 10%; nhập `SAI` → báo mã không tồn tại.
+Bán hàng → tab **Voucher**: tạo `GIAM10`, 10%, tối đa 100.000. Hóa đơn mới → nhập mã `giam10` → giảm đúng 10%; nhập `SAI` → báo mã không tồn tại.
 
 ### 9.4 Gói trừ buổi
 Hóa đơn bán "Gói … 10 buổi" cho Hoa → thu đủ. Hồ sơ khách Hoa → mục **Gói** hiện "còn 10/10". Lịch hẹn của Hoa (dịch vụ thuộc gói) → **Thanh toán** → hóa đơn hiện dòng "Dùng buổi gói", tổng 0 → **Chốt (0 đ)** → gói còn 9/10.
@@ -516,10 +516,10 @@ Chuẩn bị: Danh mục → Sản phẩm: "Tinh dầu tràm 50ml" bật **Theo 
 **Đúng khi:** tồn 20, giá vốn bình quân 110.000.
 
 ### 10.2 Bán trừ kho, hủy trả kho
-Bán hàng → hóa đơn 3 chai tinh dầu → thu đủ → Kho: tồn 17. Hủy hóa đơn đó → tồn 20. Lịch sử kho có dòng "Bán" và "Trả lại".
+Bán hàng → hóa đơn 3 chai tinh dầu → thu đủ → Kho hàng: tồn 17. Hủy hóa đơn đó → tồn 20. Lịch sử kho có dòng "Bán" và "Trả lại".
 
 ### 10.3 Định mức vật tư
-Kho → Định mức → dịch vụ "Trị liệu cổ vai gáy 60 phút" dùng `0.05` chai Dầu massage 1L. Nhập 2 chai dầu. Lịch hẹn → Hoàn thành một lịch trị liệu → Kho: dầu còn 1.95.
+Kho hàng → Định mức → dịch vụ "Trị liệu cổ vai gáy 60 phút" dùng `0.05` chai Dầu massage 1L. Nhập 2 chai dầu. Lịch hẹn → Hoàn thành một lịch trị liệu → Kho: dầu còn 1.95.
 
 ### 10.4 Chuyển kho, kiểm kê, cảnh báo
 Chuyển 5 chai tinh dầu sang chi nhánh Q12 → Q12 tồn 5, CN1 tồn 15. Kiểm kê Q12 đếm 4 → tồn 4, có dòng điều chỉnh −1. Đặt mức tối thiểu Q12 = 5 → bộ lọc "Sắp hết" hiện tinh dầu Q12.
@@ -561,7 +561,7 @@ Mỗi tab mở không lỗi; Công nợ liệt kê hóa đơn còn nợ (Buổi 
 Ô "Hỏi số liệu": `Tháng này dịch vụ nào bán chạy nhất?` → câu trả lời nêu đúng dịch vụ và số tiền như tab Doanh thu. Hỏi `Thời tiết hôm nay thế nào?` → báo không thuộc báo cáo.
 
 ### 12.5 Báo cáo tuần
-Nếu đã kết nối Telegram: Cài đặt → bấm "Gửi thử báo cáo tuần" (nếu có) hoặc đợi 08:00 thứ 2 → nhóm Telegram nhận tóm tắt.
+Nếu đã kết nối Telegram: Cài đặt → Thông báo → bấm "Gửi thử báo cáo tuần" (nếu có) hoặc đợi 08:00 thứ 2 → nhóm Telegram nhận tóm tắt.
 
 ---
 
