@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using Hangfire;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Shouldly;
@@ -98,12 +99,49 @@ public sealed class InboxEndpointsTests(PostgresFixture db)
         var again = (await owner.GetFromJsonAsync<InboxConversationDetail>(Inbox($"/{conversationId}")))!;
         again.Conversation.NeedsAttentionSince.ShouldNotBeNull();
         again.Messages[^1].Sender.ShouldBe("customer");
+        var waitingId = again.Messages[^1].Id;
+        var queued = QueuedReplies(waitingId);
 
+        // Trả lại bot khi tin khách chưa ai trả lời → bot trả lời luôn tin đó, khách không phải nhắn lại.
         (await owner.PostAsync(Inbox($"/{conversationId}/return-to-bot"), null)).StatusCode.ShouldBe(HttpStatusCode.NoContent);
         var back = (await owner.GetFromJsonAsync<InboxConversationDetail>(Inbox($"/{conversationId}")))!;
         back.Conversation.Mode.ShouldBe("bot");
         back.Conversation.NeedsAttentionSince.ShouldBeNull();
+        QueuedReplies(waitingId).ShouldBe(queued + 1);
+
+        using (var scope = db.Api.Services.CreateScope())
+        {
+            await scope.ServiceProvider.GetRequiredService<ProcessIncomingMessageJob>().RunAsync(tenantId, waitingId, CancellationToken.None);
+        }
+
+        var answered = (await owner.GetFromJsonAsync<InboxConversationDetail>(Inbox($"/{conversationId}")))!;
+        answered.Messages.SkipWhile(m => m.Id != waitingId).Skip(1).ShouldContain(m => m.Sender == "bot");
     }
+
+    [Fact]
+    public async Task Return_to_bot_after_staff_answered_does_not_reply_again()
+    {
+        var (tenantId, owner, conversationId) = await HandedOffAsync("Trả lại bot đã trả lời");
+        (await owner.PostAsync(Inbox($"/{conversationId}/take-over"), null)).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        await owner.PostAsJsonAsync(new Uri($"/chat-test/conversations/{conversationId}/messages", UriKind.Relative), new { text = "gói này mấy buổi em" });
+        (await owner.PostAsJsonAsync(Inbox($"/{conversationId}/messages"), new { text = "Dạ gói 10 buổi ạ" })).StatusCode.ShouldBe(HttpStatusCode.Accepted);
+        await RunPendingJobsAsync(tenantId);
+        var detail = (await owner.GetFromJsonAsync<InboxConversationDetail>(Inbox($"/{conversationId}")))!;
+        var customerId = detail.Messages.Last(m => m.Sender == "customer").Id;
+        var queued = QueuedReplies(customerId);
+
+        (await owner.PostAsync(Inbox($"/{conversationId}/return-to-bot"), null)).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        QueuedReplies(customerId).ShouldBe(queued);
+    }
+
+    private int QueuedReplies(Guid messageId) => Queued<ProcessIncomingMessageJob>(JobQueues.Messages, messageId);
+
+    /// <summary>Số job <typeparamref name="TJob"/> đang xếp hàng cho một id (tham số thứ 2 của job; API test không chạy Hangfire server nên job nằm nguyên trong hàng đợi).</summary>
+    private int Queued<TJob>(string queue, Guid id) =>
+        db.Api.Services.GetRequiredService<JobStorage>().GetMonitoringApi()
+            .EnqueuedJobs(queue, 0, 100_000)
+            .Count(j => j.Value.Job?.Type == typeof(TJob) && j.Value.Job.Args[1] is Guid arg && arg == id);
 
     [Fact]
     public async Task Tenant_B_cannot_see_or_act_on_tenant_A_conversations()

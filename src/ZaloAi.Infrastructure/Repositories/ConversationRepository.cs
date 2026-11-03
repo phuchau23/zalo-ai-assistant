@@ -142,6 +142,17 @@ public sealed class ConversationRepository(AppDbContext db, ITenantContext tenan
             .FirstOrDefaultAsync(cancellationToken);
     }
 
+    /// <summary>Tin cuối của hội thoại, mọi người gửi (trả lại bot → biết khách còn chờ trả lời không).</summary>
+    public Task<Message?> LatestMessageAsync(Guid tenantId, Guid conversationId, CancellationToken cancellationToken)
+    {
+        EnsureTenant(tenantId);
+        return Db.Messages
+            .AsNoTracking()
+            .Where(m => m.TenantId == tenantId && m.ConversationId == conversationId)
+            .OrderByDescending(m => m.CreatedAt).ThenByDescending(m => m.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
     /// <summary>Tin ra còn chờ gửi của hội thoại (được track), cũ trước.</summary>
     public async Task<IReadOnlyList<Message>> ListPendingOutgoingAsync(Guid tenantId, Guid conversationId, CancellationToken cancellationToken)
     {

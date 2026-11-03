@@ -78,12 +78,19 @@ public sealed class InboxService(
         await notifier.PublishAsync(tenantId, new InboxEvent("updated", conversationId), cancellationToken);
     }
 
-    /// <summary>Trả lại cho bot: bot trả lời tin tiếp theo của khách; gửi câu "trợ lý AI luôn sẵn sàng" nếu bật.</summary>
+    /// <summary>
+    /// Trả lại cho bot. Tin cuối là của khách (nhắn lúc nhân viên đang xử lý, chưa ai trả lời) → bot trả lời luôn tin đó, khách không phải
+    /// nhắn lại; job xử lý tin idempotent nên bấm nhiều lần không trả lời trùng. Không còn tin chờ → gửi câu "trợ lý AI luôn sẵn sàng" nếu bật
+    /// (có tin chờ thì câu trả lời của bot thay cho câu này, tránh hai tin đến lộn thứ tự).
+    /// </summary>
     public async Task ReturnToBotAsync(Guid tenantId, Guid conversationId, Guid? userId, CancellationToken cancellationToken)
     {
         var conversation = await RequireAsync(tenantId, conversationId, cancellationToken);
         var settings = await handoffSettings.GetAsync(tenantId, cancellationToken);
         var tenant = await tenants.GetAsync(tenantId, cancellationToken) ?? throw new NotFoundException();
+        var waiting = await conversations.LatestMessageAsync(tenantId, conversationId, cancellationToken) is { Sender: MessageSender.Customer } last
+            ? last.Id
+            : (Guid?)null;
 
         conversation.Mode = ConversationMode.Bot;
         conversation.HandoffReason = null;
@@ -91,7 +98,7 @@ public sealed class InboxService(
         conversation.NeedsAttentionSince = null;
         conversation.LastReminderAt = null;
         Message? notice = null;
-        if (settings.ReturnToBotMessageEnabled && !conversation.IsTest)
+        if (settings.ReturnToBotMessageEnabled && !conversation.IsTest && waiting is null)
         {
             notice = delivery.AddOutgoing(tenantId, conversation, MessageSender.System,
                 HandoffTexts.Fill(settings.ReturnToBotMessage, tenant.Name, null, settings, time.GetUtcNow(), await SalutationAsync(tenantId, conversation, cancellationToken)));
@@ -100,6 +107,11 @@ public sealed class InboxService(
         audit.Add(tenantId, userId, "conversation.returned_to_bot", conversationId.ToString());
         await conversations.SaveChangesAsync(cancellationToken);
         EnqueueSend(tenantId, notice);
+        if (waiting is { } customerMessageId)
+        {
+            jobs.Enqueue<ProcessIncomingMessageJob>(job => job.RunAsync(tenantId, customerMessageId, CancellationToken.None));
+        }
+
         await notifier.PublishAsync(tenantId, new InboxEvent("updated", conversationId), cancellationToken);
     }
 
