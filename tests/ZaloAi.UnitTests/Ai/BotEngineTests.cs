@@ -100,9 +100,9 @@ public sealed class BotEngineTests
         var chat = new ScriptedChat(_ => Json("Dạ em chào anh/chị ạ."));
         var result = await Engine(chat, new StaticSearch()).ReplyAsync(Turn("xin chào", first: true), CancellationToken.None);
 
-        result.Reply.ShouldStartWith("Dạ em là Huyệt Đạo, trợ lý AI");
-        result.Reply.ShouldContain("https://example.vn/bao-mat");
-        result.Reply.ShouldEndWith("Dạ em chào anh/chị ạ.");
+        result.Messages.Count.ShouldBe(1); // gộp vào tin đầu, không thành tin riêng
+        result.Reply.ShouldStartWith("Dạ em là trợ lý AI của Khoa Học Huyệt Đạo ạ. Em chào");
+        result.Reply.ShouldEndWith("\nChính sách bảo mật của Khoa Học Huyệt Đạo: https://example.vn/bao-mat");
     }
 
     [Fact]

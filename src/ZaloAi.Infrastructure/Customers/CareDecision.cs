@@ -27,7 +27,7 @@ public sealed record CareDecisionResult(CareDecisionKind Kind, string? Reason = 
 /// <summary>
 /// Giới hạn CỨNG của hệ thống cho tin bot tự nhắn (CLAUDE.md mục 7) — AI chỉ đề xuất, các luật ở đây quyết định:
 /// khách đã từ chối → không nhắn; bot đã nhắn mà khách chưa trả lời → không nhắn tin thứ hai (trừ lịch hẹn nhân viên đặt);
-/// cách tin chủ động trước ≥ 24 giờ; chỉ trong khung giờ (DN chọn, luôn nằm trong 07:00–21:00 giờ Việt Nam); quá hạn nhắn Zalo
+/// cách tin chủ động trước ≥ 24 giờ (trừ lịch hẹn nhân viên đặt: nhân viên đã chọn giờ); chỉ trong khung giờ (DN chọn, luôn nằm trong 07:00–21:00 giờ Việt Nam); quá hạn nhắn Zalo
 /// (7 ngày) → nhân viên gọi điện; tin quảng cáo (chưa có dữ liệu đồng ý nhận tin) → nhân viên; nhân viên đang xử lý → nhân viên.
 /// </summary>
 public static class CareDecision
@@ -94,7 +94,7 @@ public static class CareDecision
             return new(CareDecisionKind.Nothing, "awaiting_reply");
         }
 
-        var earliest = contact.LastProactiveAt is { } last && last + MinProactiveGap > now ? last + MinProactiveGap : now;
+        var earliest = !isFollowUp && contact.LastProactiveAt is { } last && last + MinProactiveGap > now ? last + MinProactiveGap : now;
         var sendAt = NextSendTime(settings, earliest);
         var deadline = MessagingDeadline(conversation);
         if (deadline is not null && sendAt >= deadline)

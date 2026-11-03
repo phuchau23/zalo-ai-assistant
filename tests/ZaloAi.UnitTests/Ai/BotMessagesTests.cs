@@ -54,16 +54,52 @@ public sealed class BotMessagesTests
         new(Guid.NewGuid(), Spa, message, [], null, first, null, salutation, byStaff);
 
     [Fact]
-    public async Task Several_short_messages_are_kept_in_order_with_disclosure_as_its_own_first_message()
+    public async Task Several_short_messages_are_kept_in_order_with_disclosure_merged_into_the_first()
     {
         var chat = new ScriptedChat(_ => MessagesJson(["Dạ gói này giá 450.000đ ạ 😊", "  ", "Massage body 60 phút, thư giãn mà không đau.", "Mình muốn em giữ lịch giờ nào ạ?"], ["C1"]));
         var result = await Engine(chat, new StaticSearch(Massage)).ReplyAsync(TurnWith("giá massage 60p", null, false, first: true), CancellationToken.None);
 
-        result.Messages.Count.ShouldBe(4); // câu báo AI + 3 tin (tin rỗng bị bỏ)
-        result.Messages[0].ShouldStartWith("Dạ em là Huyệt Đạo, trợ lý AI");
-        result.Messages[1].ShouldBe("Dạ gói này giá 450.000đ ạ 😊");
-        result.Messages[3].ShouldBe("Mình muốn em giữ lịch giờ nào ạ?");
-        JsonDocument.Parse(result.TraceJson).RootElement.GetProperty("parts").GetInt32().ShouldBe(4);
+        result.Messages.Count.ShouldBe(3); // tin rỗng bị bỏ, câu báo AI không thành tin riêng
+        result.Messages[0].ShouldBe("Dạ em là trợ lý AI của Khoa Học Huyệt Đạo ạ. Gói này giá 450.000đ ạ 😊");
+        result.Messages[1].ShouldBe("Massage body 60 phút, thư giãn mà không đau.");
+        // Link chính sách cuối tin CUỐI: không cắt ngang khi tin đầu mở đầu một danh sách.
+        result.Messages[2].ShouldBe("Mình muốn em giữ lịch giờ nào ạ?\nChính sách bảo mật của Khoa Học Huyệt Đạo: https://example.vn/bao-mat");
+        JsonDocument.Parse(result.TraceJson).RootElement.GetProperty("parts").GetInt32().ShouldBe(3);
+    }
+
+    [Theory]
+    [InlineData("Vâng, em gửi mình bảng giá nha", "Dạ em là trợ lý AI của Khoa Học Huyệt Đạo ạ. Em gửi mình bảng giá nha")]
+    [InlineData("Dạ vâng ạ, em ghi nhận rồi", "Dạ em là trợ lý AI của Khoa Học Huyệt Đạo ạ. Em ghi nhận rồi")]
+    [InlineData("Dạo này bên em có ưu đãi", "Dạ em là trợ lý AI của Khoa Học Huyệt Đạo ạ. Dạo này bên em có ưu đãi")]
+    public async Task Disclosure_drops_only_a_leading_yes_word(string first, string expected)
+    {
+        var chat = new ScriptedChat(_ => MessagesJson([first], ["C1"]));
+        var result = await Engine(chat, new StaticSearch(Massage)).ReplyAsync(TurnWith("hi", null, false, first: true), CancellationToken.None);
+
+        result.Messages[0].ShouldStartWith(expected);
+    }
+
+    [Fact]
+    public async Task Booking_intent_is_parsed_and_dropped_when_handing_off()
+    {
+        const string Booking = """{"action":"book","service_codes":["dv-massage-60"],"date":"2026-10-20","time":"15:00","staff_name":null,"branch_name":null,"party_size":2,"appointment_id":null}""";
+        var chat = new ScriptedChat(_ => MessagesJson(["Dạ để em kiểm tra lịch cho chị nha."], ["C1"]).Replace("\"lead_fields\":[]", "\"lead_fields\":[],\"booking\":" + Booking, StringComparison.Ordinal));
+        var context = new BookingContext(true, ["Spa Hoa Mai"], []);
+        var result = await Engine(chat, new StaticSearch(Massage)).ReplyAsync(TurnWith("đặt lịch 15h", null, false) with { Booking = context }, CancellationToken.None);
+
+        result.Booking.ShouldNotBeNull();
+        (result.Booking.Action, result.Booking.ServiceCodes[0], result.Booking.Date, result.Booking.Time, result.Booking.PartySize)
+            .ShouldBe(("book", "DV-MASSAGE-60", "2026-10-20", "15:00", 2));
+        chat.Requests[0].System.ShouldContain("## ĐẶT LỊCH QUA CHAT");
+
+        // Chuyển người (không có dữ liệu) → bỏ ý định đặt lịch.
+        var handoff = new ScriptedChat(_ => MessagesJson(["Dạ em chưa rõ, em chuyển nhân viên ạ."])
+            .Replace("\"needs_human\":false", "\"needs_human\":true", StringComparison.Ordinal)
+            .Replace("\"handoff_reason\":null", "\"handoff_reason\":\"no_knowledge\"", StringComparison.Ordinal)
+            .Replace("\"lead_fields\":[]", "\"lead_fields\":[],\"booking\":" + Booking, StringComparison.Ordinal));
+        var handedOff = await Engine(handoff, new StaticSearch()).ReplyAsync(TurnWith("đặt lịch 15h", null, false) with { Booking = context }, CancellationToken.None);
+        handedOff.NeedsHuman.ShouldBeTrue();
+        handedOff.Booking.ShouldBeNull();
     }
 
     [Fact]

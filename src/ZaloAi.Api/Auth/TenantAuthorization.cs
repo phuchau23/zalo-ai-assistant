@@ -30,4 +30,25 @@ internal static class TenantAuthorization
         });
         return builder;
     }
+
+    /// <summary>
+    /// Endpoint cần đăng nhập + tenant + một quyền chi tiết (<see cref="TenantPermissions"/>). Chủ DN luôn qua; nhân viên phải được
+    /// chủ bật công tắc quyền đó (trang Cài đặt → Nhân viên). Thiếu → 403 "forbidden".
+    /// </summary>
+    public static TBuilder RequirePermission<TBuilder>(this TBuilder builder, string permission)
+        where TBuilder : IEndpointConventionBuilder
+    {
+        builder.RequireTenantRole(TenantRole.Staff);
+        builder.AddEndpointFilter(async (context, next) =>
+        {
+            var tenant = context.HttpContext.RequestServices.GetRequiredService<ITenantContext>();
+            if (!tenant.Can(permission))
+            {
+                throw new ForbiddenException();
+            }
+
+            return await next(context);
+        });
+        return builder;
+    }
 }

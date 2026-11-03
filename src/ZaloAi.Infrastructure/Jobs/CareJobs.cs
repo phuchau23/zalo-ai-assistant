@@ -25,6 +25,7 @@ public sealed class CareAnalysisJob(
     ContactRepository contacts,
     TenantRepository tenants,
     HandoffSettingsRepository handoffSettings,
+    Crm.CrmSettingsRepository crmSettings,
     ICareAdvisor advisor,
     IFieldEncryptor encryptor,
     IInboxNotifier notifier,
@@ -94,7 +95,8 @@ public sealed class CareAnalysisJob(
                 conversation.LastCustomerMessageAt,
                 followUp is null ? null : ToInput(followUp),
                 BotWillSend: settings.CareAutoSend,
-                Salutation: contact.Salutation),
+                Salutation: contact.Salutation,
+                BotCanBook: (await crmSettings.GetAsync(tenantId, cancellationToken)).BotBookingEnabled),
             cancellationToken);
 
         var now = time.GetUtcNow();

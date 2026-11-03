@@ -94,7 +94,8 @@ public sealed class AttentionNotifyJob(
 
 /// <summary>
 /// Quét mỗi phút (job HỆ THỐNG, mọi tenant): ca đang chờ người quá số phút cài đặt mà chưa nhắc → nhắc (hộp thư + Telegram),
-/// lặp lại sau mỗi khoảng đó cho tới khi có người trả lời. IgnoreQueryFilters có chủ đích; chỉ đọc id + mốc thời gian.
+/// lặp lại sau mỗi khoảng đó cho tới khi có người trả lời. Chat thử chỉ nhắc 1 lần: DN thử được Telegram, chat thử bỏ quên không nhắc mãi.
+/// IgnoreQueryFilters có chủ đích; chỉ đọc id + mốc thời gian.
 /// </summary>
 [Queue(JobQueues.Default)]
 public sealed class AttentionReminderSweepJob(AppDbContext db, IBackgroundJobClient jobs, TimeProvider time)
@@ -111,7 +112,7 @@ public sealed class AttentionReminderSweepJob(AppDbContext db, IBackgroundJobCli
             join s in db.HandoffSettings.IgnoreQueryFilters() on c.TenantId equals s.TenantId into settings
             from s in settings.DefaultIfEmpty()
             where c.NeedsAttentionSince != null && c.NeedsAttentionSince < earliest
-                  && c.Mode == ConversationMode.Human && !c.IsTest && t.Status == TenantStatus.Active
+                  && c.Mode == ConversationMode.Human && (!c.IsTest || c.LastReminderAt == null) && t.Status == TenantStatus.Active
             select new { c.Id, c.TenantId, c.NeedsAttentionSince, c.LastReminderAt, Minutes = s == null ? 10 : s.ReminderMinutes })
             .AsNoTracking()
             .ToListAsync(cancellationToken);

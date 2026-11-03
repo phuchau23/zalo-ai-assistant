@@ -118,6 +118,45 @@ public static class DependencyInjection
         services.AddScoped<TelegramLinkService>();
         services.AddHttpClient<TelegramUpdatesClient>(http => http.Timeout = TimeSpan.FromSeconds(TelegramUpdatesClient.PollSeconds + 15));
 
+        // CRM C1
+        services.AddScoped<Crm.BranchService>();
+        services.AddScoped<Crm.CatalogKnowledgeSync>();
+        services.AddScoped<Crm.CatalogService>();
+        services.AddScoped<Crm.StaffService>();
+        services.AddScoped<Crm.CrmSettingsRepository>();
+
+        // CRM C2
+        services.AddScoped<Crm.AvailabilityService>();
+        services.AddScoped<Crm.AppointmentService>();
+        services.AddScoped<Crm.ResourceService>();
+        services.AddScoped<Crm.BookingOrchestrator>();
+        services.AddScoped<AppointmentReminderSweepJob>();
+        services.AddScoped<AppointmentReminderJob>();
+        services.AddScoped<AppointmentBriefJob>();
+        services.AddScoped<WaitlistMatchJob>();
+
+        // CRM C3
+        services.AddScoped<Billing.InvoiceService>();
+        services.AddScoped<Billing.PackageService>();
+        services.AddScoped<Billing.WalletService>();
+        services.AddScoped<Billing.VoucherService>();
+        services.AddScoped<Billing.CashShiftService>();
+        services.AddScoped<Billing.BankAccountService>();
+        services.AddScoped<Billing.ReceiptService>();
+        services.AddScoped<PackageExpiryJob>();
+
+        // CRM C4
+        services.AddScoped<Inventory.InventoryService>();
+
+        // CRM C5
+        services.AddScoped<Staffing.CommissionService>();
+        services.AddScoped<Staffing.AttendanceService>();
+        services.AddScoped<Staffing.PerformanceService>();
+
+        // CRM C6
+        services.AddScoped<Reports.ReportService>();
+        services.AddScoped<WeeklyReportJob>();
+
         services.AddScoped<KnowledgeImportService>();
         services.AddScoped<KnowledgeIndexer>();
         services.AddScoped<IKnowledgeSearch, KnowledgeSearchService>();

@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using Hangfire;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Shouldly;
@@ -65,8 +66,8 @@ public sealed class InboxEndpointsTests(PostgresFixture db)
         item.IsTest.ShouldBeTrue();
 
         var detail = (await owner.GetFromJsonAsync<InboxConversationDetail>(Inbox($"/{conversationId}")))!;
-        detail.Messages.Select(m => m.Sender).ShouldBe(["customer", "bot", "bot", "system"]); // câu báo trợ lý AI + câu trả lời + câu chuyển tiếp
-        detail.Messages[3].Text.ShouldContain("chuyên viên chăm sóc khách hàng");
+        detail.Messages.Select(m => m.Sender).ShouldBe(["customer", "bot", "system"]); // câu trả lời (kèm câu báo trợ lý AI) + câu chuyển tiếp
+        detail.Messages[2].Text.ShouldContain("chuyên viên chăm sóc khách hàng");
         detail.Messages.ShouldAllBe(m => m.Sender == "customer" || m.DeliveryStatus == "sent");
     }
 
@@ -98,12 +99,88 @@ public sealed class InboxEndpointsTests(PostgresFixture db)
         var again = (await owner.GetFromJsonAsync<InboxConversationDetail>(Inbox($"/{conversationId}")))!;
         again.Conversation.NeedsAttentionSince.ShouldNotBeNull();
         again.Messages[^1].Sender.ShouldBe("customer");
+        var waitingId = again.Messages[^1].Id;
+        var queued = QueuedReplies(waitingId);
 
+        // Trả lại bot khi tin khách chưa ai trả lời → bot trả lời luôn tin đó, khách không phải nhắn lại.
         (await owner.PostAsync(Inbox($"/{conversationId}/return-to-bot"), null)).StatusCode.ShouldBe(HttpStatusCode.NoContent);
         var back = (await owner.GetFromJsonAsync<InboxConversationDetail>(Inbox($"/{conversationId}")))!;
         back.Conversation.Mode.ShouldBe("bot");
         back.Conversation.NeedsAttentionSince.ShouldBeNull();
+        QueuedReplies(waitingId).ShouldBe(queued + 1);
+
+        using (var scope = db.Api.Services.CreateScope())
+        {
+            await scope.ServiceProvider.GetRequiredService<ProcessIncomingMessageJob>().RunAsync(tenantId, waitingId, CancellationToken.None);
+        }
+
+        var answered = (await owner.GetFromJsonAsync<InboxConversationDetail>(Inbox($"/{conversationId}")))!;
+        answered.Messages.SkipWhile(m => m.Id != waitingId).Skip(1).ShouldContain(m => m.Sender == "bot");
     }
+
+    [Fact]
+    public async Task Reminder_sweep_reminds_test_chat_once_and_real_chat_every_interval()
+    {
+        var (testTenant, _, testChat) = await HandedOffAsync("Nhắc chat thử");
+        var (realTenant, _, realChat) = await HandedOffAsync("Nhắc chat thật");
+        await SetWaitingAsync(testTenant, testChat, isTest: true, lastReminderAt: null);
+        await SetWaitingAsync(realTenant, realChat, isTest: false, lastReminderAt: null);
+        var (testQueued, realQueued) = (QueuedReminders(testChat), QueuedReminders(realChat));
+
+        await RunReminderSweepAsync();
+        QueuedReminders(testChat).ShouldBe(testQueued + 1);
+        QueuedReminders(realChat).ShouldBe(realQueued + 1);
+
+        // Đã nhắc 1 lần, quá khoảng nhắc lần nữa: chat thật nhắc tiếp, chat thử thôi.
+        await SetWaitingAsync(testTenant, testChat, isTest: true, lastReminderAt: DateTimeOffset.UtcNow.AddMinutes(-11));
+        await SetWaitingAsync(realTenant, realChat, isTest: false, lastReminderAt: DateTimeOffset.UtcNow.AddMinutes(-11));
+        await RunReminderSweepAsync();
+        QueuedReminders(testChat).ShouldBe(testQueued + 1);
+        QueuedReminders(realChat).ShouldBe(realQueued + 2);
+    }
+
+    private async Task SetWaitingAsync(Guid tenantId, Guid conversationId, bool isTest, DateTimeOffset? lastReminderAt)
+    {
+        await using var context = db.CreateDbContext(tenantId);
+        var c = await context.Conversations.SingleAsync(x => x.Id == conversationId);
+        c.IsTest = isTest;
+        c.NeedsAttentionSince = DateTimeOffset.UtcNow.AddMinutes(-30);
+        c.LastReminderAt = lastReminderAt;
+        await context.SaveChangesAsync();
+    }
+
+    private async Task RunReminderSweepAsync()
+    {
+        using var scope = db.Api.Services.CreateScope();
+        await scope.ServiceProvider.GetRequiredService<AttentionReminderSweepJob>().RunAsync(CancellationToken.None);
+    }
+
+    private int QueuedReminders(Guid conversationId) => Queued<AttentionReminderJob>(JobQueues.Default, conversationId);
+
+    [Fact]
+    public async Task Return_to_bot_after_staff_answered_does_not_reply_again()
+    {
+        var (tenantId, owner, conversationId) = await HandedOffAsync("Trả lại bot đã trả lời");
+        (await owner.PostAsync(Inbox($"/{conversationId}/take-over"), null)).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        await owner.PostAsJsonAsync(new Uri($"/chat-test/conversations/{conversationId}/messages", UriKind.Relative), new { text = "gói này mấy buổi em" });
+        (await owner.PostAsJsonAsync(Inbox($"/{conversationId}/messages"), new { text = "Dạ gói 10 buổi ạ" })).StatusCode.ShouldBe(HttpStatusCode.Accepted);
+        await RunPendingJobsAsync(tenantId);
+        var detail = (await owner.GetFromJsonAsync<InboxConversationDetail>(Inbox($"/{conversationId}")))!;
+        var customerId = detail.Messages.Last(m => m.Sender == "customer").Id;
+        var queued = QueuedReplies(customerId);
+
+        (await owner.PostAsync(Inbox($"/{conversationId}/return-to-bot"), null)).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        QueuedReplies(customerId).ShouldBe(queued);
+    }
+
+    private int QueuedReplies(Guid messageId) => Queued<ProcessIncomingMessageJob>(JobQueues.Messages, messageId);
+
+    /// <summary>Số job <typeparamref name="TJob"/> đang xếp hàng cho một id (tham số thứ 2 của job; API test không chạy Hangfire server nên job nằm nguyên trong hàng đợi).</summary>
+    private int Queued<TJob>(string queue, Guid id) =>
+        db.Api.Services.GetRequiredService<JobStorage>().GetMonitoringApi()
+            .EnqueuedJobs(queue, 0, 100_000)
+            .Count(j => j.Value.Job?.Type == typeof(TJob) && j.Value.Job.Args[1] is Guid arg && arg == id);
 
     [Fact]
     public async Task Tenant_B_cannot_see_or_act_on_tenant_A_conversations()

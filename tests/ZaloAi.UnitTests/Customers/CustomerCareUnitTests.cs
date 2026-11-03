@@ -267,13 +267,18 @@ public sealed class CareDecisionTests
     }
 
     [Fact]
-    public void At_least_24h_between_proactive_messages()
+    public void At_least_24h_between_proactive_messages_except_follow_up_notes()
     {
         var contact = NewContact();
         contact.LastProactiveAt = Morning.AddHours(-2);
-        var d = CareDecision.Decide(Send(), contact, Chat(ChannelKind.Webchat), new HandoffSettings(), true, Morning);
+        var d = CareDecision.Decide(Send(), contact, Chat(ChannelKind.Webchat), new HandoffSettings(), false, Morning);
         d.Kind.ShouldBe(CareDecisionKind.AutoSend);
         d.SendAt.ShouldBe(Morning.AddHours(22));
+
+        // Nhân viên đã chọn giờ hẹn chăm sóc → gửi đúng giờ hẹn, không chờ đủ 24 giờ.
+        var followUp = CareDecision.Decide(Send(), contact, Chat(ChannelKind.Webchat), new HandoffSettings(), true, Morning);
+        followUp.Kind.ShouldBe(CareDecisionKind.AutoSend);
+        followUp.SendAt.ShouldBe(Morning);
     }
 
     [Fact]
@@ -368,6 +373,33 @@ public sealed class SalutationTests
         system.ShouldContain(expected);
         system.ShouldNotContain("gọi khách là \"anh/chị\"");
         system.ShouldContain("biểu tượng cảm xúc dễ thương");
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Booking_needs_staff_only_when_bot_cannot_book(bool botCanBook)
+    {
+        var request = new CareAnalysisRequest(
+            Guid.NewGuid(),
+            new BotProfile("Spa Hoa Mai", "spa", "Mai", "em", BotTone.Human, null, null),
+            null,
+            null,
+            [new BotHistoryTurn(MessageSender.Customer, "bấm huyệt giá bao nhiêu em")],
+            [],
+            LeadStatus.Interested,
+            null,
+            null,
+            BotWillSend: true,
+            BotCanBook: botCanBook);
+        var chat = new RecordingChat();
+        await CareAdvisors.Create(chat).AnalyzeAsync(request, CancellationToken.None);
+        var system = chat.Requests[0].System;
+
+        // Bot tự chốt lịch (CRM C2): khách cần đặt lịch → bot mời nhắn ngày giờ, không đẩy nhân viên. Tắt → nhân viên xếp lịch như cũ.
+        system.Contains("KHÔNG chọn ask_human chỉ vì khách cần đặt lịch", StringComparison.Ordinal).ShouldBe(botCanBook);
+        system.Contains("xác nhận đặt chỗ (needs_staff_info)", StringComparison.Ordinal).ShouldBe(!botCanBook);
+        system.Contains("KHÔNG tự nêu giờ trống cụ thể", StringComparison.Ordinal).ShouldBe(botCanBook);
     }
 }
 

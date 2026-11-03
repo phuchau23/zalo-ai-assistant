@@ -9,7 +9,30 @@ namespace ZaloAi.Api.Tenants;
 
 /// <param name="Role">owner (chủ doanh nghiệp) | staff (nhân viên)</param>
 /// <param name="IsYou">Chính người đang đăng nhập (không tự xóa / tự cấp lại mật khẩu).</param>
-public sealed record TeamMemberResponse(Guid UserId, string Email, string Name, string Role, bool IsYou, DateTimeOffset JoinedAt);
+/// <param name="Permissions">Công tắc quyền của nhân viên (xem CrmSettingsResponse.AllPermissions); chủ luôn đầy đủ.</param>
+/// <param name="BranchId">Chi nhánh làm việc; null = mọi chi nhánh.</param>
+public sealed record TeamMemberResponse(
+    Guid UserId,
+    string Email,
+    string Name,
+    string Role,
+    bool IsYou,
+    DateTimeOffset JoinedAt,
+    IReadOnlyList<string> Permissions,
+    Guid? BranchId);
+
+/// <param name="Permissions">Danh sách quyền bật cho nhân viên (mã quyền).</param>
+/// <param name="BranchId">Chi nhánh làm việc; null = mọi chi nhánh.</param>
+public sealed record SetTeamPermissionsRequest(IReadOnlyList<string> Permissions, Guid? BranchId);
+
+internal sealed class SetTeamPermissionsRequestValidator : AbstractValidator<SetTeamPermissionsRequest>
+{
+    public SetTeamPermissionsRequestValidator()
+    {
+        RuleFor(x => x.Permissions).NotNull().Must(p => p.Count <= 50);
+        RuleForEach(x => x.Permissions).Must(TenantPermissions.IsKnown).WithMessage("Quyền không hợp lệ.");
+    }
+}
 
 /// <param name="Role">owner | staff</param>
 public sealed record AddTeamMemberRequest(string Email, string Name, string Role);
@@ -59,7 +82,17 @@ internal static class TeamEndpoints
         group.MapPost("/{userId:guid}/reset-password", ResetPasswordAsync)
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status409Conflict);
+        group.MapPut("/{userId:guid}/permissions", SetPermissionsAsync)
+            .Validate<SetTeamPermissionsRequest>()
+            .ProducesProblem(StatusCodes.Status404NotFound);
         return app;
+    }
+
+    private static async Task<NoContent> SetPermissionsAsync(
+        Guid userId, SetTeamPermissionsRequest request, ITenantContext tenant, TeamService team, CancellationToken cancellationToken)
+    {
+        await team.SetPermissionsAsync(tenant.RequireTenantId(), userId, request.Permissions, request.BranchId, cancellationToken);
+        return TypedResults.NoContent();
     }
 
     internal static bool IsRole(string? role) => role is "owner" or "staff";
@@ -97,5 +130,5 @@ internal static class TeamEndpoints
         TypedResults.Ok(new ResetPasswordResponse(await team.ResetPasswordAsync(tenant.RequireTenantId(), userId, cancellationToken)));
 
     private static TeamMemberResponse ToResponse(TeamMember m, ITenantContext tenant) =>
-        new(m.UserId, m.Email, m.Name, m.Role.ToString().ToLowerInvariant(), m.UserId == tenant.UserId, m.JoinedAt);
+        new(m.UserId, m.Email, m.Name, m.Role.ToString().ToLowerInvariant(), m.UserId == tenant.UserId, m.JoinedAt, m.Permissions, m.BranchId);
 }

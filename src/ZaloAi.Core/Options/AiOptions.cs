@@ -13,8 +13,8 @@ public sealed class ModelPrice
 }
 
 /// <summary>
-/// Cấu hình AI. Chỉ dùng Gemini (chủ dự án chốt 2026-10-04, bỏ Claude). Production phải dùng gói Gemini TRẢ PHÍ:
-/// gói miễn phí cho phép Google dùng dữ liệu để cải thiện sản phẩm.
+/// Cấu hình AI. Chat: Gemini, Groq làm dự phòng khi Gemini hết lượt/lỗi (chủ dự án chốt 2026-11-03). Embedding: chỉ Gemini.
+/// Production phải dùng gói Gemini TRẢ PHÍ: gói miễn phí cho phép Google dùng dữ liệu để cải thiện sản phẩm.
 /// </summary>
 public sealed class AiOptions : IValidatableObject
 {
@@ -23,16 +23,60 @@ public sealed class AiOptions : IValidatableObject
     /// <summary>Số chiều cột chunks.embedding trong database. Đổi = migration + đánh chỉ mục lại (skill db-migration).</summary>
     public const int SupportedEmbedDimensions = 768;
 
-    /// <summary>gemini: gọi Google. fake: trả lời giả tính tại chỗ (test, chạy không mạng) — không dùng ở production.</summary>
+    /// <summary>
+    /// gemini: gọi AI thật theo chuỗi <see cref="ChatProviders"/> (tên giữ "gemini" cho cấu hình cũ).
+    /// fake: trả lời giả tính tại chỗ (test, chạy không mạng) — không dùng ở production.
+    /// </summary>
     [Required, RegularExpression("^(gemini|fake)$")]
     public string ChatProvider { get; set; } = "gemini";
+
+    /// <summary>
+    /// Thứ tự nhà cung cấp chat, cách nhau dấu phẩy. gemini = <see cref="ChatModel"/> rồi <see cref="ChatFallbackModel"/>;
+    /// groq = <see cref="GroqModels"/> theo thứ tự (chỉ dùng khi có <see cref="GroqApiKey"/>). Lỗi tạm thời / hết lượt / JSON hỏng
+    /// → thử bước tiếp theo; request sai, key sai → dừng (AiRequestRejectedException).
+    /// </summary>
+    [Required, RegularExpression(@"^\s*(gemini|groq)\s*(,\s*(gemini|groq)\s*)*$")]
+    public string ChatProviders { get; set; } = "gemini,groq";
 
     /// <summary>Kiểm chứng 2026-10-04: https://ai.google.dev/gemini-api/docs/models</summary>
     [Required]
     public string ChatModel { get; set; } = "gemini-3.8-flash";
 
-    /// <summary>Model dự phòng khi model chính quá tải (503) hoặc hết hạn mức (429) sau khi đã thử lại. Để trống = không dùng.</summary>
+    /// <summary>Model Gemini dự phòng khi model chính lỗi tạm thời hoặc hết hạn mức. Để trống = không dùng.</summary>
     public string? ChatFallbackModel { get; set; } = "gemini-3.5-flash-lite";
+
+    /// <summary>Model hết lượt (429) hoặc quá tải (503) → bỏ qua trong bấy nhiêu giây (hoặc theo retry-after nếu lâu hơn). 0 = không bỏ qua.</summary>
+    [Range(0, 3600)]
+    public int ChatCooldownSeconds { get; set; } = 60;
+
+    /// <summary>429 kèm retry-after ≤ số giây này → chờ rồi thử lại cùng model một lần; lâu hơn → chuyển bước tiếp theo.</summary>
+    [Range(0, 60)]
+    public int ChatMaxRetryAfterSeconds { get; set; } = 10;
+
+    /// <summary>Key Groq (console.groq.com). Trống = không dùng Groq. Chỉ đặt qua user-secrets "Ai:GroqApiKey" hoặc env Ai__GroqApiKey.</summary>
+    public string? GroqApiKey { get; set; }
+
+    [Url]
+    public string GroqBaseUrl { get; set; } = "https://api.groq.com/openai/v1/";
+
+    /// <summary>Model Groq theo thứ tự thử, cách nhau dấu phẩy. Kiểm chứng 2026-11-03: https://console.groq.com/docs/models (model production).</summary>
+    public string GroqModels { get; set; } = "openai/gpt-oss-120b,openai/gpt-oss-20b";
+
+    /// <summary>
+    /// json_schema: Structured Outputs strict (chỉ một số model, ví dụ gpt-oss). json_object: JSON thường, schema gửi trong prompt
+    /// (mọi model) — dùng khi model không hỗ trợ json_schema hoặc Groq từ chối schema. Kiểm chứng 2026-11-03:
+    /// https://console.groq.com/docs/structured-outputs
+    /// </summary>
+    [Required, RegularExpression("^(json_schema|json_object)$")]
+    public string GroqJsonMode { get; set; } = "json_schema";
+
+    /// <summary>low | medium | high (model gpt-oss). Trống = không gửi (model không có chế độ suy nghĩ sẽ báo lỗi 400 nếu gửi).</summary>
+    [RegularExpression("^(low|medium|high)?$")]
+    public string? GroqReasoningEffort { get; set; } = "low";
+
+    /// <summary>Trần max_completion_tokens gửi Groq (gồm token suy nghĩ). Thấp để prompt + trần không vượt số token/phút của gói.</summary>
+    [Range(256, 65536)]
+    public int GroqMaxCompletionTokens { get; set; } = 2048;
 
     /// <summary>gemini: gọi Google. fake: vector giả tính tại chỗ (test, chạy không mạng) — không dùng ở production.</summary>
     [Required, RegularExpression("^(gemini|fake)$")]
@@ -80,6 +124,13 @@ public sealed class AiOptions : IValidatableObject
             ? ((inputTokens * price.InputPerMillionUsd) + (outputTokens * price.OutputPerMillionUsd)) / 1_000_000m
             : 0m;
 
+    public IReadOnlyList<string> ChatProviderOrder => SplitList(ChatProviders);
+
+    public IReadOnlyList<string> GroqModelList => SplitList(GroqModels);
+
+    public bool GroqEnabled =>
+        !string.IsNullOrWhiteSpace(GroqApiKey) && ChatProviderOrder.Contains("groq") && GroqModelList.Count > 0;
+
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
         if (EmbedDim != SupportedEmbedDimensions)
@@ -89,11 +140,33 @@ public sealed class AiOptions : IValidatableObject
                 [nameof(EmbedDim)]);
         }
 
-        if ((EmbedProvider == "gemini" || ChatProvider == "gemini") && string.IsNullOrWhiteSpace(GeminiApiKey))
+        var chatUsesGemini = ChatProvider == "gemini" && ChatProviderOrder.Contains("gemini");
+        if ((EmbedProvider == "gemini" || chatUsesGemini) && string.IsNullOrWhiteSpace(GeminiApiKey))
         {
             yield return new ValidationResult(
                 $"{nameof(GeminiApiKey)} bắt buộc khi dùng Gemini (đặt bằng user-secrets \"Ai:GeminiApiKey\" hoặc env Ai__GeminiApiKey).",
                 [nameof(GeminiApiKey)]);
         }
+
+        // Dán key hay dính dấu xuống dòng: ở hai đầu thì lúc gọi tự cắt; ở giữa key là key hỏng → báo ngay khi khởi động.
+        foreach (var (name, key) in new[] { (nameof(GeminiApiKey), GeminiApiKey), (nameof(GroqApiKey), GroqApiKey) })
+        {
+            if (key is not null && key.Trim().Any(c => char.IsWhiteSpace(c) || char.IsControl(c)))
+            {
+                yield return new ValidationResult(
+                    $"{name} có khoảng trắng hoặc dấu xuống dòng ở giữa key — đặt lại key trên một dòng.",
+                    [name]);
+            }
+        }
+
+        if (ChatProvider == "gemini" && !chatUsesGemini && !GroqEnabled)
+        {
+            yield return new ValidationResult(
+                $"{nameof(ChatProviders)} không còn nhà cung cấp chat nào dùng được (groq cần {nameof(GroqApiKey)} và {nameof(GroqModels)}).",
+                [nameof(ChatProviders), nameof(GroqApiKey)]);
+        }
     }
+
+    private static List<string> SplitList(string? value) =>
+        (value ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Distinct(StringComparer.Ordinal).ToList();
 }

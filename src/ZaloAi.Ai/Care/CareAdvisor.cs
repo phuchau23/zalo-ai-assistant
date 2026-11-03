@@ -124,7 +124,17 @@ public sealed partial class CareAdvisor(IChatProvider chat, IKnowledgeSearch sea
         s.AppendLine();
         s.AppendLine("## Chọn action");
         s.AppendLine("- send: khách còn nhu cầu chưa xong và một tin hỏi thăm/nhắc nhẹ là phù hợp — hỏi giá/dịch vụ mà chưa chốt, nói \"để suy nghĩ\", hỏi lịch mà chưa đặt, đã dùng dịch vụ cần hỏi thăm, tới giờ hẹn chăm sóc lại.");
-        s.AppendLine("- ask_human: cần NGƯỜI liên hệ — khách phàn nàn/không hài lòng (human_reason = complaint); chuyện sức khỏe, triệu chứng, phản ứng sau dịch vụ, chuyện nhạy cảm (sensitive); khách cần thông tin chỉ nhân viên có như lịch trống cụ thể, giá đặc biệt, xác nhận đặt chỗ (needs_staff_info).");
+        if (request.BotCanBook)
+        {
+            // CRM C2: hệ thống lịch kiểm tra chỗ trống rồi mới giữ lịch khi khách nhắn ngày giờ — đặt lịch không còn là việc của nhân viên.
+            s.AppendLine("- Trợ lý AI đặt lịch được ngay trong chat (khách nhắn ngày giờ, hệ thống kiểm tra chỗ trống rồi mới giữ lịch). Khách cần đặt/chốt lịch, đang chọn dịch vụ/thời lượng, hỏi lịch mà chưa đặt → chọn send, mời khách nhắn ngày giờ muốn đến. KHÔNG chọn ask_human chỉ vì khách cần đặt lịch.");
+            s.AppendLine("- ask_human: cần NGƯỜI liên hệ — khách phàn nàn/không hài lòng (human_reason = complaint); chuyện sức khỏe, triệu chứng, phản ứng sau dịch vụ, chuyện nhạy cảm (sensitive); khách cần thông tin chỉ nhân viên có như giá đặc biệt, ưu đãi riêng, đặt cho nhóm đông (needs_staff_info).");
+        }
+        else
+        {
+            s.AppendLine("- ask_human: cần NGƯỜI liên hệ — khách phàn nàn/không hài lòng (human_reason = complaint); chuyện sức khỏe, triệu chứng, phản ứng sau dịch vụ, chuyện nhạy cảm (sensitive); khách cần thông tin chỉ nhân viên có như lịch trống cụ thể, giá đặc biệt, xác nhận đặt chỗ (needs_staff_info).");
+        }
+
         s.AppendLine("- none: khách đã chốt/đặt xong và không còn gì cần hỏi, chỉ chào hỏi xã giao, đã từ chối rõ ràng, hoặc nhắn thêm sẽ làm phiền.");
         s.AppendLine("- promotional = true nếu tin nháp mời ưu đãi, khuyến mãi, giảm giá, hoặc chỉ nhằm kéo khách cũ quay lại mua. Hỏi thăm sau dịch vụ, nhắc điều khách đang hỏi dở thì promotional = false.");
         s.AppendLine("- temperature: hot = sắp mua/đặt (hỏi giá cụ thể, hỏi lịch, để lại số điện thoại); warm = có quan tâm nhưng chưa rõ; cold = ít khả năng.");
@@ -133,7 +143,7 @@ public sealed partial class CareAdvisor(IChatProvider chat, IKnowledgeSearch sea
         s.AppendLine("## Tin gửi khách (draft_message)");
         var salutation = CustomerSalutation.Resolve(request.Salutation);
         var address = salutation == CustomerSalutation.Unknown
-            ? "gọi khách là \"mình\" (chưa biết giới tính; nếu trong hội thoại khách tự xưng anh/chị/cô/chú/bác thì gọi theo đó)"
+            ? "gọi khách là \"mình\" (chưa biết giới tính; chỉ khi khách TỰ XƯNG anh/chị/cô/chú/bác, ví dụ \"chị muốn hỏi\", mới gọi theo đó; khách gọi mình là \"bé\", \"em\", \"con\" thì vẫn chưa biết, giữ \"mình\")"
             : $"gọi khách là \"{salutation}\"";
         if (request.BotWillSend)
         {
@@ -142,7 +152,9 @@ public sealed partial class CareAdvisor(IChatProvider chat, IKnowledgeSearch sea
             s.AppendLine(p.Tone is BotTone.Human or BotTone.Friendly
                 ? "- Có thể dùng 1–2 biểu tượng cảm xúc dễ thương (😊 💙 🌿 ✨), không dùng khi chuyện khách đang lo lắng; từ đệm (nè, nha, nhé) tối đa 1 lần."
                 : "- Không dùng biểu tượng cảm xúc.");
-            s.AppendLine("- KHÔNG nêu bất kỳ con số giá tiền nào, KHÔNG nhắc ưu đãi/khuyến mãi/lịch trống/chính sách. Nếu cần các thông tin đó thì chọn ask_human.");
+            s.AppendLine(request.BotCanBook
+                ? "- KHÔNG nêu bất kỳ con số giá tiền nào, KHÔNG nhắc ưu đãi/khuyến mãi/chính sách, KHÔNG tự nêu giờ trống cụ thể (hệ thống kiểm tra khi khách nhắn ngày giờ). Cần giá đặc biệt/ưu đãi thì chọn ask_human."
+                : "- KHÔNG nêu bất kỳ con số giá tiền nào, KHÔNG nhắc ưu đãi/khuyến mãi/lịch trống/chính sách. Nếu cần các thông tin đó thì chọn ask_human.");
         }
         else
         {
@@ -240,7 +252,7 @@ public sealed partial class CareAdvisor(IChatProvider chat, IKnowledgeSearch sea
     {
         try
         {
-            using var json = JsonDocument.Parse(text);
+            using var json = JsonDocument.Parse(Providers.JsonOutput.Clean(text));
             var root = json.RootElement;
             if (root.ValueKind != JsonValueKind.Object)
             {

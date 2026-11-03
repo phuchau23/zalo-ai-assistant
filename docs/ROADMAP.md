@@ -324,3 +324,20 @@ Sau phát hành (lặp lại hằng tuần):
 5. **Phase 7:** nơi deploy, dịch vụ DB, gói AI trả phí.
 6. **Phase 8:** giá bán.
 7. **Phase 9:** thời điểm mở bán.
+
+## Giai đoạn CRM (chốt 2026-10-15) — chèn TRƯỚC Phase 7
+
+Chủ dự án chốt: sản phẩm thành **CRM đầy đủ cho DN dịch vụ + AI Zalo** (xem `CRM-FEATURES.md`, `CRM-PLAN.md`). 8 đợt C1–C8, ≈ 12 tuần toàn thời gian, làm trước Phase 7 (deploy) và thay cho các mục trùng ở Giai đoạn 2/3 (đặt lịch, nhắc lịch, sinh nhật, kéo khách, nhiều nhân viên).
+
+| Đợt | Tên | Thời gian |
+| --- | --- | --- |
+| C1 | Nền CRM (chi nhánh, danh mục, nhân viên, quyền) | 1,5 tuần |
+| C2 | Lịch hẹn + bot tự chốt | 2 tuần |
+| C3 | Bán hàng, gói, VietQR | 2 tuần |
+| C4 | Kho hàng | 1 tuần |
+| C5 | Hoa hồng, hiệu suất, chấm công | 1 tuần |
+| C6 | Báo cáo | 1,5 tuần |
+| C7 | AI dùng dữ liệu CRM | 1,5 tuần |
+| C8 | PWA, đặt lịch online, hạng, ảnh, cam kết | 1,5 tuần |
+
+Khuyến nghị: cho 1 DN dùng thử phần bot đã xong song song để lấy góp ý; Phase 7–9 lùi tương ứng.

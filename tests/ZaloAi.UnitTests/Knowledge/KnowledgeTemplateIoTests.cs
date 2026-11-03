@@ -105,7 +105,7 @@ public sealed class KnowledgeTemplateIoTests
         using (var workbook = new XLWorkbook(buffer))
         {
             workbook.Worksheets.Select(w => w.Name).ShouldBe(
-                ["Hướng dẫn", "Thông tin chung", "Dịch vụ", "Gói liệu trình", "Câu hỏi thường gặp", "Chính sách"]);
+                ["Hướng dẫn", "Thông tin chung", "Dịch vụ", "Gói liệu trình", "Câu hỏi thường gặp", "Chính sách", "Sản phẩm"]);
             workbook.Worksheet("Dịch vụ").Cell(1, 5).GetString().ShouldBe("Giá (VNĐ)");
         }
 

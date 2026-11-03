@@ -74,7 +74,7 @@ public sealed partial class BotEngine(
         var chunks = await SearchAsync(request.TenantId, maskedMessage, maskedHistory, trace, cancellationToken);
 
         // 3. Gọi AI.
-        var system = PromptBuilder.BuildSystem(template, request.Profile, chunks, maskedSummary, time.GetUtcNow(), addressing);
+        var system = PromptBuilder.BuildSystem(template, request.Profile, chunks, maskedSummary, time.GetUtcNow(), addressing, request.Booking);
         var turns = BuildTurns(maskedHistory, maskedMessage);
         BotAnswer? answer;
         try
@@ -290,7 +290,14 @@ public sealed partial class BotEngine(
             reason = "other";
         }
 
-        return new Decision(messages, needsHuman, needsHuman ? reason : null, urgency, answer.Confidence, answer.Sentiment, answer.LeadFields, answer.CustomerSalutation);
+        // Ý định đặt lịch chỉ được thực thi khi bot vẫn tự xử lý (không chuyển người).
+        if (answer.Booking is not null && !needsHuman)
+        {
+            trace.Guards.Add("booking_intent");
+        }
+
+        return new Decision(messages, needsHuman, needsHuman ? reason : null, urgency, answer.Confidence, answer.Sentiment, answer.LeadFields, answer.CustomerSalutation,
+            needsHuman ? null : answer.Booking);
     }
 
     /// <summary>Câu trả lời đã mời khách kiểm tra/thăm khám trực tiếp (chuyên viên của DN, hoặc bác sĩ với bệnh lý) chưa.</summary>
@@ -319,7 +326,18 @@ public sealed partial class BotEngine(
             .ToList();
         if (request.IsFirstBotReply)
         {
-            messages.Insert(0, texts.Disclosure); // tin riêng, luôn đứng đầu (CLAUDE.md mục 7)
+            // Câu báo trợ lý AI (CLAUDE.md mục 7): gộp vào đầu tin trả lời đầu tiên cho tự nhiên, không bao giờ bỏ.
+            // Link chính sách ở cuối tin CUỐI: tin đầu hay mở đầu một danh sách ("giá như sau:"), chèn link vào đó sẽ cắt ngang.
+            if (messages.Count == 0)
+            {
+                messages.Add(texts.WithDisclosure(""));
+            }
+            else
+            {
+                messages[0] = texts.WithDisclosure(messages[0]);
+            }
+
+            messages[^1] = texts.WithPrivacyLink(messages[^1]);
         }
 
         var allowedKeys = IndustryTemplateRegistry.Get(request.Profile.IndustrySlug).LeadFields.Select(f => f.Key).ToHashSet(StringComparer.Ordinal);
@@ -353,7 +371,8 @@ public sealed partial class BotEngine(
             leads,
             trace.ToJson(),
             usage,
-            decision.DetectedSalutation);
+            decision.DetectedSalutation,
+            decision.Booking);
     }
 
     /// <summary>Lịch sử (đã che) + tin mới → lượt chat cho AI: bắt đầu bằng khách, gộp các tin liên tiếp cùng phía.</summary>
@@ -398,7 +417,8 @@ public sealed partial class BotEngine(
         string Confidence,
         string? Sentiment,
         IReadOnlyList<KeyValuePair<string, string>> LeadFields,
-        string? DetectedSalutation = null);
+        string? DetectedSalutation = null,
+        BookingIntent? Booking = null);
 
     /// <summary>Thông tin chẩn đoán cho màn "Vì sao bot trả lời vậy?" — KHÔNG chứa nội dung tin hay dữ liệu cá nhân của khách.</summary>
     private sealed class TurnTrace(IndustryTemplate template)
@@ -492,17 +512,39 @@ internal sealed class BotTexts(BotProfile profile, string salutation, string urg
     /// <summary>Câu dự phòng khi bot nói về cơ thể mà quên mời kiểm tra trực tiếp — mời về chuyên viên của DN, không đẩy khách đi nơi khác.</summary>
     public string MedicalDisclaimer => Fill("Nếu {khach} thấy cảm giác này kéo dài hoặc khó chịu hơn, {khach} ghé {ten_doanh_nghiep} để chuyên viên bên {bot} kiểm tra trực tiếp cho {khach} nha.");
 
-    /// <summary>Câu báo trợ lý AI + link chính sách (CLAUDE.md mục 7) — không tắt được.</summary>
-    public string Disclosure
+    private static readonly string[] LeadingYes = ["dạ vâng", "dạ", "vâng"];
+
+    /// <summary>
+    /// Tin đầu tiên kèm câu báo trợ lý AI (CLAUDE.md mục 7) — không tắt được. Câu báo đứng đầu tin, bỏ "Dạ/Vâng"
+    /// mở đầu của câu trả lời để không thành "Dạ ... ạ. Dạ ...". Link chính sách: <see cref="WithPrivacyLink"/>.
+    /// </summary>
+    public string WithDisclosure(string firstMessage)
     {
-        get
+        var rest = firstMessage.Trim();
+        foreach (var yes in LeadingYes)
         {
-            var text = Fill($"Dạ {{bot}} là {profile.BotName}, trợ lý AI (trí tuệ nhân tạo) của {{ten_doanh_nghiep}}, hỗ trợ {{khach}} 24/7.");
-            return string.IsNullOrWhiteSpace(profile.PrivacyUrl)
-                ? text
-                : $"{text} {Fill("Thông tin {khach} chia sẻ được bảo vệ theo chính sách bảo mật:")} {profile.PrivacyUrl}";
+            if (rest.StartsWith(yes, StringComparison.OrdinalIgnoreCase)
+                && (rest.Length == yes.Length || !char.IsLetterOrDigit(rest[yes.Length])))
+            {
+                rest = rest[yes.Length..].TrimStart(' ', ',', '.', '!');
+                if (rest.StartsWith("ạ", StringComparison.OrdinalIgnoreCase) && (rest.Length == 1 || !char.IsLetterOrDigit(rest[1])))
+                {
+                    rest = rest[1..].TrimStart(' ', ',', '.', '!');
+                }
+
+                break;
+            }
         }
+
+        var text = Fill("Dạ {bot} là trợ lý AI của {ten_doanh_nghiep} ạ.");
+        return rest.Length > 0 ? $"{text} {char.ToUpperInvariant(rest[0])}{rest[1..]}" : text;
     }
+
+    /// <summary>Link chính sách bảo mật (CLAUDE.md mục 7) xuống dòng cuối tin cuối của lượt trả lời đầu tiên, khi DN có cài.</summary>
+    public string WithPrivacyLink(string lastMessage) =>
+        string.IsNullOrWhiteSpace(profile.PrivacyUrl)
+            ? lastMessage
+            : $"{lastMessage}\n{Fill("Chính sách bảo mật của {ten_doanh_nghiep}:")} {profile.PrivacyUrl}";
 
     private string Fill(string text)
     {
@@ -552,9 +594,12 @@ internal sealed record BotAnswer(
     bool HealthTopic,
     string? Sentiment,
     IReadOnlyList<KeyValuePair<string, string>> LeadFields,
-    string? CustomerSalutation = null)
+    string? CustomerSalutation = null,
+    BookingIntent? Booking = null)
 {
     public const int MaxMessages = 4;
+
+    private static readonly string[] BookingActions = ["book", "reschedule", "cancel", "check_slots"];
 
     private static readonly string[] Confidences = ["high", "medium", "low"];
     private static readonly string[] Sentiments = ["positive", "neutral", "negative"];
@@ -617,12 +662,36 @@ internal sealed record BotAnswer(
                 Bool("health_topic"),
                 Sentiments.Contains(sentiment) ? sentiment : null,
                 leads,
-                ZaloAi.Core.Entities.CustomerSalutation.IsAllowed(salutation) ? salutation : null);
+                ZaloAi.Core.Entities.CustomerSalutation.IsAllowed(salutation) ? salutation : null,
+                ReadBooking(root));
         }
         catch (JsonException)
         {
             return null;
         }
+    }
+
+    /// <summary>"booking" (CRM C2): action hợp lệ mới tính; các trường khác thiếu/sai kiểu → null hoặc mặc định.</summary>
+    private static BookingIntent? ReadBooking(JsonElement root)
+    {
+        if (!root.TryGetProperty("booking", out var b) || b.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        string? Str(string name) => b.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(v.GetString()) ? v.GetString()!.Trim() : null;
+        var action = Str("action");
+        if (action is null || !BookingActions.Contains(action))
+        {
+            return null;
+        }
+
+        var codes = b.TryGetProperty("service_codes", out var array) && array.ValueKind == JsonValueKind.Array
+            ? array.EnumerateArray().Where(c => c.ValueKind == JsonValueKind.String).Select(c => c.GetString()!.Trim().ToUpperInvariant()).Where(c => c.Length > 0).Distinct(StringComparer.Ordinal).ToList()
+            : [];
+        var party = b.TryGetProperty("party_size", out var p) && p.ValueKind == JsonValueKind.Number && p.TryGetInt32(out var n) && n > 0 ? n : 1;
+        Guid? appointmentId = Guid.TryParse(Str("appointment_id"), out var id) ? id : null;
+        return new BookingIntent(action, codes, Str("date"), Str("time"), Str("staff_name"), Str("branch_name"), party, appointmentId);
     }
 
     /// <summary>"messages" (bỏ tin rỗng, tối đa <see cref="MaxMessages"/>) hoặc "reply". null = không có nội dung đúng kiểu.</summary>

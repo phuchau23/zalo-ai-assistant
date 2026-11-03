@@ -1,6 +1,6 @@
 namespace ZaloAi.Core.Entities;
 
-/// <summary>Năm loại mục của mẫu dữ liệu chuẩn (docs/KNOWLEDGE-FORMAT.md).</summary>
+/// <summary>Sáu loại mục của mẫu dữ liệu chuẩn (docs/KNOWLEDGE-FORMAT.md). Sản phẩm thêm 2026-10-15 (CRM C1).</summary>
 public enum KnowledgeKind
 {
     Info = 0,
@@ -8,6 +8,7 @@ public enum KnowledgeKind
     Package = 2,
     Faq = 3,
     Policy = 4,
+    Product = 5,
 }
 
 /// <summary>

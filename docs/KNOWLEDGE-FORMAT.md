@@ -78,6 +78,22 @@ File Excel mẫu còn có sheet `Hướng dẫn` (chỉ để đọc, hệ thố
 | Chủ đề * | `topic` | chữ ≤ 200 |
 | Nội dung * | `content` | chữ ≤ 4000 |
 
+### Sản phẩm (thêm 2026-10-15, CRM C1)
+Sheet `Sản phẩm`, khóa JSON `products`. Sản phẩm bán lẻ (tinh dầu, kem, thuốc bôi...). Mỗi mục đồng bộ với **danh mục bán** (trang Danh mục): giá/đơn vị/SKU sửa ở đâu cũng khớp.
+| Cột Excel | Trường JSON | Kiểu | Ghi chú |
+| --- | --- | --- | --- |
+| Mã * | `code` | mã | tiền tố gợi ý `SP-` |
+| Nhóm | `group` | chữ ≤ 100 | |
+| Tên sản phẩm * | `name` | chữ ≤ 200 | |
+| Giá (VNĐ) | `price` | số nguyên ≥ 0 | |
+| Đơn vị | `unit` | chữ ≤ 50 | chai, hộp, tuýp... |
+| Mã hàng (SKU) | `sku` | chữ ≤ 100 | mã nội bộ / mã vạch |
+| Mô tả | `description` | chữ ≤ 4000 | |
+| Cách dùng | `usage` | chữ ≤ 2000 | |
+| Ghi chú | `note` | chữ ≤ 2000 | ghi chú nội bộ cho bot |
+
+> Dịch vụ, gói, sản phẩm nhập ở đây tự tạo/cập nhật **danh mục bán** cùng mã (CRM); mục bị xóa khỏi file → danh mục ngừng bán (giữ lịch sử hóa đơn). Ngược lại, sửa giá/tên/thời lượng trên trang Danh mục ghi ngược vào kho kiến thức để bot nói đúng giá.
+
 ## 3. Quy tắc về Mã
 
 - Chỉ gồm **chữ in hoa không dấu A–Z, số 0–9, dấu gạch ngang `-`**, dài 2–50 ký tự. Ví dụ hợp lệ: `DV-TRI-LIEU-CVG-60`. Hệ thống tự viết hoa và bỏ khoảng trắng hai đầu.
@@ -109,7 +125,10 @@ File Excel mẫu còn có sheet `Hướng dẫn` (chỉ để đọc, hệ thố
   "faqs": [
     { "code": "FAQ-CO-DAU-KHONG", "question": "Bấm huyệt có đau không?", "answer": "..." }
   ],
-  "policies": []
+  "policies": [],
+  "products": [
+    { "code": "SP-TINH-DAU-TRAM", "name": "Tinh dầu tràm 50ml", "price": 120000, "unit": "chai", "sku": "TD-050" }
+  ]
 }
 ```
 
