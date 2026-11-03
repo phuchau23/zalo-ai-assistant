@@ -55,7 +55,7 @@ public sealed class GeminiEmbeddingProvider(HttpClient http, IOptions<AiOptions>
         {
             Content = JsonContent.Create(body),
         };
-        request.Headers.Add("x-goog-api-key", _options.GeminiApiKey);
+        request.Headers.Add("x-goog-api-key", _options.GeminiApiKey?.Trim());
 
         HttpResponseMessage response;
         try
