@@ -68,7 +68,7 @@ Máy tính mở **Hộp thư**, điện thoại đóng vai khách.
 
 ## Buổi 5 — Quản lý & quản trị (≈ 20 phút)
 - [ ] 5.1 Trang Tổng quan (chủ DN): 4 ô số liệu, biểu đồ 7/30 ngày, "Câu bot chưa trả lời được" (lưu ý: Chat thử không được tính nên gần như trống).
-- [ ] 5.2 Cài đặt: đổi tên bot, link chính sách bảo mật → câu báo trợ lý AI ở cuộc chat mới có link.
+- [ ] 5.2 Cài đặt → Doanh nghiệp: link chính sách bảo mật; Thiết lập trợ lý → Giọng văn & xưng hô: tên bot → câu báo trợ lý AI ở cuộc chat mới có link (ở cuối lượt trả lời đầu).
 - [ ] 5.3 Super admin (`admin@zaloai.local`) → Quản trị hệ thống: thấy danh sách DN, chi phí AI.
 - [ ] 5.4 Tạo DN "Shop Test" → hiện mật khẩu tạm 1 lần → đăng nhập được bằng tab ẩn danh.
 - [ ] 5.5 Đặt hạn thuê ngày mai → chủ "Shop Test" thấy băng vàng nhắc gia hạn.
@@ -76,7 +76,7 @@ Máy tính mở **Hộp thư**, điện thoại đóng vai khách.
 - [ ] 5.7 Tải dữ liệu .zip của "Shop Test" → Khóa → Xóa (gõ đúng tên) → biến khỏi danh sách. (KHÔNG làm với "Khoa Học Huyệt Đạo".)
 
 ## Buổi 5b — Nhân viên & mật khẩu (≈ 15 phút)
-- [ ] 5b.1 Cài đặt → Nhân viên: thêm email mới vai trò "Nhân viên" → hiện mật khẩu tạm 1 lần (có nút Chép).
+- [ ] 5b.1 Cài đặt → Tài khoản & phân quyền: thêm email mới vai trò "Nhân viên" → hiện mật khẩu tạm 1 lần (có nút Chép).
 - [ ] 5b.2 Tab ẩn danh đăng nhập bằng tài khoản nhân viên → vào Hộp thư được; KHÔNG thấy phần Nhân viên, không xuất Excel/xóa khách được.
 - [ ] 5b.3 Nhân viên bấm vào tên mình (góc dưới thanh bên) → Tài khoản → đổi mật khẩu → đăng nhập lại bằng mật khẩu mới được.
 - [ ] 5b.4 Chủ bấm "Cấp lại mật khẩu" cho nhân viên → tab của nhân viên bị đăng xuất ngay ở thao tác kế tiếp; đăng nhập bằng mật khẩu mới được.
@@ -86,7 +86,7 @@ Máy tính mở **Hộp thư**, điện thoại đóng vai khách.
 
 ## Buổi 6 — Zalo thật (khi DNS đã chuyển sang Cloudflare)
 - [ ] 6.1 Tunnel `dev-api.haulp.io.vn` chạy, Zalo App đã khai báo Callback + Webhook, đã lưu OA Secret Key.
-- [ ] 6.2 Kết nối kênh → Kết nối Zalo OA → trạng thái "Đang hoạt động".
+- [ ] 6.2 **Kênh Zalo** → Kết nối Zalo OA → trạng thái "Đang hoạt động".
 - [ ] 6.3 Zalo cá nhân nhắn OA → bot trả lời trên Zalo trong vài giây (làm lại các mục 1.1–1.10 trên Zalo).
 - [ ] 6.4 Nhân viên trả lời từ Hộp thư → khách nhận trên Zalo; nhân viên trả lời trong app OA → bot dừng.
 - [ ] 6.5 Ngắt kết nối → bot ngừng trả lời.
