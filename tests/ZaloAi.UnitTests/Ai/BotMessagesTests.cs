@@ -60,8 +60,10 @@ public sealed class BotMessagesTests
         var result = await Engine(chat, new StaticSearch(Massage)).ReplyAsync(TurnWith("giá massage 60p", null, false, first: true), CancellationToken.None);
 
         result.Messages.Count.ShouldBe(3); // tin rỗng bị bỏ, câu báo AI không thành tin riêng
-        result.Messages[0].ShouldBe("Dạ em là trợ lý AI của Khoa Học Huyệt Đạo ạ. Gói này giá 450.000đ ạ 😊\nChính sách bảo mật của Khoa Học Huyệt Đạo: https://example.vn/bao-mat");
-        result.Messages[2].ShouldBe("Mình muốn em giữ lịch giờ nào ạ?");
+        result.Messages[0].ShouldBe("Dạ em là trợ lý AI của Khoa Học Huyệt Đạo ạ. Gói này giá 450.000đ ạ 😊");
+        result.Messages[1].ShouldBe("Massage body 60 phút, thư giãn mà không đau.");
+        // Link chính sách cuối tin CUỐI: không cắt ngang khi tin đầu mở đầu một danh sách.
+        result.Messages[2].ShouldBe("Mình muốn em giữ lịch giờ nào ạ?\nChính sách bảo mật của Khoa Học Huyệt Đạo: https://example.vn/bao-mat");
         JsonDocument.Parse(result.TraceJson).RootElement.GetProperty("parts").GetInt32().ShouldBe(3);
     }
 

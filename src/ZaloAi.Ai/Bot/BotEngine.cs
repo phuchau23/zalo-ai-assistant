@@ -327,6 +327,7 @@ public sealed partial class BotEngine(
         if (request.IsFirstBotReply)
         {
             // Câu báo trợ lý AI (CLAUDE.md mục 7): gộp vào đầu tin trả lời đầu tiên cho tự nhiên, không bao giờ bỏ.
+            // Link chính sách ở cuối tin CUỐI: tin đầu hay mở đầu một danh sách ("giá như sau:"), chèn link vào đó sẽ cắt ngang.
             if (messages.Count == 0)
             {
                 messages.Add(texts.WithDisclosure(""));
@@ -335,6 +336,8 @@ public sealed partial class BotEngine(
             {
                 messages[0] = texts.WithDisclosure(messages[0]);
             }
+
+            messages[^1] = texts.WithPrivacyLink(messages[^1]);
         }
 
         var allowedKeys = IndustryTemplateRegistry.Get(request.Profile.IndustrySlug).LeadFields.Select(f => f.Key).ToHashSet(StringComparer.Ordinal);
@@ -512,8 +515,8 @@ internal sealed class BotTexts(BotProfile profile, string salutation, string urg
     private static readonly string[] LeadingYes = ["dạ vâng", "dạ", "vâng"];
 
     /// <summary>
-    /// Tin đầu tiên kèm câu báo trợ lý AI + link chính sách (CLAUDE.md mục 7) — không tắt được. Câu báo đứng đầu tin, bỏ "Dạ/Vâng"
-    /// mở đầu của câu trả lời để không thành "Dạ ... ạ. Dạ ...". Link chính sách xuống dòng cuối tin (khi DN có cài).
+    /// Tin đầu tiên kèm câu báo trợ lý AI (CLAUDE.md mục 7) — không tắt được. Câu báo đứng đầu tin, bỏ "Dạ/Vâng"
+    /// mở đầu của câu trả lời để không thành "Dạ ... ạ. Dạ ...". Link chính sách: <see cref="WithPrivacyLink"/>.
     /// </summary>
     public string WithDisclosure(string firstMessage)
     {
@@ -534,15 +537,14 @@ internal sealed class BotTexts(BotProfile profile, string salutation, string urg
         }
 
         var text = Fill("Dạ {bot} là trợ lý AI của {ten_doanh_nghiep} ạ.");
-        if (rest.Length > 0)
-        {
-            text = $"{text} {char.ToUpperInvariant(rest[0])}{rest[1..]}";
-        }
-
-        return string.IsNullOrWhiteSpace(profile.PrivacyUrl)
-            ? text
-            : $"{text}\n{Fill("Chính sách bảo mật của {ten_doanh_nghiep}:")} {profile.PrivacyUrl}";
+        return rest.Length > 0 ? $"{text} {char.ToUpperInvariant(rest[0])}{rest[1..]}" : text;
     }
+
+    /// <summary>Link chính sách bảo mật (CLAUDE.md mục 7) xuống dòng cuối tin cuối của lượt trả lời đầu tiên, khi DN có cài.</summary>
+    public string WithPrivacyLink(string lastMessage) =>
+        string.IsNullOrWhiteSpace(profile.PrivacyUrl)
+            ? lastMessage
+            : $"{lastMessage}\n{Fill("Chính sách bảo mật của {ten_doanh_nghiep}:")} {profile.PrivacyUrl}";
 
     private string Fill(string text)
     {
