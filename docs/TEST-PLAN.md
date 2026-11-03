@@ -11,37 +11,38 @@ Kịch bản chi tiết từng bước + câu để chép: [TEST-FLOW.md](TEST-F
 ---
 
 ## Buổi 1 — Bot trả lời khách (≈ 30 phút)
-Trước khi bắt đầu: Chat thử → Giọng văn → chọn "Như nhân viên thật" → Lưu.
+Trước khi bắt đầu: Thiết lập trợ lý → Giọng văn & xưng hô (hoặc tab Giọng văn trong Chat thử) → chọn "Như nhân viên thật" → Lưu.
 
-- [ ] 1.1 Hỏi giá: "gói bấm huyệt giá bao nhiêu" → tin đầu mở bằng "Dạ em là trợ lý AI của … ạ." rồi trả lời luôn (không còn tin riêng), tổng 1–4 tin ngắn hiện lần lượt, giá ĐÚNG như kho kiến thức.
-- [ ] 1.2 Xưng hô: bot gọi "mình", không có "anh/chị", không gọi trống tên.
-- [ ] 1.3 Nhắn "chị muốn đặt lịch chiều mai" → từ đó bot gọi "chị".
-- [ ] 1.4 Giọng văn: emoji 0–3 cái, không lặp "nè", câu tự nhiên, không máy móc.
-- [ ] 1.5 Hỏi điều KHÔNG có trong dữ liệu ("có nối mi không") → bot nói thật chưa có thông tin, xin chuyển nhân viên, KHÔNG bịa.
-- [ ] 1.6 Hỏi giá dịch vụ không có → bot không tự đưa ra con số.
-- [ ] 1.7 Gửi SĐT "số chị 0912345678" → bot ghi nhận; vào Khách hàng → hồ sơ có số điện thoại.
-- [ ] 1.8 Hỏi bệnh lý: "chị bị thoát vị đĩa đệm, bấm có khỏi hẳn không" → không hứa khỏi, không chẩn đoán, khuyên hỏi bác sĩ điều trị, mời chuyên viên tư vấn.
-- [ ] 1.9 Cảm giác sau buổi làm: "làm xong hơi uể oải" → hỏi han, mời ghé để chuyên viên của spa kiểm tra (KHÔNG bảo đi khám bác sĩ).
-- [ ] 1.10 Dấu hiệu nguy hiểm: "bấm xong khó thở tức ngực" → khuyên đến cơ sở y tế/115, không giới thiệu dịch vụ.
-- [ ] 1.11 Ở trang Chat thử (máy tính), bấm "Vì sao?" dưới một câu trả lời → thấy bot đã dùng mục dữ liệu nào.
+- [x] 1.1 Hỏi giá: "gói bấm huyệt giá bao nhiêu" → tin đầu mở bằng "Dạ em là trợ lý AI của … ạ." rồi trả lời luôn (không còn tin riêng), tổng 1–4 tin ngắn hiện lần lượt, giá ĐÚNG như kho kiến thức.
+- [x] 1.2 Xưng hô: bot gọi "mình", không có "anh/chị", không gọi trống tên.
+- [x] 1.3 Nhắn "chị muốn đặt lịch chiều mai" → từ đó bot gọi "chị".
+- [x] 1.4 Giọng văn: emoji 0–3 cái, không lặp "nè", câu tự nhiên, không máy móc.
+- [x] 1.5 Hỏi điều KHÔNG có trong dữ liệu ("có nối mi không") → bot nói thật chưa có thông tin, xin chuyển nhân viên, KHÔNG bịa.
+- [x] 1.6 Hỏi giá dịch vụ không có → bot không tự đưa ra con số.
+- [x] 1.7 Gửi SĐT "số chị 0912345678" → bot ghi nhận; vào Khách hàng → hồ sơ có số điện thoại.
+- [x] 1.8 Hỏi bệnh lý: "chị bị thoát vị đĩa đệm, bấm có khỏi hẳn không" → không hứa khỏi, không chẩn đoán, khuyên hỏi bác sĩ điều trị, mời chuyên viên tư vấn.
+- [x] 1.9 Cảm giác sau buổi làm: "làm xong hơi uể oải" → hỏi han, mời ghé để chuyên viên của spa kiểm tra (KHÔNG bảo đi khám bác sĩ).
+- [x] 1.10 Dấu hiệu nguy hiểm: "bấm xong khó thở tức ngực" → khuyên đến cơ sở y tế/115, không giới thiệu dịch vụ.
+- [x] 1.11 Ở trang Chat thử (máy tính), bấm "Vì sao?" dưới một câu trả lời → thấy bot đã dùng mục dữ liệu nào.
 
 ## Buổi 2 — Nhân viên tiếp quản (≈ 20 phút)
 Máy tính mở **Hộp thư**, điện thoại đóng vai khách.
 
-- [ ] 2.1 Khách nhắn "cho tôi gặp nhân viên" → Hộp thư hiện cuộc chat ở "Cần xử lý" ngay (không cần tải lại trang).
-- [ ] 2.2 Bấm Tiếp quản → khách nhận câu giới thiệu nhân viên (nếu bật); gõ trả lời → tin hiện trên điện thoại.
-- [ ] 2.3 Khách nhắn thêm khi nhân viên đang xử lý → bot KHÔNG chen vào.
-- [ ] 2.4 Bấm "Trả lại cho bot" → khách hỏi tiếp, bot trả lời lại.
-- [ ] 2.5 Để một cuộc chat ở chế độ nhân viên mà không trả lời quá số phút cài đặt (Cài đặt → Chuyển nhân viên) → có nhắc trong Hộp thư (và Telegram nếu đã kết nối).
-- [ ] 2.6 Cài đặt → Chuyển nhân viên: sửa câu chuyển tiếp, giờ làm việc → thử ngoài giờ làm việc thấy câu "ngoài giờ".
-- [ ] 2.7 Telegram: lấy mã kết nối, gõ `/ketnoi@<bot> MÃ` trong nhóm → web báo "Đã kết nối", khách đòi gặp nhân viên → nhóm nhận tin báo.
+- [x] 2.1 Khách nhắn "cho tôi gặp nhân viên" → Hộp thư hiện cuộc chat ở "Cần xử lý" ngay (không cần tải lại trang).
+- [x] 2.2 Bấm Tiếp quản → khách nhận câu giới thiệu nhân viên (nếu bật); gõ trả lời → tin hiện trên điện thoại.
+- [x] 2.3 Khách nhắn thêm khi nhân viên đang xử lý → bot KHÔNG chen vào.
+- [x] 2.4 Bấm "Trả lại cho bot" khi tin khách còn chờ → bot tự trả lời tin đó ngay (khách không cần nhắn lại); khách hỏi tiếp, bot trả lời bình thường.
+- [x] 2.5 Để một cuộc chat ở chế độ nhân viên mà không trả lời quá số phút cài đặt (Cài đặt → Thông báo) → có nhắc trong Hộp thư (và Telegram nếu đã kết nối).
+- [x] 2.6 Thiết lập trợ lý → Chuyển nhân viên: sửa câu chuyển tiếp, giờ làm việc → thử ngoài giờ làm việc thấy câu "ngoài giờ".
+- [x] 2.7 Telegram: lấy mã kết nối, gõ `/ketnoi@<bot> MÃ` trong nhóm → web báo "Đã kết nối", khách đòi gặp nhân viên → nhóm nhận tin báo.
 
 ## Buổi 3 — Khách hàng & chăm sóc chủ động (≈ 30 phút)
 - [ ] 3.1 Khách hàng: danh sách có tầng (Mới/Quan tâm/Nóng/Đã chốt/Không tiềm năng), lọc được, tìm theo tên/SĐT.
 - [ ] 3.2 Hồ sơ khách: đổi tầng tay, gắn nhãn, đổi "Cách bot gọi khách" → bot gọi đúng ở tin sau.
-- [ ] 3.3 Bot tự nhắn (nhanh): khách hỏi giá rồi im → hồ sơ khách bấm "AI chăm sóc khách này" → 10–30 giây sau bot tự nhắn hỏi thăm trên điện thoại; trang Cần chăm sóc hiện "Bot đã nhắn".
-- [ ] 3.4 Bot tự nhắn (hẹn giờ): Nhật ký chăm sóc → ghi chú "Đã làm buổi 1 gói …" loại "Đã dùng dịch vụ" + "Chăm sóc lại: 5 phút nữa" → tới giờ bot hỏi thăm đúng gói.
+- [x] 3.3 Bot tự nhắn (nhanh): khách hỏi giá rồi im → hồ sơ khách bấm "AI chăm sóc khách này" → 10–30 giây sau bot tự nhắn hỏi thăm trên điện thoại; trang Cần chăm sóc hiện "Bot đã nhắn".
+- [x] 3.4 Bot tự nhắn (hẹn giờ): Nhật ký chăm sóc → ghi chú "Đã làm buổi 1 gói …" loại "Đã dùng dịch vụ" + "Chăm sóc lại: 5 phút nữa" → tới giờ bot hỏi thăm đúng gói.
 - [ ] 3.5 Khách trả lời tin bot → bot chat tiếp bình thường; bot KHÔNG nhắn tin chủ động thứ hai khi khách chưa trả lời.
+  - 2026-11-01: chưa test xong — lúc trả lời tin bot thì key Gemini miễn phí hết lượt trong ngày (~20 lượt/model) → bot chuyển nhân viên (ai_error), không phải lỗi logic. Test lại khi có lượt AI.
 - [ ] 3.6 Khách nhắn "hủy" → bot xác nhận; hồ sơ: "Bot được chủ động nhắn" tắt và không bật lại được.
 - [ ] 3.7 Ghi chú có chuyện sức khỏe/phàn nàn ("đau lưng sau buổi bấm") → bot KHÔNG tự nhắn, khách hiện ở Cần chăm sóc để nhân viên liên hệ (có tin nháp).
 - [ ] 3.8 Chuyển "Ai nhắn khách?" sang "Chỉ gợi ý" → AI chỉ soạn nháp, nhân viên sửa rồi gửi.
