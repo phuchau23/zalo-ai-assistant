@@ -252,7 +252,7 @@ public sealed partial class CareAdvisor(IChatProvider chat, IKnowledgeSearch sea
     {
         try
         {
-            using var json = JsonDocument.Parse(text);
+            using var json = JsonDocument.Parse(Providers.JsonOutput.Clean(text));
             var root = json.RootElement;
             if (root.ValueKind != JsonValueKind.Object)
             {
