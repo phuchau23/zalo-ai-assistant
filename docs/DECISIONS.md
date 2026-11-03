@@ -52,3 +52,333 @@ Mỗi quyết định: ngày, nội dung, lý do, hệ quả.
 - **Seed** chạy từng tenant trong scope riêng có set tenant, đi qua đúng luật cô lập như code thật. Chỉ chạy ở Development.
 - **Version NuGet:** bật `CentralPackageTransitivePinningEnabled` và ghim EF Core 10.0.12, vì Npgsql kéo EF bản cũ hơn gây xung đột.
 - Code migration sinh tự động được loại khỏi analyzer (`Persistence/Migrations/.editorconfig`), không sửa tay.
+
+## 2026-10-02 — Đăng nhập và phân quyền (M1 bước 4)
+
+- **Cookie ASP.NET Core** tên `zaloai.session`: httpOnly, `SameSite=Lax`, `Secure` bắt buộc ngoài Development/Testing, hết hạn 12h trượt. Cookie chỉ chứa `sub` (userId) và `tid` (tenant đang chọn).
+- **Kiểm lại quyền mỗi request** (`TenantContextMiddleware`): đọc user, membership, trạng thái tenant từ DB. Xóa user → 401; mất membership hoặc tenant không `active` → 403 `no_active_tenant`. Đổi lại 2 truy vấn nhỏ mỗi request; cache sau nếu cần.
+- **CSRF:** không dùng antiforgery token. Dựa vào `SameSite=Lax` + API chỉ nhận JSON (form của trang khác không gửi được `application/json` mà không qua CORS preflight). Lax thay vì Strict để callback OAuth Zalo (M4) vẫn mang cookie.
+- **Đăng nhập sai:** cùng một thông báo và cùng thời gian xử lý (hash giả) cho email không tồn tại và sai mật khẩu. Mọi lần đăng nhập/đăng xuất/đổi tenant ghi `audit_logs`.
+- **`AccessQueries`** dùng `IgnoreQueryFilters()` có chủ đích: là nơi quyết định tenant nên chạy trước khi có tenant context; chỉ lọc theo userId đã xác thực, chỉ trả tên + vai trò.
+- **Khóa Data Protection** (mã hóa cookie) lưu bảng `data_protection_keys` qua `Microsoft.AspNetCore.DataProtection.EntityFrameworkCore` (chủ dự án duyệt): deploy lại hoặc chạy nhiều bản API không đăng xuất người dùng.
+- **Lỗi API** trả ProblemDetails kèm `code` ổn định (`invalid_credentials`, `unauthenticated`, `forbidden`, `no_active_tenant`, `not_found`, `validation_failed`, `rate_limited`, `internal_error`). Lỗi validate trả tên trường camelCase.
+- **OpenAPI** chỉ mở ngoài Production (`/openapi/v1.json`).
+
+## 2026-10-02 — Hàng đợi job (M1 bước 5)
+
+- **Hangfire lưu trong Postgres**, schema riêng `hangfire`, bảng do Hangfire tự quản (không qua migration EF). **Chỉ Worker tạo/nâng cấp bảng** (`PrepareSchemaIfNecessary`); Api chỉ dùng, để Api khởi động không phụ thuộc thao tác DDL. Lệnh `seed` và bộ test gọi `HangfireSetup.EnsureSchemaAsync` để bảng có sẵn trên máy dev.
+- **Job có dữ liệu tenant:** tham số đầu là `tenantId` (do API/webhook xác định), dòng đầu `TenantContext.Set(...)`. Hangfire tạo DI scope riêng cho mỗi lần chạy. Khuôn mẫu: `SampleTenantJob`.
+- **Retry toàn cục:** 5 lần, chờ 10s, 30s, 90s, 270s, 810s (thay mặc định 10 lần của Hangfire). Hết lượt → trạng thái Failed (dead-letter, chạy lại tay trên dashboard) + log Error qua `JobFailureAlertFilter` (chỉ ghi tên job + loại lỗi, không ghi tham số/message vì có thể chứa dữ liệu khách).
+- **Dashboard `/hangfire` chỉ super admin** (hiện job của mọi tenant, chạy lại/xóa được). Không hiện connection string.
+- Worker hỏi hàng đợi mỗi 5s (`Jobs:QueuePollSeconds`), 10 job song song (`Jobs:WorkerCount`).
+- Hangfire.Core kéo `Newtonsoft.Json` 11.0.1 có lỗ hổng (GHSA-5crp-9r3c-p9vr) → ghim 13.0.4 trong `Directory.Packages.props`.
+
+## 2026-10-02 — Trang quản trị FE (M1 bước 6)
+
+- **Gọi BE qua rewrite** `/api/*` → `API_INTERNAL_URL` (và `/hangfire/*` cho dashboard). Trình duyệt gọi cùng domain nên cookie httpOnly hoạt động mà không cần CORS.
+- **Lấy dữ liệu ở trình duyệt** (client component + `openapi-fetch`), không qua server component, để không phải chuyển tiếp cookie thủ công từ server Next.js sang BE. Xem lại khi cần SEO hoặc tối ưu tải trang (trang quản trị không cần SEO).
+- **`proxy.ts`** (Next.js 16 đổi tên middleware → proxy) chỉ kiểm có cookie hay chưa; không chuyển hướng ngược từ `/login` khi có cookie, để cookie cũ/bị thu hồi không gây vòng lặp. BE trả 401 → FE về `/login?next=...`; `next` được lọc chống open redirect.
+- **shadcn/ui** (style `radix-nova`, Radix UI). Bản mới dùng gói `cn` (của chính tác giả shadcn, thay clsx + tailwind-merge) — đã kiểm tra người duy trì và repo trước khi giữ.
+- Lỗi validate từ BE trả tiếng Việt (FluentValidation culture `vi`, tên trường đặt bằng `WithName`); FE hiện lỗi dưới từng ô theo key camelCase.
+
+## 2026-10-03 — Sentry, backup, CI (M1 bước 7)
+
+- **Sentry một nguồn:** lỗi đi qua Serilog → `Sentry.Serilog` (cả Api và Worker), nên đã qua bộ che log. `Sentry.AspNetCore` ở Api chỉ để gắn ngữ cảnh request; tắt kênh log riêng của nó (`MinimumEventLevel = None`) để không gửi trùng. Worker để Serilog khởi tạo SDK.
+- **Che trước khi gửi** (`SentryScrubber`, BeforeSend/BeforeBreadcrumb): che SĐT/email trong message và exception, bỏ query string (callback OAuth có `code`), cookie, header, body; `SendDefaultPii = false`. Breadcrumb bỏ phần data.
+- **Vùng dữ liệu EU** (`*.ingest.de.sentry.io`). Chỉ bật Error monitoring; không bật Logs/Tracing/Metrics của Sentry để hạn chế dữ liệu ra nước ngoài.
+- **Backup dev** bằng `pg_dump -Fc` trong container, chép ra `backups\`, giữ 14 bản. Production: backup của nhà cung cấp + bản `pg_dump` hằng ngày ở nơi khác + thử khôi phục hằng tháng (`docs/OPERATIONS.md`).
+- **CI:** GitHub Actions ở cả 2 repo, chạy khi push `main`/`dev` và mọi PR; BE chạy test tích hợp với Docker có sẵn trên runner ubuntu.
+
+## 2026-10-03 — Kho kiến thức có cấu trúc + so sánh/gộp (M2, chủ dự án duyệt)
+
+**Bối cảnh:** chủ dự án muốn doanh nghiệp tự nạp dữ liệu từ giao diện, và khi doanh nghiệp gửi bộ dữ liệu "chuẩn" sau này thì giao diện phải chỉ ra chỗ khác nhau và cho duyệt gộp (như merge code), tránh hai tài liệu cùng chủ đề nhưng khác thông tin "đá nhau".
+
+**Quyết định:**
+- Kiến thức chính nạp bằng **mẫu chuẩn** (Excel/JSON) gồm 5 loại mục (thông tin chung, dịch vụ, gói, FAQ, chính sách), **mỗi mục có Mã ổn định** → so sánh theo Mã được tới từng trường. Đặc tả: `docs/KNOWLEDGE-FORMAT.md`.
+- Nhập file → **bản xem trước** (thêm mới / thay đổi / có thể trùng / không còn trong file / không đổi) → người dùng chọn → áp dụng. Mục "không còn trong file" mặc định **giữ lại**; "có thể trùng" (mã khác, tên gần giống) phải chọn tay. Mỗi lần nhập lưu lịch sử + audit log.
+- Doanh nghiệp tự điền mẫu, hoặc dùng **câu lệnh mẫu cho AI bên ngoài** (ChatGPT/Claude/Gemini) để chuyển tài liệu lộn xộn → JSON. Hệ thống tự trích bằng AI để sang M3 (cần chat model).
+- Tài liệu tự do (PDF/Word/...) vẫn nạp được làm "tài liệu tham khảo", không so sánh từng mục; trùng tên → hỏi rồi thay thế.
+- Đơn giá lưu số nguyên VNĐ; `price = null` + `priceNote` khi không công bố giá (bot phải nói "liên hệ", không đoán).
+
+**Dữ liệu mẫu:** lấy từ website công khai của phòng khám có thật "Khoa Học Huyệt Đạo" (đổi tên tenant mẫu cho đúng), giữ nguyên các câu quảng cáo chữa bệnh/cam kết để test bộ lọc ở M3. Lưu ngoài repo. Phòng khám này quảng cáo trị liệu bệnh → trước khi phục vụ thật: hỏi luật sư, xác minh giấy phép (INDUSTRIES.md "chưa mở").
+
+## 2026-10-03 — Schema kho kiến thức (M2 bước 2)
+
+- **Embedding:** `gemini-embedding-2` (docs chính thức https://ai.google.dev/gemini-api/docs/embeddings, kiểm tra 2026-10-03): đa ngôn ngữ (có tiếng Việt), 768 chiều là mức khuyến nghị, tự chuẩn hóa vector ở số chiều không mặc định; không dùng tham số `task_type` (ghi nhiệm vụ vào nội dung). Tên model đặt trong config `Ai:EmbedModel`. Cột `chunks.embedding` = `vector(768)` cố định → `Ai:EmbedDim` phải bằng 768.
+- **Bảng:** `knowledge_items` (mục có cấu trúc, `data` jsonb, mã không trùng trong tenant), `knowledge_imports` (bản xem trước + lịch sử nhập), `documents` (tài liệu tự do, tên file không trùng trong tenant), `chunks` (đúng một nguồn: mục hoặc tài liệu; xóa nguồn → xóa đoạn).
+- **Không mã hóa** nội dung kiến thức: là thông tin công khai của doanh nghiệp. Dữ liệu cá nhân (tin nhắn khách) vẫn mã hóa từ M3.
+- **Tìm kiếm vector:** SQL thô có `WHERE tenant_id = …` trước `ORDER BY embedding <=> …`, bật `SET LOCAL hnsw.iterative_scan = relaxed_order` (pgvector 0.8.7) để chỉ mục HNSW không trả thiếu kết quả khi nhiều tenant dùng chung bảng; sắp lại theo khoảng cách ở code.
+- Core giữ `float[]` cho embedding (không phụ thuộc thư viện pgvector), Infrastructure chuyển sang kiểu `vector`.
+
+## 2026-10-03 — So sánh và gộp khi nhập file (M2 bước 4)
+
+- **Phân quyền:** staff xem kho kiến thức, bản so sánh, lịch sử; **chỉ owner** tạo bản so sánh, áp dụng, hủy (dữ liệu bot dùng để báo giá cho khách). Đổi được sau nếu DN muốn giao cho nhân viên.
+- **"Có thể trùng":** chỉ xét mục cùng loại, mã khác; so tên sau khi bỏ dấu + chữ thường, **các con số phải khớp tuyệt đối** (Massage 60' ≠ Massage 90'), độ giống Levenshtein ≥ 0,85. Mặc định không chọn; người dùng bắt buộc chọn "gộp vào mục cũ" (giữ mã cũ, lấy nội dung mới) hoặc "giữ cả hai".
+- **An toàn khi áp dụng:** một transaction; mỗi mục cũ phải còn đúng dấu vân tay (`content_hash`) như lúc so sánh, nếu không → 409, nhập lại file; không cho vừa gộp vào vừa xóa cùng một mục; lần nhập đã áp dụng/hủy không áp dụng lại được.
+- Bản so sánh lưu cả nội dung mới của từng mục → áp dụng không cần tải lại file. Mục thêm/đổi/gộp có đoạn (chunk) mới chưa có vector; bước 5 đánh chỉ mục.
+- Upload multipart không dùng antiforgery token (dựa vào cookie SameSite=Lax như các API khác); giới hạn 5 MB/file mẫu.
+
+## 2026-10-03 — Đánh chỉ mục, tài liệu tự do, giao diện kho kiến thức (M2 bước 5–8)
+
+- **Embedding tách khỏi chat:** interface `IEmbeddingProvider` (Core) riêng với chat (M3), vì `Ai:EmbedProvider` và `Ai:ChatProvider` cấu hình độc lập. Gemini gọi REST `batchEmbedContents` (định dạng kiểm chứng từ docs chính thức 2026-10-03): key ở header `x-goog-api-key` (không trên URL), `output_dimensionality` 768, nhiệm vụ ghi vào nội dung (`title: … | text: …` cho tài liệu, `task: search result | query: …` cho câu hỏi). Lỗi 429 → `AiRateLimitedException`; lỗi khác không đưa body phản hồi vào message (có thể lặp lại nội dung khách).
+- **`Ai:EmbedProvider = fake`**: vector giả tính tại chỗ (bag-of-words) cho test/CI, không gọi mạng. Khởi động kiểm tra: `EmbedDim` phải 768; dùng gemini thì bắt buộc có key.
+- **Đánh chỉ mục bất đồng bộ:** áp dụng bản nhập → xếp `IndexKnowledgeJob` cho tenant; job quét `IndexSweepJob` mỗi 5 phút làm lưới an toàn (truy vấn hệ thống `IgnoreQueryFilters` chỉ đọc tenant_id). Mỗi lô 50 đoạn lưu ngay để lỗi giữa chừng không mất phần đã làm.
+- **Tài liệu tự do:** ≤ 20MB; kiểm nội dung khớp đuôi (PDF `%PDF`, docx/xlsx `PK`, văn bản không có byte 0); tên hiển thị giữ tiếng Việt nhưng tên trên đĩa chỉ ASCII; lưu local `%LOCALAPPDATA%\zaloai\files` (Api và Worker cùng máy) — production phải dùng object storage. Chia đoạn ~1.500 ký tự, chồng lấn ~220 ký tự, đoạn mới ở mỗi tiêu đề mục. File hỏng / PDF ảnh scan → `failed` kèm lý do, không thử lại; lỗi AI → thử lại.
+- **Câu lệnh nhờ AI** là hằng số trong code (`KnowledgeTemplate.AiPrompt`), hiện trên giao diện có nút sao chép; bản trong docs phải giữ giống.
+- **JSON API chỉ nhận số thật** (`NumberHandling = Strict`): OpenAPI của .NET 10 mặc định sinh `number | string` cho trường số, làm type FE khó dùng.
+- **Giao diện duyệt:** logic chọn (mặc định, khóa "vừa gộp vừa xóa", đếm thay đổi) nằm trong `selection.ts` có test riêng; áp dụng/hủy luôn hỏi xác nhận; mục "không còn trong file" hiện nhãn "Sẽ xóa" khi được chọn.
+
+## 2026-10-04 — Lõi AI + chat thử (M3)
+
+- **Chỉ dùng Gemini, bỏ Claude** (chủ dự án chốt 2026-10-04). Chat `gemini-3.8-flash`, dự phòng `gemini-3.5-flash-lite` khi model chính quá tải (503) sau 2 lần thử lại. Gọi REST `generateContent` (định dạng kiểm chứng bằng request thật 2026-10-04): JSON ép bằng `generationConfig.responseMimeType` + `responseJsonSchema` (`response_format` bị từ chối). Token "suy nghĩ" tính như output. Giá đặt ở `Ai:Pricing` (appsettings) theo trang giá Google, cập nhật tay. `Ai:ChatProvider = fake` cho test/CI. **Gói Gemini miễn phí chỉ dùng cho dev**: Google được dùng dữ liệu gói free để cải thiện sản phẩm → production bắt buộc gói trả phí.
+- **Phân lớp:** contract ở Core (`IChatProvider`, `IKnowledgeSearch`, `IBotEngine`, `IChannelAdapter`), bộ não `BotEngine` ở ZaloAi.Ai (không đụng database), job `ProcessIncomingMessageJob` ở Infrastructure (đọc/ghi DB, mã hóa, gọi bộ não, gửi qua adapter). Webchat (chat thử) và Zalo (M4) dùng chung job.
+- **Thứ tự an toàn trong một lượt:** che dữ liệu cá nhân (SĐT VN, email, CCCD 12 số, CMND 9 số chỉ khi có chữ "CMND" gần đó, tên khách đã biết) → kiểm dấu hiệu nguy hiểm bằng từ khóa (bỏ dấu, không gọi AI) → tìm kiến thức bằng câu đã che (độ giống ≥ 0,35, tối đa 6 đoạn) → AI trả JSON → sai định dạng thử lại 1 lần → câu cấm thử viết lại 1 lần → có giá mà không dẫn đoạn dữ liệu nào thì chặn (0 bịa giá) → `confidence = low` thì chuyển người → câu hỏi sức khỏe tự thêm lời khuyên thăm khám → ghép lại dữ liệu đã che → tin đầu tiên có câu báo trợ lý AI + link chính sách (không tắt được). Lỗi AI → câu dự phòng + chuyển người, không im lặng.
+- **Câu cấm:** so khớp có dấu ("không đau" ≠ "không đâu"); `strict` = luôn cấm (cam kết kết quả y khoa), không strict = được dùng khi đúng nguyên văn đoạn dữ liệu bot đã dùng. Bỏ các cụm quá chung ("đảm bảo", "chắc chắn", "anh bị", "ngưng thuốc") vì chặn nhầm câu vô hại — phần đó do quy tắc + eval lo.
+- **Dấu hiệu nguy hiểm:** so khớp bỏ dấu (khách hay gõ không dấu), chỉ dùng cụm đủ cụ thể: "ngất" → "bị ngất"/"ngất xỉu" (tránh "ngắt"), "xỉu" → "bị xỉu" (tránh "xíu"). AI còn tự đánh giá `urgency` (lớp 2).
+- **Cờ `medically_reviewed`** trên mục kiến thức và tài liệu, owner bật/tắt (audit). Sửa nội dung → tự bỏ cờ. Prompt ghi nhãn từng đoạn "đã/chưa duyệt chuyên môn".
+- **Hội thoại:** bảng `contacts`, `conversations`, `messages` (nội dung mã hóa, `ai_trace` jsonb không chứa nội dung/PII), `usage_records`. Mỗi tin khách chỉ có 1 câu trả lời (unique `reply_to_message_id`) → chạy lại job không gửi trùng. Khách nhắn liên tiếp → chỉ trả lời tin cuối. Chuyển người → `mode = human`, bot im. Hội thoại dài → tóm tắt phần cũ (giữ 10 tin gần nhất nguyên văn), tóm tắt lưu mã hóa.
+- **Hàng đợi `messages`** ưu tiên trước `default` (đánh chỉ mục, đọc tài liệu) để khách không phải chờ việc nền.
+- **Chat thử:** chỉ thao tác hội thoại `is_test` của tenant hiện tại; giới hạn 20 tin/phút/người dùng (mỗi tin tốn tiền AI). Giọng văn (thân thiện/chuyên nghiệp/ngắn gọn) + hướng dẫn thêm ≤ 1000 ký tự, đặt SAU quy tắc hệ thống và ghi rõ không ghi đè được an toàn.
+- **Eval:** `evals.json` trong mẫu ngành; lệnh `dotnet run --project src/ZaloAi.Api -- eval` chạy trên kho kiến thức thật bằng AI thật; "bịa giá" = số tiền trong câu trả lời không có trong dữ liệu DN. Ngưỡng: thường ≥ 85%, 0 bịa giá, an toàn 100%.
+
+## 2026-10-04 — Kết nối Zalo OA (M4)
+
+- **Nguồn API:** mọi chi tiết Zalo (OAuth v4 + PKCE, token 25 giờ / refresh 3 tháng dùng 1 lần, webhook + chữ ký, gửi tin tư vấn, mã lỗi) lấy từ docs chính thức do chủ dự án chụp/copy, ghi ở `docs/zalo-api-notes.md` kèm ngày. Trang docs developers.zalo.me hiển thị bằng JS + Cloudflare nên Claude không tự đọc được.
+- **Phụ thuộc:** Infrastructure tham chiếu Channels (để lưu token/khóa/mã hóa quanh `ZaloClient`). Channels vẫn chỉ phụ thuộc Core, chỉ lo giao thức Zalo (HTTP, chữ ký, PKCE, đọc sự kiện). Không có vòng lặp.
+- **Redis** (`StackExchange.Redis`, đã duyệt ở M1) qua `IDistributedStore`: khóa làm mới token theo kết nối (Lua so-khớp để không nhả khóa người khác), OAuth state 10 phút dùng 1 lần (GETDEL), chống trùng webhook theo `oa_id:msg_id` 1 ngày, đếm giới hạn gửi theo OA/phút. Test bằng `Testcontainers.Redis`.
+- **Một OA chỉ thuộc một DN** (unique `channel + external_id` toàn hệ thống): webhook tìm DN theo OA ID phải ra đúng 1. DN khác kết nối OA đang dùng → báo "oa_in_use", không lộ DN nào. Ngắt kết nối = xóa dòng (xóa luôn token), hội thoại giữ lại (`connection_id` → null).
+- **Callback OAuth không đăng nhập:** tenant + user + code_verifier lấy từ state trong Redis, không từ query. Lỗi → chuyển về trang Kênh với `?error=<mã ngắn>`. URL callback có `code`: request log chỉ ghi path.
+- **Webhook:** đọc nguyên body → kiểm `X-ZEvent-Signature` (sha256(appId + body + timestamp + OA Secret Key)), chấp nhận có/không tiền tố `mac=` và hex hoa/thường vì docs chưa rõ (ghi log *định dạng* header khi sai để đối chiếu với Zalo thật) → đúng app → chống trùng → lưu tin mã hóa → xếp job → 200. Tin bot gửi qua API dội về (`oa_send_*` không có `admin_id`) bị bỏ qua; có `admin_id` = nhân viên trả lời trong app OA → hội thoại chuyển `human`, bot im.
+- **Không tự retry POST tới Zalo ở tầng HTTP** (`DisableForUnsafeHttpMethods`): refresh token chỉ dùng 1 lần, gửi lại tin = khách nhận 2 lần. Job thử lại có kiểm tra trạng thái: tin bot lưu `pending` trước khi gửi; chạy lại thì gửi lại đúng tin đó (không gọi AI lần 2). Còn rủi ro nhỏ: Zalo đã nhận tin nhưng mất phản hồi → gửi lại 1 lần.
+- **Phân loại lỗi gửi:** -216/-220 → làm mới token rồi gửi lại 1 lần; -223/-219/-209/-212/-204/-205 → kết nối `needs_reauth` (log Error → Sentry); -230/-232/-227/-213/-244/-218 → tin `failed`, không gửi lại; -32/-200/5xx/mạng → job thử lại.
+- **Tin không phải chữ** (ảnh, video, file, thoại, vị trí): lưu dạng "[Khách gửi hình ảnh]", bot trả lời cố định + chuyển nhân viên, không gọi AI (không bịa nội dung ảnh). Sticker: đáp ngắn, không chuyển người.
+- **Không gọi AI** khi kênh Zalo của hội thoại đã ngắt hoặc cần cấp quyền lại.
+- **Làm mới token:** job quét 30 phút/lần, token còn < 2 giờ thì xếp job làm mới riêng cho từng kết nối (trong đúng tenant). Ngoài ra làm mới ngay khi gửi tin gặp -216/-220.
+- **Quyền app xin OA cấp** tối thiểu cho GĐ1: gửi tin, thông tin OA, tin nhắn người dùng; webhook tin nhắn + người dùng. ZNS/Template bật lại ở GĐ2 (OA phải cấp quyền lại).
+
+## 2026-10-04 — Hộp thư + tiếp quản (M5)
+
+- **Hộp thư hiện cả hội thoại Chat thử** (nhãn "Chat thử"): chủ dự án/DN test trọn luồng khách ↔ bot ↔ nhân viên trên web, không cần Zalo. Báo cáo/hạn mức (M6) vẫn loại hội thoại thử. Chat thử cho "khách" nhắn khi nhân viên đang xử lý (trước đây bị chặn 409).
+- **"Cần bạn"** = `conversations.needs_attention_since` (bot chuyển người, hoặc khách nhắn khi nhân viên đang xử lý); xóa khi nhân viên trả lời / tiếp quản có câu giới thiệu / trả lại bot. Danh sách xếp ca chờ lâu nhất lên đầu.
+- **Câu chuyển tiếp là tin `system`** (lưu, gửi qua kênh như tin thường): chuyển người trong/ngoài giờ (luôn bật, trừ ca khẩn cấp vì câu khẩn cấp đã đủ), tiếp quản (mặc định bật), trả lại bot (mặc định tắt), chữ ký "— Tên, CSKH" (mặc định bật). Cài đặt 1 dòng/tenant `handoff_settings`, giờ Việt Nam.
+- **Nhân viên gửi tin = tự tiếp quản** (bot im, tự gán cho người gửi nếu chưa ai phụ trách). Tin nhân viên/hệ thống lưu `pending` rồi job `SendOutgoingMessageJob` gửi (API trả nhanh, mạng lỗi có thử lại).
+- **Tự chuyển người thêm:** sentiment âm → chuyển ("negative_sentiment"). "Không chắc liên tiếp" không cần riêng vì bot đã chuyển ngay từ lần không chắc đầu tiên (M3).
+- **Realtime:** SSE `/inbox/stream`, sự kiện qua Redis pub/sub kênh theo tenant, chỉ chứa {type, conversationId} — trình duyệt tự tải lại qua API có kiểm quyền. FE dự phòng tải lại 20 giây/lần nếu SSE rớt.
+- **Nhắc khi chờ lâu:** job hệ thống mỗi phút (IgnoreQueryFilters, chỉ đọc id + mốc giờ) → job theo tenant ghi `last_reminder_at`, báo hộp thư, Telegram; lặp mỗi X phút (5–240, mặc định 10) tới khi có người trả lời.
+- **Telegram** (Bot API sendMessage, HttpClient, không thư viện): một bot của hệ thống, mỗi DN điền chat id nhóm. **Không gửi nội dung tin / thông tin cá nhân của khách** sang Telegram (bên thứ ba) — chỉ loại sự việc, tên DN, lý do, link hộp thư.
+- **Audit xem hội thoại:** ghi `conversation.viewed`, tối đa 1 lần / người / hội thoại / 30 phút (khóa Redis) để không ngập log khi giao diện tải lại.
+- **Vai trò:** staff vào thẳng Hộp thư; owner có Tổng quan (số khách đang chờ). Chỉ owner gán người phụ trách và sửa cài đặt chuyển tiếp; staff tiếp quản/trả lời được.
+
+## 2026-10-04 — Khách hàng + Cần chăm sóc + kết nối Telegram (M6 đợt A)
+
+- **5 tầng khách** (chủ dự án chốt): Mới → Quan tâm → Nóng → Đã chốt → Không tiềm năng. Hệ thống **chỉ tự nâng**, không bao giờ hạ: để lại SĐT hoặc muốn đặt lịch → Nóng; nói rõ nhu cầu (dịch vụ, thời gian, chi nhánh) hoặc nhắn ≥ 3 tin → Quan tâm; AI "Cần chăm sóc" đánh giá nóng/ấm → Nóng/Quan tâm. Đã chốt / Không tiềm năng chỉ nhân viên đặt. Nhân viên đặt tay → `lead_status_manual`, hệ thống không đụng nữa cho tới khi chọn lại "Tự động". Quy tắc rõ ràng, không thêm trường vào JSON trả lời của bot (không phải chạy lại eval).
+- **Nhật ký chăm sóc** (`contact_notes`): nhân viên ghi khách đã làm gì + "ngày chăm sóc lại". Nội dung mã hóa (có thể chứa thông tin sức khỏe). Tới ngày → tạo gợi ý "Tới ngày hẹn chăm sóc". Đây là dữ liệu đầu vào cho flow tự động GĐ2.
+- **"Cần chăm sóc" chỉ GỢI Ý, không tự gửi.** Nhân viên sửa tin nháp rồi bấm gửi (đi qua hộp thư như tin nhân viên → hội thoại chuyển sang nhân viên). Mỗi khách tối đa 1 gợi ý đang mở (unique có điều kiện), phân tích lại thì cập nhật. Khách nhắn lại → gợi ý tự "đã xử lý" (`customer_replied`). Quá hạn nhắn → "hết hạn".
+- **Khi nào AI phân tích:** job hệ thống 15 phút/lần; khách im lặng ≥ X giờ (cài đặt, mặc định 6, 1–72), còn trong 7 ngày Zalo cho nhắn, chưa phân tích từ tin mới nhất (`conversations.care_analyzed_at`), không có khách đang chờ người; tối đa 100 lần gọi AI/lượt; DN tắt được. Nhân viên bấm "AI gợi ý chăm sóc" thủ công: 1 lần / 2 phút / hội thoại. **Khác đặc tả:** đặc tả nói "không phân tích hội thoại mode = human"; đổi thành "không phân tích khi khách đang chờ người" — vì sau khi nhân viên tiếp quản, hội thoại thường ở mode human mãi, nếu theo đặc tả thì khách đó không bao giờ được gợi ý chăm sóc.
+- **Hạn nhắn Zalo:** `messaging_deadline` = tin cuối của khách + 7 ngày (docs Zalo, `zalo-api-notes.md`); giao diện ghi thêm "miễn phí 48 giờ đầu, sau đó có thể tính phí". Quá hạn → khóa "Nhắn ngay", gợi ý gọi điện (ZNS ở GĐ2). Chat thử không giới hạn.
+- **Tin nháp an toàn:** che PII trước khi gửi AI (cả ghi chú nhân viên), prompt cấm bịa giá/ưu đãi/lịch (để chỗ trống cho nhân viên điền), tin nháp có câu cấm của ngành → bỏ tin nháp. Lý do/gợi ý/tin nháp lưu mã hóa.
+- **Danh sách khách:** tìm tên/SĐT trong bộ nhớ sau khi giải mã (tối đa 5.000 khách) — không lưu SĐT dạng thường để tìm. Xuất Excel chỉ owner, ghi audit `contacts.exported`, mặc định không gồm khách chat thử, ô luôn là chữ (không chạy công thức). Xem hồ sơ ghi audit `contact.viewed` (1 lần/người/khách/30 phút).
+- **Kết nối Telegram tự phục vụ:** owner lấy mã 6 ký tự (bỏ chữ dễ nhầm, Redis 10 phút, dùng 1 lần) → nhóm gõ `/ketnoi@tên_bot MÃ` (bot chế độ riêng tư chỉ nhận lệnh có @tên_bot) hoặc bấm link `t.me/<bot>?startgroup=MÃ`. Worker đọc tin bằng **long polling `getUpdates`** (không cần URL công khai như webhook; chạy được cả ở máy dev), chỉ một Worker đọc tại một thời điểm (khóa Redis). Lưu chat id vào đúng DN theo mã, gửi tin chào vào nhóm, audit `tenant.telegram_connected`. Không ghi log nội dung tin trong nhóm. Ô chat id thủ công vẫn giữ (ẩn trong "Nhập thủ công").
+- **Lịch chăm sóc lại theo giờ** (chủ dự án yêu cầu 2026-10-04): `contact_notes.follow_up_at` (timestamptz, lưu UTC; giao diện nhập/hiện giờ Việt Nam) thay cho chỉ ngày — migration `NoteFollowUpTime`, lịch cũ chỉ có ngày chuyển thành 08:00. Job riêng `CareFollowUpSweepJob` chạy **mỗi phút** (lịch hẹn tới giờ + gợi ý quá hạn); phân tích khách im lặng vẫn 15 phút/lần (tốn AI hơn, không cần chính xác tới phút).
+
+## 2026-10-05 — Bot TỰ chăm sóc khách (đưa phần lõi của GĐ2 lên trước M6 đợt B)
+
+Chủ dự án chốt: "AI phải tự nhắn chăm sóc khách như một nhân viên, chỉ khi cần người mới gọi người vào" — đây là lõi sản phẩm. Mặc định DN mới: **bot tự nhắn** (tắt được: "Chỉ gợi ý").
+- **Luồng:** khách im lặng ≥ X giờ (quét 15 phút) hoặc tới giờ hẹn trong nhật ký (quét mỗi phút) → AI chọn `send` / `ask_human` / `none` + tin nhắn viết bằng giọng TRỢ LÝ AI (không giả làm nhân viên) → `CareDecision` (luật cứng) quyết định → bot gửi qua đúng đường gửi tin (`ProactiveSendJob`, tin đánh dấu `messages.proactive`), hoặc gợi ý + Telegram cho nhân viên. Khách trả lời thì bot nói chuyện tiếp như thường; cần người thì chuyển như M5.
+- **Giới hạn cứng (`CareDecision`):** mỗi lần khách im lặng chỉ 1 tin chủ động — chưa được trả lời thì không nhắn tin thứ 2 (`contacts.proactive_awaiting_reply`; riêng lịch hẹn nhân viên đặt vẫn gửi); cách tin chủ động trước ≥ 24 giờ; chỉ trong khung giờ DN chọn, luôn bị kẹp trong 07:00–21:00 giờ VN (ngoài giờ → hẹn Hangfire tới giờ mở); quá 7 ngày Zalo → nhân viên gọi điện; khách nhắn đúng một lệnh "hủy"/"dừng nhắn tin"/"stop"... → `proactive_opt_out` (nguồn customer, nhân viên không bật lại được), bot xác nhận cố định, không gọi AI. Không coi "dừng"/"dung" đứng một mình là lệnh (bỏ dấu trùng "đúng").
+- **Luôn chuyển nhân viên (không tự gửi):** AI đánh giá phàn nàn / sức khỏe-nhạy cảm / cần thông tin chỉ nhân viên có; tin có câu cấm hoặc **có giá tiền** (bot tự nhắn không được nêu giá); **tin quảng cáo** (ưu đãi, kéo khách cũ) vì chưa có dữ liệu "đồng ý nhận tin" — làm cùng GĐ2 (consent, ZNS); nhân viên đang phụ trách hội thoại (mode human).
+- **Kiểm tra lại lúc gửi:** khách vừa nhắn, vừa hủy, nhân viên vừa tiếp quản, DN vừa tắt tự nhắn → không gửi. Chạy lại an toàn (gợi ý đã gửi chỉ gửi nốt tin pending). Job quét mỗi phút đẩy lại tin hẹn giờ bị trễ > 5 phút.
+- **Cần luật sư xác nhận** ranh giới "chăm sóc" (được tự nhắn) và "quảng cáo" (cần đồng ý) trước khi bán thật.
+
+## 2026-10-14 — Giọng "Như nhân viên thật", trả lời nhiều tin ngắn, xưng hô theo từng khách
+
+**Quyết định (chủ dự án chốt):**
+- Giọng văn mới `human` ("Như nhân viên thật"), **mặc định cho tenant mới**: chia 1–4 tin ngắn, đa dạng cách nói, đọc cảm xúc khách, emoji dễ thương tổng 0–3 mỗi lượt (không dùng khi khách bực/lo), từ đệm ("nè, nha, nhé") tối đa 1 lần mỗi tin, "nè" tối đa 1 lần mỗi lượt. Tenant cũ giữ giọng đã chọn (đổi ở trang Giọng văn).
+- AI trả `messages[]` thay cho `reply`. Mỗi phần tử là **một dòng `messages` và một tin Zalo riêng**, gửi cách nhau `Ai:BotMessageGapMs` (mặc định 1,2 giây). Tin đầu giữ `reply_to_message_id` (unique → không trả lời trùng), tin cuối giữ `ai_trace`. Câu báo trợ lý AI nằm ở đầu tin đầu tiên (sửa 2026-10-15, xem mục cuối); câu nhắc thăm khám (ngành y) là tin riêng ở cuối. Kiểm tra câu cấm, giá không nguồn chạy trên toàn bộ các tin.
+- Xưng hô: bot xưng theo cài đặt DN ("em"). Khách: nhân viên chọn (anh/chị/cô/chú/bác) → giữ nguyên; khách tự xưng khi chat → AI báo `customer_salutation`, hệ thống lưu; chưa biết → **"mình"**. Cấm gọi trống tên và cấm "anh/chị". Áp dụng cho câu cố định của bot, câu chuyển tiếp (`{xung_ho}`) và tin bot tự chăm sóc. Bỏ trường `customerAddress` của mẫu ngành.
+
+**Lý do:** chủ dự án muốn bot nhắn như nhân viên chăm sóc khách hàng thật trên Zalo; "anh/chị" và gọi trống tên bị đánh giá là kém tự nhiên.
+
+**Hệ quả:** migration `CustomerSalutation` (`contacts.salutation`, `contacts.salutation_source`, mặc định `tenants.bot_tone = human`). PATCH `/contacts/{id}` nhận `salutation` (giá trị hợp lệ hoặc `auto`). Tin bot tự nhắn (chăm sóc chủ động) vẫn là 1 tin. Không đoán giới tính từ tên.
+
+## 2026-10-14 — M6 đợt B: dashboard, xuất/xóa dữ liệu, super admin, hạn mức (chủ dự án chốt)
+
+**Quyết định:**
+- Làm theo thứ tự B1 dashboard → B2 xuất/xóa dữ liệu 1 khách → B3 super admin → B4 hạn mức.
+- Hết hạn mức hội thoại/tháng: khách đã nhắn trong tháng vẫn được bot trả lời; khách MỚI → **chuyển nhân viên** (một cách cho mọi DN, không có cột cấu hình riêng). Gói trial tạm **100 hội thoại/tháng**; super admin đặt hạn mức riêng từng DN.
+- Hết hạn thuê: báo trước 7 ngày trên web; quá hạn **3 ngày** chưa gia hạn → tự khóa (bot ngừng), super admin mở lại được.
+- Ngừng thuê: super admin **xuất file** toàn bộ dữ liệu gửi DN rồi **xóa ngay** (gõ tên DN xác nhận), không giữ 30 ngày.
+- Dashboard (B1): chỉ owner; không tính Chat thử; "bot tự xử lý" = hội thoại có khách nhắn trong khoảng mà không có tin bot chuyển người (trace `needsHuman`) và nhân viên không nhắn; "câu bot không trả lời được" = lượt bot chuyển người vì `no_knowledge`/`low_confidence`, nội dung che SĐT/email/giấy tờ trước khi trả về, xem có audit log (1 lần/30 phút/người). Chi phí AI tính từ đầu tháng giờ Việt Nam, gồm cả Chat thử.
+
+**Hệ quả:** B1 không đổi schema. Số liệu ngày gộp trong bộ nhớ từ tối đa 100.000 tin (đủ cho DN nhỏ/vừa; DN lớn sau này chuyển sang truy vấn gộp sẵn trong SQL).
+
+## 2026-10-14 — Super admin (M6 đợt B3)
+
+**Quyết định:**
+- Trang `/admin` chỉ cho user có cờ `is_super_admin` (filter `RequireSuperAdmin`); mở được cả khi tài khoản không thuộc DN nào.
+- Đọc tổng hợp nhiều DN: `SuperAdminRepository` dùng `IgnoreQueryFilters()` có chủ đích, kiểm cờ super admin trong từng hàm, chỉ trả số liệu tổng hợp + thông tin tài khoản (không nội dung tin, không dữ liệu khách).
+- Ghi lên một DN: `TenantAdminService` mở **DI scope riêng** cho từng DN và đặt tenant context = DN đó (TenantContext không cho đổi tenant giữa chừng một scope) → vẫn đi qua global query filter + kiểm tenant khi SaveChanges. Mọi thao tác có audit log.
+- Tạo DN: sinh mật khẩu tạm 14 ký tự cho chủ mới, chỉ trả một lần (lưu dạng hash). Email đã có tài khoản → thêm làm chủ, giữ mật khẩu.
+- Gói thuê đọc từ `Billing:Plans` (mặc định trong code: `trial` 100 hội thoại/tháng); hạn mức riêng ở `tenants.conversation_quota`.
+- Khóa/mở: `tenants.status` + cột mới `suspended_reason` (`manual` | `expired`). Job `tenant-expiry` mỗi giờ: quá hạn > 3 ngày → tự khóa (`expired`); gia hạn qua hôm nay thì tự mở lại. Chủ DN thấy băng nhắc từ 7 ngày trước hạn (`/auth/me` trả `expiresAt`).
+- Xuất dữ liệu DN: zip (khach-hang.xlsx, kho-kien-thuc.xlsx đúng mẫu nhập lại, tai-lieu/ file gốc), dựng trong file tạm tự xóa rồi stream ra.
+- Xóa DN: phải đang khóa + gõ đúng tên. Xóa dòng `tenants` (khóa ngoại CASCADE xóa mọi bảng có tenant_id), xóa file đã tải lên, xóa tài khoản chỉ thuộc DN đó; ghi audit hệ thống `tenant.deleted` (tenant_id rỗng) làm bằng chứng.
+
+**Hệ quả:** migration `TenantBilling`. Quyền của Zalo App trên OA của DN không tự gỡ khi xóa (chưa kiểm chứng API thu hồi) — nhắc DN tự gỡ.
+
+## 2026-10-14 — Hạn mức hội thoại (M6 đợt B4)
+
+**Quyết định:** hội thoại được bot trả lời khi nằm trong N hội thoại **bắt đầu sớm nhất** của tháng (N = hạn mức; tính theo tin khách đầu tiên trong tháng giờ Việt Nam, không tính Chat thử). Nhờ vậy khách đã nhắn trong tháng luôn được trả lời, khách nhắn dồn nhiều tin không lọt hạn mức. Ngoài hạn mức: không gọi AI, chuyển nhân viên (`handoff_reason = quota_exceeded`) với câu chuyển tiếp gắn `reply_to_message_id` (chạy lại không gửi trùng). Báo Telegram khi tới 80% và khi bắt đầu chặn, mỗi mức một lần/tháng (khóa Redis `quota-notify:*`, 40 ngày). Chủ DN thấy băng cảnh báo (`GET /tenant/usage`).
+
+**Hệ quả:** mỗi tin khách thêm 2 truy vấn đếm (đủ nhanh với index hiện có cho DN nhỏ/vừa; DN lớn sau này cache số đếm trong Redis).
+
+## 2026-10-14 — Câu nhắc an toàn sức khỏe nói như người của doanh nghiệp
+
+**Quyết định (chủ dự án yêu cầu):** bỏ câu cứng "cần bác sĩ/chuyên viên thăm khám trực tiếp" gắn sau mọi câu về cơ thể (nghe như đẩy khách đi nơi khác). Thay bằng:
+- Cảm giác thông thường sau dịch vụ (mỏi, uể oải, đau nhẹ): bot tự lồng lời mời khách ghé để **chuyên viên của doanh nghiệp** kiểm tra trực tiếp; không khuyên đi khám bác sĩ. Hệ thống chỉ gắn câu dự phòng (cùng ý, giọng mời về doanh nghiệp) khi bot quên.
+- Bệnh lý / bệnh nền / mang thai / đang dùng thuốc: vẫn khuyên hỏi bác sĩ điều trị, không chẩn đoán. Dấu hiệu nguy hiểm: giữ nguyên (115, chuyển khẩn cấp).
+- Thêm quy tắc chung: bot nói về doanh nghiệp, đội ngũ, dịch vụ với sự trân trọng, mời khách quay lại; không tự khen quá lời nếu dữ liệu không ghi.
+
+**Hệ quả:** docs/INDUSTRIES.md mục 3 cập nhật. Eval an toàn (S07, S09, S11, S13, S17, S21) chạy lại với Gemini: 6/6 đạt.
+
+## 2026-10-14 — Cột "Sau khi làm" trong mẫu dữ liệu + bot chăm sóc tra kho kiến thức
+
+**Quyết định:** thêm trường `afterCare` ("Sau khi làm", không bắt buộc, ≤ 2000 ký tự) cho Dịch vụ và Gói liệu trình: cảm giác thường gặp sau buổi làm, kéo dài bao lâu, nên làm/kiêng gì, khi nào báo lại DN. File cũ vẫn nhập được (vẫn là mẫu phiên bản 1). Bot chăm sóc chủ động (CareAdvisor) tìm trong kho kiến thức của tenant theo ghi chú "đã dùng dịch vụ" + tin gần nhất (đã che dữ liệu cá nhân, tối đa 3 đoạn) để hỏi thăm đúng gói; ngành sức khỏe chỉ dùng phần về cơ thể từ đoạn "Đã duyệt chuyên môn"; tin bot tự gửi vẫn không được nêu giá (báo giá làm ở phần nhập danh sách khách).
+
+## 2026-10-14 — Quản lý nhân viên + đổi mật khẩu
+
+**Quyết định:**
+- Chủ DN quản lý nhân viên ở Cài đặt → Nhân viên (`/tenant/team`, chỉ owner): thêm bằng email (email chưa có tài khoản → tạo + mật khẩu tạm 14 ký tự hiện MỘT lần; đã có → chỉ thêm quyền, giữ mật khẩu), đổi vai trò owner/staff, xóa, cấp lại mật khẩu. Chốt: luôn còn ≥ 1 chủ (`last_owner`), không tự xóa mình, chỉ cấp lại mật khẩu cho tài khoản CHỈ thuộc DN này và không phải super admin (`shared_account` — tránh chủ DN A chiếm tài khoản ở DN B). Xóa người cuối cùng không còn thuộc DN nào → xóa luôn tài khoản. Mọi thao tác có audit log.
+- Mọi người tự đổi mật khẩu ở `/account` (`POST /auth/change-password`, kiểm mật khẩu hiện tại, mật khẩu mới ≥ 8 ký tự, giới hạn tốc độ như đăng nhập).
+- **Dấu vân tay mật khẩu trong cookie** (claim `pst` = 16 hex SHA-256 của chuỗi hash mật khẩu): middleware so với DB mỗi request → đổi/cấp lại mật khẩu là mọi phiên cũ bị đăng xuất; phiên đang đổi được cấp cookie mới.
+
+**Hệ quả:** không đổi schema. Cookie cũ (trước thay đổi) không có `pst` → mọi người phải đăng nhập lại một lần.
+
+## 2026-10-14 — Nhập danh sách khách (SĐT, đã làm gì, hẹn nhắn)
+
+**Quyết định (chủ dự án chốt):** chủ và **nhân viên** đều được nhập file Excel danh sách khách (mẫu tải từ hệ thống: SĐT*, Tên, Giới tính, Cách gọi, Đã làm gì, Ngày làm, Hẹn nhắn lúc, Ghi chú cho AI, Đồng ý nhận tin ưu đãi). Hai bước: xem trước (khách mới / cập nhật / lỗi) → nhập (gửi lại đúng file, dòng lỗi bỏ qua). Khách **chỉ có SĐT, chưa nhắn OA**: tới giờ hẹn chỉ **liệt kê** ở trang Cần chăm sóc ("Tới hẹn – chưa nhắn OA được") để nhân viên gọi/nhắn tay, bấm "Đã liên hệ" — không gọi AI.
+
+**Thiết kế:**
+- SĐT chuẩn hóa về "0xxxxxxxxx", lưu mã hóa (`contacts.phone_enc`) + dấu vân tay HMAC-SHA256 (`contacts.phone_hash`, khóa tách từ khóa mã hóa bằng HKDF), unique theo (tenant_id, phone_hash). Khách chưa nhắn kênh nào: `channel = phone`, `external_user_id = phone_hash` (không lưu SĐT dạng đọc được).
+- Giới tính Nam/Nữ → cách gọi anh/chị (nhân viên đặt); "Cách gọi" thắng giới tính. Đồng ý nhận tin: `consent_marketing/consent_at/consent_source = import` (DN tự khai, chịu trách nhiệm).
+- Mỗi dòng tạo ghi chú "đã dùng dịch vụ" (+ "ghi chú cho AI"), giờ hẹn gắn vào ghi chú (dùng lại job hẹn giờ của nhật ký chăm sóc). Nhập lại cùng file không tạo trùng ghi chú. `contact_notes.follow_up_done_at` đánh dấu nhân viên đã liên hệ.
+- Khách cũ đã tự cho SĐT khi chat được điền dấu vân tay lúc nhập để khớp đúng người. Khách đang chat cho SĐT trùng khách nhập → gộp (nhật ký, cách gọi, đồng ý, nhãn, thông tin) vào hồ sơ đang chat, xóa bản nhập; chỉ trong cùng tenant; trùng với khách đang chat khác thì không gắn.
+
+**Hệ quả:** migration `ContactPhoneImport`. Chỉ nhận SĐT di động 10 số. Báo giá khi bot chủ động nhắn + gửi ZNS cho khách chỉ có SĐT: làm sau.
+
+## 2026-10-15 — Câu báo trợ lý AI gộp vào tin trả lời đầu tiên
+
+- Chủ dự án thấy tin riêng "Dạ em là …, trợ lý AI (trí tuệ nhân tạo) … 24/7" máy móc, muốn bỏ. Bỏ hẳn trái nguyên tắc mục 2.5/7 (luật bảo vệ người tiêu dùng, dữ liệu cá nhân, quy định AI, chính sách Zalo) → chủ dự án chọn **gộp**.
+- Tin đầu tiên của bot trong hội thoại: `Dạ {bot} là trợ lý AI của {DN} ạ. <câu trả lời>` (bỏ "Dạ/Vâng/Dạ vâng" mở đầu của câu trả lời để không lặp). DN có link chính sách → xuống dòng cuối tin đó: `Chính sách bảo mật của {DN}: <link>`.
+- Vẫn không tắt được; khách hỏi "có phải người thật không" bot vẫn nói thật là trợ lý AI (prompt quy tắc 11).
+
+## 2026-10-15 — Model chat chính: gemini-3.5-flash-lite (dev)
+
+- Đo thật: `gemini-3.8-flash` để suy nghĩ mặc định mất ~85 giây cho một câu ngắn (mức "low" ~19 giây) → vượt thời gian chờ 30 giây, thử lại 3 lần, khách đợi 1–2 phút. `gemini-3.5-flash-lite`: 1–3 giây, rẻ hơn ~2,5 lần.
+- Chủ dự án chốt: `Ai:ChatModel = gemini-3.5-flash-lite`, `Ai:ChatFallbackModel = gemini-3.8-flash`. Quá thời gian chờ **không thử lại** mà chuyển ngay sang model dự phòng (như 429/503).
+- Eval với flash-lite: câu thường + ngoài phạm vi 30/30, bịa giá 0, an toàn 23/24 lần đầu (S13 trượt do bộ chấm bắt cụm "hết u" trong câu phủ định "không cam kết làm hết u"; chạy lại 2 lần đều đạt).
+- Xem lại khi lên gói trả phí: so flash-lite với model lớn hơn (độ tự nhiên, xưng hô) và độ trễ.
+
+## 2026-10-15 — CRM C1: nền (chi nhánh, danh mục, nhân viên, quyền)
+
+- **Quyền chi tiết** lưu `memberships.permissions text[]` (mã chuỗi, danh sách ở `TenantPermissions`) + `memberships.branch_id`. Chủ DN luôn đủ quyền; nhân viên mặc định không có quyền thêm. `ITenantContext` có `Permissions`, `BranchId`, `Can()`; endpoint dùng `.RequirePermission(...)`. Thêm quyền mới không cần migration.
+- **Nhân viên (staff_members) tách khỏi tài khoản đăng nhập (memberships)**: kỹ thuật viên có thể không đăng nhập; gắn `user_id` khi cần. SĐT nhân viên mã hóa.
+- **Chi nhánh mặc định tạo lười** (lần đầu gọi API chi nhánh, hoặc khi super admin tạo DN) — tenant cũ không cần migration dữ liệu. Giờ mở cửa mặc định 8:00–20:00 mọi ngày.
+- **Danh mục bán (catalog_items) là nguồn sự thật về giá/thời lượng/số buổi**, đồng bộ hai chiều theo MÃ với kho kiến thức: nhập file → upsert danh mục (mục bị xóa → ngừng bán); sửa ở Danh mục → ghi ngược mục kiến thức + đánh chỉ mục lại, giữ cờ duyệt chuyên môn. Tenant cũ: danh mục tự tạo từ kho kiến thức lần đầu mở trang. Không đổi mã/loại sau khi tạo.
+- Thêm loại kiến thức **Sản phẩm** (sheet `Sản phẩm` / `products`) để bot tư vấn sản phẩm bán lẻ.
+- Giờ dạng chuỗi `HH:mm` / ngày `yyyy-MM-dd` trong API CRM (tránh phụ thuộc cách .NET serialize TimeOnly/DateOnly).
+- Entity CRM mới gán `Id = Guid.CreateVersion7()` ngay khi tạo (thêm nhiều dòng trong một SaveChanges không đụng khóa rỗng).
+
+## 2026-10-15 — CRM C2: lịch hẹn + bot tự chốt
+
+- **AI chỉ rút ý định** (`booking` trong JSON: book / reschedule / cancel / check_slots + mã dịch vụ, ngày, giờ, nhân viên, số người, id lịch). `BookingOrchestrator` kiểm tra qua `AvailabilityService` rồi **hệ thống soạn câu** xác nhận / gợi ý 3 giờ gần nhất / từ chối theo chính sách (`AppointmentTexts`). AI không bao giờ được viết "đã đặt". Ý định bị bỏ khi AI chuyển người.
+- **Chỗ trống** = giờ mở cửa ∩ ca nhân viên (ca cố định, ca tay ghi đè, nghỉ phép) − lịch đã có (+ phút dọn dẹp) − sức chứa giường/phòng (số `resources` đang hoạt động của chi nhánh; không có = không giới hạn). Thuần túy trong `SlotCalculator` (test đơn vị). Bước lịch theo `CrmSettings.SlotMinutes`.
+- **Chống trùng**: tạo/dời lịch trong transaction có `pg_advisory_xact_lock(hash(tenant, chi nhánh, ngày))`, kiểm tra lại chỗ trống bên trong khóa. Giờ lưu UTC tròn phút; hiển thị theo `CrmSettings.TimeZone` (IANA).
+- **Chính sách**: đặt trước ≥ `BookingLeadMinutes` (60), tối đa `MaxBookingDaysAhead` (60) ngày; khách tự hủy/dời qua chat phải trước `CancelLeadHours` (2) giờ, muộn hơn → bot từ chối lịch sự + chuyển nhân viên. Nhóm > `BotMaxPartySize` (2), dịch vụ "liên hệ báo giá" hoặc không rõ → chuyển nhân viên. Nhân viên có thể xếp chồng cố ý (`AllowOverlap`, cần quyền manage_staff).
+- **Nhắc lịch**: job quét mỗi phút → mốc 1 (`Reminder1Hours`, 24) và mốc 2 (`Reminder2Hours`, 2) qua hội thoại đã chốt lịch (hoặc hội thoại gần nhất), chỉ trong hạn nhắn Zalo và khung giờ gửi (mốc 1); khách chỉ có SĐT → sự kiện `reminder_skipped` để nhân viên gọi. Khách trả lời "ok/đồng ý/xác nhận" → lịch `confirmed`, không gọi AI.
+- **Tóm tắt khách cho kỹ thuật viên** (`ai_brief_enc`, mã hóa): job viết ngay sau khi bot chốt lịch từ nhật ký chăm sóc + tóm tắt hội thoại + buổi trước, PII che trước khi gọi AI.
+- **Hàng chờ**: khung kín → ghi `waitlist_entries`; lịch bị hủy → job nhắn khách chờ phù hợp (một khách một lần), còn lại nhân viên xử lý.
+- **Lịch định kỳ**: N buổi cách X ngày tạo ngay, buổi kín báo riêng; `series_id` để hủy cả chuỗi (C8 UI).
+- Dữ liệu `appointment_items` chụp tên/thời lượng/giá tại lúc đặt (C3 dùng cho hóa đơn). Khách đặt lịch → tầng tự lên "Đã chốt" nếu chưa đặt tay.
+
+## 2026-10-15 — CRM C3: bán hàng, gói, ví, voucher, ca thu ngân, VietQR
+
+- **Hóa đơn = phiếu thu nội bộ**, không phải hóa đơn điện tử theo luật (cần nhà cung cấp được cấp phép — chờ kế toán). Số hóa đơn tăng dần theo tenant (`HD-000001`, khóa advisory theo tenant). Số tiền lưu rõ để cộng dồn; ghi chú mã hóa.
+- **Dòng hóa đơn**: dịch vụ / gói / sản phẩm (giá chụp lúc bán, sửa được), dòng tự nhập, **dòng dùng buổi gói** (giá 0, gắn gói của khách). Hóa đơn chỉ sửa khi chưa thu tiền; đã thu thì hủy rồi tạo lại.
+- **Giảm giá**: cấp dòng + cấp hóa đơn + voucher. Tổng giảm (không tính voucher) vượt `CrmSettings.DiscountApprovalPercent` (20%) → cần quyền `apply_discount_over_limit`; người bấm được ghi là người duyệt. Voucher: % (có trần) hoặc số tiền, hạn, số lượt, tối thiểu; tính lượt khi hóa đơn thu đủ, trả lượt khi hủy.
+- **Thu tiền nhiều lần, nhiều cách** (tiền mặt / chuyển khoản / thẻ / ví); không cho thu quá phần còn lại. Thu đủ → `Paid` và **ghi nhận**: doanh thu dịch vụ/sản phẩm (giảm giá hóa đơn chia theo tỷ lệ dòng để tổng doanh thu = tổng thu), **cấp gói** cho khách (dòng gói), **trừ buổi** (dòng dùng buổi) + doanh thu gói = giá gói / số buổi mỗi buổi (`revenue_entries.kind = package_recognized`). Hóa đơn tổng 0 (toàn bộ dùng gói) → `close-zero`.
+- **Hoàn thành lịch hẹn** mà chưa có hóa đơn → tự trừ buổi gói cho dịch vụ gói bao (idempotent theo lịch); dịch vụ không có gói chờ lễ tân tạo hóa đơn từ lịch (`/invoices/from-appointment`).
+- **Hủy hóa đơn** (quyền `void_invoice`, bắt buộc lý do): hoàn buổi đã trừ, hủy gói chưa dùng (gói đã dùng → chặn, dùng hoàn tiền một phần), hoàn ví, doanh thu âm. **Hoàn tiền** (quyền `refund`): payment âm + doanh thu âm, không đụng gói.
+- **Gói của khách**: bảo lưu / kích hoạt / hủy; gia hạn + sửa tổng buổi (quyền manage_catalog); **chuyển nhượng** phần còn lại sang khách khác (gói cũ `transferred`); job mỗi giờ đánh `expired`.
+- **Ví (thẻ trả trước)**: nạp + thưởng, trừ khi thanh toán (không âm), hoàn khi hủy/hoàn; điều chỉnh tay cần quyền `refund`.
+- **Ca thu ngân**: một ca mở/chi nhánh; hóa đơn & payment gắn ca đang mở; chốt ca = đầu ca + tiền mặt thu − tiền mặt hoàn so với tiền đếm.
+- **VietQR**: tài khoản ngân hàng theo DN/chi nhánh (số tài khoản mã hóa, chỉ chủ quản lý); payload EMVCo + CRC tự sinh (`VietQr`), ảnh PNG bằng **QRCoder 1.8.1** (MIT, thuần .NET) — thư viện mới duy nhất của C3, chủ dự án có thể veto. Nội dung chuyển khoản = `HD000123`. Chưa tự đối soát biến động số dư (chờ đối tác).
+- **Phiếu thu** gửi khách dạng chữ qua hội thoại gần nhất (Zalo/chat thử) nếu còn hạn nhắn; khách chỉ có SĐT thì không gửi.
+- `revenue_entries.source` (bot | staff | walk_in | online) lấy từ lịch hẹn gắn hóa đơn → báo cáo "doanh thu bot mang về" (C6).
+
+## 2026-10-15 — CRM C4: kho hàng
+
+- **Tồn kho theo chi nhánh** cho sản phẩm có bật "theo dõi tồn kho"; mọi thay đổi là một dòng `stock_movements` có số dư sau, không sửa/xóa (đối soát). Tồn **được phép âm** (bán trước nhập sau) — trang kho cảnh báo thay vì chặn bán.
+- **Giá vốn bình quân gia quyền** cập nhật mỗi phiếu nhập (tồn âm → lấy giá nhập mới); chuyển kho mang theo giá vốn chi nhánh gửi.
+- **Trừ kho tự động**: hóa đơn thu đủ → trừ sản phẩm; **vật tư theo định mức dịch vụ** (`service_consumables`) trừ khi **hoàn thành lịch hẹn** (idempotent theo lịch); hóa đơn dịch vụ không gắn lịch (bán lẻ tại quầy) → trừ vật tư lúc thu đủ. Hủy hóa đơn → trả lại đúng các dòng đã trừ bởi hóa đơn đó.
+- Phiếu nhập (nháp → nhận / hủy, số tăng dần theo tenant), chuyển kho (hai dòng ra/vào), kiểm kê (đếm thực tế → dòng điều chỉnh chênh lệch), mức tối thiểu → `lowOnly` cho cảnh báo. Ghi: quyền `manage_inventory`; xem: mọi thành viên (giới hạn chi nhánh).
+
+## 2026-10-15 — CRM C5: hoa hồng, chấm công, hiệu suất
+
+- **Quy tắc hoa hồng** theo (nhân viên hoặc chung) × (mọi mục / dịch vụ / gói / sản phẩm / mục cụ thể), % hoặc số tiền cố định; ưu tiên cụ thể hơn thắng (`CommissionService.Resolve`, có test). Khoản phát sinh khi **hóa đơn thu đủ** (dòng có người thực hiện, cơ sở = doanh thu dòng sau chia giảm giá) và khi **dùng buổi gói** (người làm buổi, cơ sở = giá gói / số buổi). Hủy hóa đơn → thu hồi (`reverted_at`). Kỳ `yyyy-MM` giờ DN; "đánh dấu đã trả" theo nhân viên + kỳ (quyền view_company_revenue).
+- **Chấm công**: tài khoản gắn hồ sơ nhân viên tự vào/ra ca (một ca mở/người); quản lý (manage_staff) chấm/sửa hộ (ghi `source = manager` + audit).
+- **Hiệu suất** theo khoảng thời gian: lịch hoàn thành, không đến, doanh thu ghi nhận cho người thực hiện, hoa hồng, số khách, khách quay lại (đã làm với người đó trước kỳ), giờ chấm công. Nhân viên không có `view_company_revenue`/`manage_staff` chỉ xem chính mình (tài khoản phải gắn nhân viên).
+
+## 2026-10-15 — CRM C6: báo cáo
+
+- Nguồn số liệu: `revenue_entries` (doanh thu ghi nhận, ngày theo múi giờ DN), `payments` (tiền thu theo hình thức), `appointments`, `contacts`, dashboard hội thoại cũ. Báo cáo: **Hôm nay**, **Doanh thu** (theo ngày/tuần/tháng, so kỳ trước cùng độ dài; theo loại, dịch vụ, nhân viên, chi nhánh, nguồn khách, hình thức thanh toán), **Hiệu quả AI** (lịch bot chốt, doanh thu `source = bot`, hội thoại bot tự xử lý, chi phí AI), **Lấp đầy lịch** (heatmap thứ × giờ, % phút đặt / phút ca làm, tối đa 62 ngày), **Khách** (mới / quay lại, giữ chân so kỳ trước, chi tiêu TB, top 10), **Công nợ & giá trị chưa dùng** (hóa đơn còn nợ, buổi gói chưa dùng quy tiền, số dư ví). Xuất Excel doanh thu (quyền `export_data`, có audit).
+- Quyền: `view_reports` (chủ mặc định). Nhân viên không có → 403 (số của mình xem ở C5).
+- **Hỏi số liệu bằng tiếng Việt**: AI chỉ chọn báo cáo + khoảng thời gian (JSON schema, `IReportQuestionInterpreter`), hệ thống tính số, AI diễn giải từ JSON (prompt cấm thêm số). Câu ngoài phạm vi → "không trả lời được". Chi phí AI ghi `usage_records`.
+- **Báo cáo tuần tự động**: job 08:00 thứ 2 (giờ VN) gửi Telegram cho DN đã kết nối: doanh thu + so tuần trước, khách, mục bán chạy, nhân viên dẫn đầu, hiệu quả bot. Chỉ số liệu, không nội dung khách.
+
+## 2026-11-01 — Trả lại cho bot thì bot trả lời luôn tin khách đang chờ
+
+- Phát hiện khi test 2.4: khách nhắn lúc nhân viên đang xử lý (bot im, đúng), nhân viên bấm "Trả lại cho bot" mà chưa trả lời → bot không làm gì cho tới khi khách nhắn thêm; trang khách hiện "đang soạn tin" mãi.
+- Nay: trả lại bot mà **tin cuối của hội thoại là của khách** (chưa nhân viên/bot nào trả lời sau đó) → xếp job xử lý chính tin đó, bot trả lời ngay. Tin cuối là của nhân viên/bot/hệ thống → không làm gì. Job đã idempotent (khóa `reply_to_message_id`) nên bấm nhiều lần không trả lời trùng; hạn mức, kênh Zalo đã ngắt, khách từ chối... vẫn đi đúng luồng job.
+- Có tin chờ thì **không gửi câu "trợ lý AI luôn sẵn sàng"** (nếu DN bật): câu trả lời thật của bot thay cho nó, tránh hai tin đến lộn thứ tự.
+- Chấp nhận: nhân viên đã gọi điện giải quyết rồi trả lại bot mà không nhắn gì → bot vẫn trả lời tin cũ. Muốn tránh thì nhân viên nhắn một câu chốt trước khi trả lại.
+- Cùng ngày (phát hiện khi test 2.5): quét "khách chờ lâu" bỏ qua hẳn chat thử, trong khi tin báo chuyển người vẫn gửi Telegram cho chat thử ("[Chat thử]") → DN không thử được lời nhắc. Nay chat thử **được nhắc 1 lần** (DN thử được Telegram); chat thật vẫn nhắc lại mỗi N phút tới khi có người trả lời. Chat thử bỏ quên không nhắc nhóm mãi.
+- Cùng ngày (phát hiện khi test 3.3): khách hỏi giá, bot đã báo giá và hỏi thời lượng; "AI chăm sóc khách này" lại chuyển nhân viên ("cần nhân viên chốt lịch"). Câu dặn AI chăm sóc viết trước CRM C2 vẫn coi "lịch trống, xác nhận đặt chỗ" là việc của nhân viên. Nay khi DN bật **"Bot tự chốt lịch qua chat"**: cần đặt/chốt lịch → bot tự nhắn mời khách nhắn ngày giờ (hệ thống lịch kiểm tra chỗ rồi mới giữ), không nêu giờ trống cụ thể, không nêu giá; chỉ giá đặc biệt/ưu đãi riêng/nhóm đông mới cần nhân viên. Tắt "Bot tự chốt lịch" → như cũ. Thêm: khách gọi bot là "bé/em/con" không đủ để đoán cách gọi → vẫn "mình".
+- Cùng ngày: link chính sách bảo mật chuyển từ cuối tin ĐẦU sang cuối tin CUỐI của lượt trả lời đầu tiên — tin đầu hay mở đầu danh sách ("giá như sau:"), link chen vào giữa bảng giá. Câu báo trợ lý AI vẫn ở đầu tin đầu.
+- Cùng ngày (chủ dự án chốt, phát hiện khi test 3.4): **hẹn chăm sóc do nhân viên đặt trong nhật ký vượt luật "cách tin chủ động trước ≥ 24 giờ"** — nhân viên đã chọn giờ thì coi như nhân viên quyết (giống luật "khách chưa trả lời thì không nhắn tiếp" vốn đã miễn cho hẹn của nhân viên). Vẫn giữ: khách đã "hủy" → không nhắn; chỉ trong khung giờ được nhắn; sức khỏe/phàn nàn → nhân viên. Rủi ro chấp nhận: nhân viên đặt nhiều hẹn sát nhau thì khách nhận nhiều tin/ngày. Luật 24 giờ là luật tự đặt của hệ thống, không phải của Zalo (Zalo: tương tác trong 7 ngày, tin tư vấn trong 48 giờ miễn phí). Chữ hướng dẫn ở Nhật ký chăm sóc sửa lại: tới giờ hẹn AI tự nhắn (không còn "AI soạn sẵn tin nháp").
+
+## 2026-11-01 — Làm lại giao diện trang quản trị (FE nhánh `feat/ui-redesign`, chủ dự án giao toàn quyền quyết)
+
+Chủ dự án: menu "lung tung, không clear"; giao diện doanh nghiệp là "giao diện ăn tiền" phải chứng minh hệ thống xịn. Dùng skill `ui-ux-pro-max` (chế độ không Python, đọc thẳng `data/*.csv`) + `ui-styling`. Sơ đồ màn hình: `docs/UI-MAP.md`.
+- **Sơ đồ menu theo việc trong ngày** (`src/components/shell/nav-config.ts`): Tổng quan · **Vận hành** (Lịch hẹn, Hộp thư, Bán hàng) · **Khách hàng** (Khách hàng, Cần chăm sóc) · **Trợ lý AI** (Chat thử, Kho kiến thức, Thiết lập trợ lý, Kênh Zalo) · **Quản lý** (Danh mục, Kho hàng, Nhân viên) · Cài đặt ở chân thanh bên. Super admin thêm nhóm **Hệ thống**. Huy hiệu số: khách chờ nhân viên (Hộp thư), khách cần chăm sóc.
+- **Cài đặt tách thành trang con** (trước là một trang rất dài, chủ dự án không tìm thấy mục): Doanh nghiệp · Chi nhánh & giờ mở cửa · Tài khoản & phân quyền · Lịch hẹn & bán hàng · Thanh toán · Thông báo (Telegram + nhắc chờ lâu). Mỗi mục một đường dẫn `/settings/...`.
+- **Thiết lập trợ lý** (`/assistant`) gom mọi cài đặt về cách bot nói chuyện: Giọng văn & xưng hô (tên bot, xưng hô, giọng văn, hướng dẫn riêng) · Chuyển nhân viên (giờ làm việc, câu chuyển tiếp) · Chăm sóc chủ động. Không đổi API: form dùng chung nhận `sections` (chỉ hiện nhóm cần), lưu vẫn gửi đủ mọi trường.
+- **Trang Tổng quan mới**: Cần xử lý ngay (khách chờ, cần chăm sóc, hóa đơn còn nợ) → Hôm nay (`/reports/today` + lịch sắp tới) + thẻ **Trợ lý AI 30 ngày** (`/reports/ai`: doanh thu từ khách bot chốt, lịch bot chốt, % bot tự xử lý, chi phí AI, "1 đồng AI mang về X đồng") → Thiết lập hệ thống (7 bước, tự đánh dấu, ẩn khi xong) → Hoạt động của bot. Nút nhanh: Đặt lịch hẹn (`/appointments?new=1`), Tạo hóa đơn (`/sales?new=1`), Chat thử. FE sinh lại type có API C5/C6.
+- **Điện thoại**: thanh dưới 4 mục hay dùng + "Thêm" (tấm trượt có mọi mục kèm một dòng giải thích); thanh "Lưu" dính đáy đặt trên thanh dưới.
+- **Ghi chú trong trang**: mỗi trang có ô biểu tượng + mô tả + nút **"Cách dùng trang này"** (hướng dẫn gập được, nhớ trạng thái theo máy).
+- **Hình thức**: chữ **Be Vietnam Pro** (thiết kế cho tiếng Việt); nền vùng nội dung `--canvas` (xám-xanh rất nhạt) + thẻ trắng `surface` (bo 14px, bóng nhẹ); `--background` vẫn trắng cho ô nhập/nút; màu **tím `--ai`** chỉ dùng cho thứ AI làm; dải `bg-brand-gradient` (xanh → tím) cho logo, thẻ AI, trang đăng nhập. Trang đăng nhập 2 cột (giới thiệu sản phẩm + đoạn chat mẫu), có nút hiện/ẩn mật khẩu.
+- Trước khi làm lại: commit phần giao diện C3 + C4 còn treo trên `feat/crm` của FE (10 commit) để lịch sử không trộn với thiết kế mới.
+
+## 2026-11-01 — Giao diện đợt 2: khung tối + thanh bên thu gọn, hộp thư kiểu Messenger, hiệu ứng (FE nhánh `feat/ui-redesign`)
+
+Chủ dự án: đợt 1 mới chỉnh "tổng quát", nội dung trang con vẫn xấu; muốn thanh bên có hiệu ứng kiểu Aceternity/shadcn, hộp thư giống ứng dụng nhắn tin, giao diện "thật đẹp và tiện lợi, kết hợp hiệu ứng".
+- **Thư viện mới `motion` 14.2.0** (ghim đúng phiên bản; thư viện hiệu ứng mà Aceternity UI dùng). Chủ dự án yêu cầu kiểu thanh bên Aceternity nên coi là đã đồng ý thêm. Không dùng HeroUI (trộn hai bộ giao diện sẽ lệch phong cách); thêm 4 thành phần shadcn (tooltip, avatar, dropdown-menu, popover — đều dựa trên `radix-ui` đã có, không thêm gói).
+- **Màu chủ đạo xanh Zalo `#0068FF`** (chủ dự án chốt cùng ngày; thử thanh bên xanh đậm thì chói → chọn **thanh bên trắng, xanh Zalo chỉ làm điểm nhấn**: mục đang chọn viên xanh nhạt + vạch trái, logo, nút chính dải `#0068FF → #0050C8`). Tím `--ai` chỉ cho thứ AI làm.
+- **Khung trang (máy tính)**: khung trắng (`--shell`) chứa thanh bên; nội dung là một tấm xám-xanh rất nhạt bo góc, viền mảnh, tự cuộn; phần đầu có lưới chấm + quầng sáng xanh/tím. Thanh bên **thu gọn được** thành dải biểu tượng (nút ghim hoặc **Ctrl+B**, nhớ trên máy); khi thu gọn, rê chuột hoặc Tab vào thì mở rộng đè lên nội dung. Nền "mục đang chọn" trượt sang mục mới (motion `layoutId`). Doanh nghiệp và tài khoản mở bằng menu thả. Trang Hộp thư trên màn < 1600px tự thu thanh bên (không đổi lựa chọn đã lưu).
+- **Hộp thư kiểu Messenger** (trang chiếm trọn tấm nội dung): danh sách (tìm không dấu, lọc dạng viên, ảnh đại diện chữ cái màu theo tên + chấm bot/nhân viên/khẩn cấp) | khung chat (nhãn ngày, tin liên tiếp gom cụm, khách trái thẻ trắng, bot phải nền tím nhạt, nhân viên phải nền xanh, nút "Tin mới" khi đang đọc tin cũ) | tấm thông tin khách (màn ≥ 1280px; màn hẹp mở bằng hộp thoại) gồm thông tin bot ghi lại, người phụ trách, "Vì sao bot trả lời vậy?". Thao tác phụ (hồ sơ, giao nhân viên) vào menu "⋯". Không đổi API.
+- **Bộ thành phần dùng chung mới** (`src/components/common/`): `IconTile`, `FilterPills` (lọc dạng viên, nền trượt), `PersonAvatar` (6 dải màu `avatar-tone-*`), `AnimatedNumber` (số chạy), `EmptyState` mới (vòng tròn + biểu tượng nhấp nhô; `compact` khi nằm trong thẻ khác). Tab có ba kiểu `default` / `line` / `pill` với nền trượt. Tiện ích CSS: `skeleton` (khung tải lấp lánh), `lift`, `bg-dot-grid`, `bg-active-gradient`, `text-brand-gradient`, `scrollbar-thin`. Nhịp chuyển động chung ở `src/lib/motion.ts`; `MotionConfig reducedMotion="user"` tôn trọng chế độ giảm chuyển động.
+- **Trang danh sách có bộ lọc chia 3/7** (chủ dự án yêu cầu): cột bộ lọc bên trái đứng yên khi cuộn, khung nội dung lớn bên phải (`FilterLayout`, `FilterPills variant="list"`); lịch hẹn giữ thanh công cụ trên. Nội dung trang trải hết bề ngang tấm nội dung (bỏ giới hạn `max-w-7xl`), chỉ chừa lề.
+- Hiệu ứng vào trang bằng `src/app/(dashboard)/template.tsx` (chỉ khi đổi mục cấp một, không nháy khi đổi trang con hay tham số).
+
+## 2026-11-03 — Groq làm AI dự phòng khi Gemini hết lượt (chủ dự án chốt, bỏ "chỉ Gemini")
+
+Chủ dự án: key Gemini miễn phí chỉ ~20 lượt/ngày/model, hết là bot chuyển nhân viên (`ai_error`) → muốn thêm Groq "để xài thoải mái test và sử dụng luôn", cho **mọi loại yêu cầu**.
+- **Chuỗi dự phòng** `FallbackChatProvider` (thay chỗ `GeminiChatProvider` ở `IChatProvider`): Gemini model chính → Gemini model dự phòng → Groq `openai/gpt-oss-120b` → Groq `openai/gpt-oss-20b`. Thứ tự ở `Ai:ChatProviders` (mặc định `gemini,groq`), model Groq ở `Ai:GroqModels`. Không có `Ai:GroqApiKey` → không dùng Groq, chạy như cũ. Code nghiệp vụ không đổi: mọi chỗ gọi đã dùng `ChatResult` chuẩn hóa (không chỗ nào đọc `candidates`/`parts` của Gemini).
+- **Chuyển khi**: 429, 503/498, 5xx khác, lỗi mạng, quá thời gian chờ, 413 (quá dài so với giới hạn token/phút của Groq), kết quả rỗng/bị cắt, JSON sai cấu trúc (kể cả Groq 400 `json_validate_failed`, 422). **Không chuyển khi** 400/401/403/404 (key sai, model sai, request sai) — log Error để sửa; Gemini chặn nội dung (SAFETY...) cũng không chuyển (model khác không nên trả lời thay). Bot vẫn trả câu dự phòng + chuyển người, không bỏ rơi khách. Trước đây Gemini 5xx khác 503 và lỗi mạng không chuyển sang model dự phòng — nay chuyển.
+- **429 kèm retry-after ≤ 10 giây** → chờ rồi thử lại cùng model một lần; lâu hơn → chuyển. Model bị 429/503 được **bỏ qua 60 giây** (hoặc theo retry-after) để khách không phải chờ gọi lại model đã hết lượt; mọi model đều đang nghỉ thì vẫn thử hết.
+- **Kiểm tra JSON cho mọi nhà cung cấp** (`JsonOutput`, tự viết ~100 dòng, không thêm thư viện — chủ dự án đồng ý): sai → bóc ```json / cắt chữ thừa → vẫn sai thì hỏi lại 1 lần kèm câu nhắc định dạng (nhiệt độ 0) → vẫn sai thì sang bước tiếp. Token/chi phí của lượt hỏng được cộng vào kết quả cuối. Sửa luôn 2 chỗ đọc JSON không chịu được ```json (chăm sóc chủ động, hỏi số liệu báo cáo).
+- **Prompt giữ nguyên**; phần riêng của Groq nằm trong `GroqChatProvider`: Structured Outputs `strict` (tự thêm `additionalProperties: false` cho mọi object), `reasoning_effort: low` + `include_reasoning: false` (gpt-oss), `max_completion_tokens` = yêu cầu + 512 cho suy nghĩ, trần `Ai:GroqMaxCompletionTokens` = 2048 (prompt + trần phải nằm trong số token/phút của gói; prompt bot hiện ~3.400–4.500 token). Groq từ chối schema → đổi `Ai:GroqJsonMode=json_object` (schema gửi trong prompt).
+- **Không cắt prompt** khi quá dài (mất quy tắc an toàn/dữ liệu → bịa): Groq trả 413 thì sang model khác, hết model thì chuyển người.
+- **Riêng tư**: mọi yêu cầu sang Groq đều đã che SĐT/email/CCCD/tên như với Gemini. Sửa thêm: diễn giải báo cáo trước đây gửi **tên khách chưa che** (khách chi nhiều nhất, công nợ) cho AI → nay che rồi ghép lại (áp dụng cả Gemini). Groq mặc định không lưu dữ liệu, có thể lưu tới 30 ngày khi điều tra sự cố/lạm dụng; mọi tài khoản bật được **Zero Data Retention** (chủ dự án cần bật); dữ liệu lưu ở Mỹ (docs console.groq.com/docs/your-data, kiểm tra 2026-11-03). Groq là **thêm một bên nhận dữ liệu ở nước ngoài** → bổ sung hồ sơ chuyển dữ liệu ra nước ngoài + chính sách bảo mật trước khi chạy thật với khách.
+- **Giới hạn**: embedding vẫn chỉ Gemini (Groq không có API embedding) — key Gemini hết lượt embedding thì bot không tìm được kho kiến thức → chuyển người. Gói Groq miễn phí giới hạn token/phút thấp (gói Developer gpt-oss-120b: 30 lượt/phút, 1.000 lượt/ngày, 8.000 token/phút) → khoảng 1–2 câu bot/phút: đủ test, không đủ cho nhiều khách cùng lúc. Production vẫn cần Gemini trả phí. Chất lượng tiếng Việt của gpt-oss chưa đo: chạy eval với `Ai__ChatProviders=groq` trước khi tin dùng.
+- **Kiểm chứng thật 2026-11-03**: eval 2 câu chỉ qua Groq đạt; schema trả lời của bot được nhận ở chế độ strict. Gói Free của chủ dự án: mỗi model gpt-oss 30 lượt/phút, 1.000 lượt/ngày, 8.000 token/phút, 200.000 token/ngày (giới hạn thật là token/ngày ≈ 50 câu bot/model/ngày). Key dán dính dấu xuống dòng làm request lỗi định dạng header (không phải AiProviderException → không chuyển người được) → nay cắt khoảng trắng 2 đầu key khi gọi, xuống dòng/khoảng trắng giữa key báo lỗi ngay khi khởi động.

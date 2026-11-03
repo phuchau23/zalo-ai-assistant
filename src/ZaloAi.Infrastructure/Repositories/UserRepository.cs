@@ -15,6 +15,10 @@ public sealed class UserRepository(AppDbContext db)
         return db.Users.Where(u => u.Email == normalized).FirstOrDefaultAsync(cancellationToken);
     }
 
+    /// <summary>Được track (để đổi mật khẩu, tên).</summary>
+    public Task<User?> GetAsync(Guid userId, CancellationToken cancellationToken) =>
+        db.Users.Where(u => u.Id == userId).FirstOrDefaultAsync(cancellationToken);
+
     public User Add(string email, string passwordHash, string name, bool isSuperAdmin = false)
     {
         var user = new User

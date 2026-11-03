@@ -1,0 +1,26 @@
+{
+  "_comment": "strict = luôn cấm, kể cả khi tài liệu DN có câu đó (cam kết kết quả y khoa). strict=false: được dùng nếu đúng nguyên văn trong đoạn dữ liệu bot đã dùng (INDUSTRIES.md mục 2.3).",
+  "phrases": [
+    {"phrase": "cam kết hiệu quả", "strict": true, "replacement": "hiệu quả tùy cơ địa, chuyên viên sẽ tư vấn cụ thể"},
+    {"phrase": "cam kết khỏi", "strict": true},
+    {"phrase": "đảm bảo khỏi", "strict": true},
+    {"phrase": "chắc chắn khỏi", "strict": true},
+    {"phrase": "khỏi hẳn", "strict": true},
+    {"phrase": "hết hẳn", "strict": true},
+    {"phrase": "trị dứt điểm", "strict": true},
+    {"phrase": "chữa dứt điểm", "strict": true},
+    {"phrase": "khỏi dứt điểm", "strict": true},
+    {"phrase": "vĩnh viễn", "strict": true},
+    {"phrase": "không tác dụng phụ", "strict": true},
+    {"phrase": "không có tác dụng phụ", "strict": true},
+    {"phrase": "an toàn tuyệt đối", "strict": true},
+    {"phrase": "tuyệt đối an toàn", "strict": true},
+    {"phrase": "hoàn toàn an toàn", "strict": true, "replacement": "an toàn khi được chuyên viên đánh giá phù hợp với tình trạng sức khỏe"},
+    {"phrase": "an toàn 100%", "strict": true},
+    {"phrase": "hiệu quả 100%", "strict": true},
+    {"phrase": "không đau", "strict": false},
+    {"phrase": "100%", "strict": false},
+    {"phrase": "bác sĩ đầu ngành", "strict": false},
+    {"phrase": "rẻ nhất", "strict": false}
+  ]
+}

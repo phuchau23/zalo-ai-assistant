@@ -1,7 +1,18 @@
 using Serilog;
+using ZaloAi.Ai;
+using ZaloAi.Api;
+using ZaloAi.Api.Cli;
+using ZaloAi.Channels;
 using ZaloAi.Infrastructure;
 using ZaloAi.Infrastructure.Logging;
 using ZaloAi.Infrastructure.Persistence.Seed;
+
+// Lệnh xử lý file mẫu kiến thức: không cần cấu hình, database hay khóa mã hóa.
+if (KnowledgeCli.IsKnowledgeCommand(args))
+{
+    Console.OutputEncoding = System.Text.Encoding.UTF8;
+    return KnowledgeCli.Run(args);
+}
 
 // Logger tạm để ghi lỗi xảy ra trước khi host dựng xong (ví dụ thiếu cấu hình).
 Log.Logger = new LoggerConfiguration().WriteTo.Console(formatProvider: null).CreateLogger();
@@ -11,9 +22,24 @@ try
     var builder = WebApplication.CreateBuilder(args);
 
     builder.Services.AddSerilog((services, logger) =>
-        logger.ConfigureZaloAi(builder.Configuration, builder.Environment).ReadFrom.Services(services));
+        logger.ConfigureZaloAi(builder.Configuration, builder.Environment, initializeSentrySdk: false).ReadFrom.Services(services));
+
+    if (LoggingSetup.GetSentryDsn(builder.Configuration) is { } sentryDsn)
+    {
+        builder.WebHost.UseSentry(options =>
+        {
+            LoggingSetup.ApplySentryDefaults(options, sentryDsn, builder.Environment);
+            // Lỗi đã được gửi qua Serilog (một nguồn duy nhất, đã che dữ liệu); tắt kênh log riêng của Sentry để không gửi trùng.
+            options.MinimumEventLevel = LogLevel.None;
+            options.MinimumBreadcrumbLevel = LogLevel.None;
+            options.MaxRequestBodySize = Sentry.Extensibility.RequestSize.None;
+        });
+    }
 
     builder.Services.AddZaloAiInfrastructure(builder.Configuration);
+    builder.Services.AddZaloAiAi();
+    builder.Services.AddZaloAiChannels();
+    builder.Services.AddZaloAiApi(builder.Configuration, builder.Environment);
 
     var app = builder.Build();
 
@@ -21,17 +47,24 @@ try
     if (args is ["seed", ..])
     {
         await DevSeeder.RunAsync(app.Services, app.Environment, CancellationToken.None);
-        Log.Information("Seed xong. Mật khẩu mọi tài khoản mẫu: {DevPassword}", DevSeeder.DevPassword);
-        return;
+        // Console thay vì logger: logger che mọi giá trị có tên chứa "password".
+        Console.WriteLine($"Seed xong. Mật khẩu mọi tài khoản mẫu: {DevSeeder.DevPassword}");
+        return 0;
+    }
+
+    // `dotnet run --project src/ZaloAi.Api -- eval ...`: chạy bộ eval của mẫu ngành bằng AI thật, rồi thoát.
+    if (EvalCli.IsEvalCommand(args))
+    {
+        return await EvalCli.RunAsync(app.Services, args);
     }
 
     // Chỉ ghi method, path (không có query string), status, thời gian.
     app.UseSerilogRequestLogging();
 
-    // Tạm thời: /health đầy đủ (kiểm tra Postgres, Redis) làm ở bước 4.
-    app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
+    app.UseZaloAiApi();
 
     await app.RunAsync();
+    return 0;
 }
 catch (Exception ex) when (ex is not HostAbortedException)
 {

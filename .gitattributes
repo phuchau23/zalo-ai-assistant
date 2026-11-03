@@ -1,3 +1,4 @@
 * text=auto eol=lf
 *.sln text eol=crlf
 *.{png,jpg,pdf,docx,xlsx} binary
+*.cmd text eol=crlf

@@ -1,11 +1,75 @@
 # Tiến độ
 
 ## Đang làm
-- Module: M1 — Nền tảng
-- Task: bước 3 xong, chờ chủ dự án chạy migration + seed; tiếp theo bước 4 (Api: auth, /health, rate limit, OpenAPI, cài đặt tenant)
-- Chặn bởi: không
+- **Groq làm AI dự phòng khi Gemini hết lượt (2026-11-03)**: XONG, đã chạy thật 2026-11-03 (eval N01 + S07 chỉ qua Groq: đạt cả 2; Groq nhận schema trả lời ở chế độ strict; gpt-oss-120b hết token/phút → tự sang gpt-oss-20b). Key dán dính dấu xuống dòng → nay tự cắt 2 đầu, xuống dòng giữa key báo lỗi khi khởi động. Chuỗi Gemini chính → Gemini dự phòng → Groq gpt-oss-120b → gpt-oss-20b (`FallbackChatProvider`, `GroqChatProvider`, kiểm tra JSON `JsonOutput`); diễn giải báo cáo che tên khách. Quyết định + rủi ro: DECISIONS.md 2026-11-03. BE 375 unit test. Chủ dự án đã: tạo key, bật Zero Data Retention, xem giới hạn gói Free (mỗi model 8K token/phút, 200K token/ngày ≈ 50 câu bot/ngày). Còn: chưa đo chất lượng tiếng Việt của gpt-oss bằng bộ eval đầy đủ (54 câu ≈ 220K token, vượt 1 ngày của 1 model → chạy theo nhóm `--only normal|out_of_scope|safety` qua nhiều ngày); schema chăm sóc chủ động + hỏi số liệu chưa chạy thật qua Groq (sẽ lộ ra khi test tay)
+- **Làm lại giao diện trang quản trị (2026-11-01, chủ dự án giao toàn quyền)**: XONG trên nhánh FE `feat/ui-redesign` (11 commit, tách từ `feat/crm` sau khi commit giao diện C3+C4). Menu chia nhóm Vận hành / Khách hàng / Trợ lý AI / Quản lý; Cài đặt tách 6 trang con; khu **Thiết lập trợ lý** (`/assistant`); trang Tổng quan mới (Cần xử lý ngay, Hôm nay, thẻ Trợ lý AI 30 ngày, Thiết lập hệ thống); thanh dưới trên điện thoại; "Cách dùng trang này" ở mọi trang; chữ Be Vietnam Pro, nền canvas + thẻ trắng; trang đăng nhập mới. FE 151 test, lint/typecheck/build sạch, đã chụp kiểm tra desktop + điện thoại. Sơ đồ: `docs/UI-MAP.md`; quyết định: DECISIONS.md. TEST-FLOW/TEST-PLAN đã đổi đường dẫn theo menu mới. Chờ chủ dự án xem và gộp nhánh.
+- **Test tay lại toàn bộ theo TEST-FLOW (2026-11-01)**: Buổi 1, 2 đạt hết. Sửa 4 lỗi (DECISIONS.md 2026-11-01): trả lại cho bot mà tin cuối là của khách → bot trả lời luôn tin đó (2.4); chat thử được nhắc chờ lâu 1 lần (2.5); AI chăm sóc không đẩy nhân viên chỉ vì khách cần đặt lịch khi bot tự chốt lịch được (3.3); link chính sách xuống cuối lượt trả lời đầu; hẹn chăm sóc của nhân viên vượt luật 24 giờ (chủ dự án chốt). BE 303 unit + 158 integration. Dữ liệu dev: tài liệu "tai-lieu-tu-do-tri-lieu-co-vai-gay" có bảng giá 90 phút 750k mâu thuẫn Danh mục (790k) → bot báo sai, nên xóa. Chưa test được: Buổi 6 (chờ DNS), Buổi 11–12 (chưa có giao diện C5/C6)
+  - **Dừng 2026-11-01 17:15 — tiếp tại đây:** Buổi 3 đạt 3.3, 3.4 (3.1, 3.2 chủ dự án chưa báo). Dừng vì key Gemini MIỄN PHÍ hết lượt trong ngày (~20 lượt/model, làm mới ~15:00 giờ VN) → bot chuyển nhân viên với `ai_error`. Phiên sau: (1) chủ dự án chọn bật tính phí key Gemini (~0,0015 USD/câu) hoặc test sau 15:00; (2) báo kết quả 3.1, 3.2; (3) cuộc chat 3.3/3.4 đang ở chế độ nhân viên → "Trả lại cho bot" rồi làm 3.5 → 3.10; (4) tiếp Buổi 3b, 4, 5, 5b, 7, 8, 9, 10.
+  - Mở: (a) ngày ghi chú khách bị lùi 1 ngày mỗi lần lưu (31/10 rồi 30/10, ô Ngày hiện 10/30) — chưa thấy lỗi trong code, đang chờ chủ dự án thử F5 + lưu không chạm ô Ngày (nghi lăn chuột trên ô date của Edge); (b) chuyển nhân viên gửi 2 tin gần giống nhau (câu cố định "…để hỗ trợ chính xác hơn" của bot + câu chuyển tiếp DN cài) — đề xuất chỉ giữ câu DN cài, chờ chủ dự án đồng ý; (c) xóa tài liệu "tai-lieu-tu-do-tri-lieu-co-vai-gay" ở Buổi 4.6.
+- **CRM đầy đủ (chốt 2026-10-15)**: chủ dự án chốt hướng CRM + AI, làm đầy đủ, nhiều chi nhánh, tồn kho. Kế hoạch `docs/CRM-PLAN.md` (C1–C8), tính năng `docs/CRM-FEATURES.md`. Chủ dự án duyệt toàn bộ C1–C8 (2026-10-15), Claude code tuần tự và tự commit lên nhánh `feat/crm` (không push). **C1 XONG code BE** (migration `CrmFoundation` đã áp DB dev; 278 unit + 143 integration): quyền chi tiết + chi nhánh, danh mục ↔ kho kiến thức (thêm loại Sản phẩm), nhân viên + ca làm, cài đặt CRM; FE: Cài đặt → Chi nhánh, quyền nhân viên, trang Danh mục, trang Nhân viên (FE commit nhánh `feat/crm` repo portal). **C2 XONG code BE** (migration `CrmAppointments` đã áp DB dev; 289 unit + 148 integration): chỗ trống (giờ mở cửa, ca, nghỉ phép, giường), đặt tay / dời / hủy / trạng thái / định kỳ / hàng chờ, bot tự chốt qua chat (AI chỉ rút ý định, hệ thống chốt), nhắc lịch 24h/2h + khách "ok" xác nhận, tóm tắt AI cho kỹ thuật viên. FE C2 (trang Lịch hẹn) đang làm. **C3 XONG code BE** (migration `CrmBilling` đã áp DB dev; 297 unit + 152 integration): hóa đơn nhiều dòng, giảm giá có ngưỡng duyệt, voucher, thu nhiều cách (tiền mặt/CK/thẻ/ví), VietQR + ảnh QR (QRCoder), phiếu thu qua chat, gói của khách (cấp/trừ buổi/hoàn/bảo lưu/chuyển nhượng/hết hạn), ví trả trước, ca thu ngân, hủy/hoàn tiền, doanh thu ghi nhận (`revenue_entries`). FE C2 (trang Lịch hẹn) XONG (commit nhánh `feat/crm` repo portal). **C4 XONG code BE** (migration `CrmInventory`): tồn kho theo chi nhánh, phiếu nhập + giá vốn bình quân, bán trừ kho / hủy trả kho, định mức vật tư trừ khi hoàn thành lịch, chuyển kho, kiểm kê, mức tối thiểu + cảnh báo. FE C3 + C4 (Bán hàng, Kho) đang làm. **C5 XONG code BE** (migration `CrmStaffPerformance`): quy tắc hoa hồng + khoản phát sinh/thu hồi, bảng tháng + đánh dấu đã trả, chấm công vào/ra ca, báo cáo hiệu suất nhân viên (nhân viên chỉ thấy mình). **C6 XONG code BE** (không migration): Hôm nay, Doanh thu đủ chiều + Excel, Hiệu quả AI, Lấp đầy lịch, Khách, Công nợ, hỏi số liệu tiếng Việt (AI chọn báo cáo), báo cáo tuần Telegram. FE C5 + C6 chờ làm. Tiếp: C7 AI dùng dữ liệu CRM. Cùng ngày: câu báo trợ lý AI gộp vào tin đầu; model chat đổi sang gemini-3.5-flash-lite (2–3 giây/câu); `docs/TEST-FLOW.md` kịch bản test tay từng bước
+- **Nhập danh sách khách (2026-10-14)**: XONG code — Khách hàng → Nhập danh sách (mẫu Excel, xem trước, nhập; chủ + nhân viên), SĐT mã hóa + dấu vân tay, gộp hồ sơ khi khách chat cho SĐT, mục "Tới hẹn – chưa nhắn OA được" ở Cần chăm sóc. Migration ContactPhoneImport (đã áp DB dev). BE 271 unit + 139 integration; FE 69. Tiếp: bot báo giá khi chủ động nhắn; ZNS khi có docs
+- **2026-10-14 (sau M6 đợt B):** cột "Sau khi làm" trong mẫu dữ liệu + bot chăm sóc tra kho kiến thức; câu nhắc sức khỏe nói như người của DN; trang /phone-test (giao diện điện thoại); quản lý nhân viên (Cài đặt → Nhân viên) + đổi mật khẩu (/account), đổi mật khẩu là đăng xuất phiên cũ. Kế hoạch test tay: docs/TEST-PLAN.md. Chờ chủ dự án: test theo TEST-PLAN, đổi DNS sang Cloudflare (Zalo thật), docs API ZBS Template (ZNS)
+- **M6 đợt B (2026-10-14, đã duyệt — quyết định ở DECISIONS.md)**: B1 dashboard XONG code (trang Tổng quan của owner: hội thoại/ngày 7–30 ngày, tỷ lệ bot tự xử lý, khách mới, chi phí AI tháng, câu bot chưa trả lời được — đã che SĐT/email). B2 xuất/xóa dữ liệu 1 khách XONG code (hồ sơ khách → "Dữ liệu của khách": tải Excel 4 sheet; xóa vĩnh viễn phải gõ XÓA; chỉ owner, có audit; giữ bản ghi chi phí AI). B3 super admin XONG code (/admin: danh sách DN, chi phí AI 12 tháng, tạo DN + mật khẩu tạm, gói/hạn/hạn mức, khóa/mở, tự khóa quá hạn 3 ngày, băng nhắc 7 ngày, xuất zip, xóa DN; migration TenantBilling đã áp DB dev). B4 hạn mức XONG code (hội thoại trong N hội thoại bắt đầu sớm nhất của tháng mới được bot trả lời; hết → khách mới chuyển nhân viên + Telegram; báo 80% và hết mỗi tháng 1 lần; băng cảnh báo cho chủ DN). **M6 đợt B XONG phần code** — chờ chủ dự án test. Tiếp theo: nhập danh sách khách + báo giá khi chủ động nhắn (đã duyệt 2026-10-14), rồi tuần 7–8
+- **Giọng "Như nhân viên thật" + xưng hô theo từng khách (2026-10-14, chủ dự án duyệt làm trước đợt B)**: XONG code — bot trả lời 1–4 tin ngắn, emoji vừa phải, gọi khách anh/chị/cô/chú/bác theo nhân viên chọn hoặc khách tự xưng, chưa biết thì "mình"; ô "Cách bot gọi khách" trong hồ sơ khách. Migration `CustomerSalutation` (đã áp DB dev). BE 244 unit + 117 integration test; FE 46 test. Chờ chủ dự án test trong Chat thử (đổi giọng sang "Như nhân viên thật" ở trang Giọng văn)
+- **Nhập danh sách khách (SĐT, giới tính, đã làm gì, hẹn nhắn lúc, đồng ý nhận tin) + bot báo giá đầy đủ khi chủ động nhắn**: đã duyệt kế hoạch 2026-10-14, làm SAU M6 đợt B. Cột đồng ý nhận tin: DN tự khai, hệ thống ghi nguồn + thời điểm. ZNS để GĐ2
+- **Bot tự chăm sóc khách (2026-10-05, chủ dự án duyệt "làm ngay, trước đợt B")**: XONG code — migration `ProactiveCare` (đã áp DB dev). BE 225 unit + 115 integration test; FE 46 test. Chờ chủ dự án test (ghi chú "5 phút nữa" → bot tự nhắn trong Chat thử)
+- Module: **M6 — đợt A XONG phần code** (2026-10-04): Khách hàng (5 tầng tiềm năng, nhãn, hồ sơ, nhật ký chăm sóc, xuất Excel), "Cần chăm sóc" (AI gợi ý + tin nháp, nhân viên sửa rồi gửi), kết nối Telegram tự phục vụ. Chờ chủ dự án test trên web (nhất là kết nối Telegram)
+- Tiếp theo: M6 đợt B (dashboard chủ DN, xóa/xuất dữ liệu 1 khách, super admin + chi phí AI, hạn mức gói) → GĐ2 chăm sóc tự động. Song song: M4 bước 8 (chạy thật Zalo) chờ DNS Cloudflare + khóa Zalo
 
-## Kế hoạch M1 (bản .NET, 2026-10-01) — đã duyệt 2026-10-02
+## Kế hoạch M6 (2026-10-04) — đã duyệt ("làm đợt A trước"; tầng Mới → Quan tâm → Nóng → Đã chốt → Không tiềm năng)
+Đợt A (xong code):
+1. Schema `AddCustomerCare`: contacts (`lead_status`, `lead_status_manual`, `tags`, `last_customer_message_at`), `contact_notes` (mã hóa, lúc chăm sóc lại — ngày + giờ, migration `NoteFollowUpTime`), `care_suggestions` (mã hóa, tối đa 1 gợi ý mở/khách), `conversations.care_analyzed_at`, cài đặt chăm sóc trong `handoff_settings`
+2. Trang Khách hàng: lọc theo tầng/nhãn, tìm tên/SĐT, xuất Excel (owner, audit); hồ sơ khách: tầng (tự động/đặt tay), nhãn, thông tin khách, hội thoại, nhật ký chăm sóc
+3. "Cần chăm sóc": job 15 phút quét khách im lặng ≥ X giờ (mặc định 6) + ghi chú tới giờ hẹn (quét mỗi phút) → AI gợi ý (mức độ, lý do, việc nên làm, tin nháp, hạn nhắn Zalo 7 ngày / miễn phí 48 giờ, giao người); nhân viên sửa rồi gửi; khách nhắn lại → tự xong; quá hạn → hết hạn
+4. Kết nối Telegram tự phục vụ: mã 6 ký tự 10 phút → `/ketnoi@bot MÃ` trong nhóm hoặc link "thêm vào nhóm" → Worker đọc tin bot (long polling, khóa Redis) → lưu nhóm + tin chào
+Đợt B (chưa làm): dashboard chủ DN, xóa/xuất dữ liệu 1 khách + xóa dữ liệu tenant, super admin (tenant, gói, chi phí AI, khóa/mở), hạn mức hội thoại theo gói
+
+## Kế hoạch M5 (2026-10-04) — đã duyệt ("làm liền", Telegram, nhắc sau 10 phút)
+1. Schema `AddInbox`: hội thoại (người phụ trách, chờ người từ lúc, tin cuối, lần nhắc), tin (người gửi là nhân viên, loại "system"), bảng `handoff_settings`
+2. API hộp thư: danh sách (cần bạn / nhân viên / bot / của tôi / tất cả, kèm chat thử), chi tiết (audit khi xem), thành viên
+3. Realtime SSE `/inbox/stream` qua Redis pub/sub (chỉ id, không nội dung) + FE tự tải lại 20 giây/lần dự phòng
+4. Tiếp quản / trả lại bot / gán người / nhân viên gửi tin (chữ ký) qua đúng kênh, job gửi có thử lại
+5. Tự chuyển người: AI báo cần người, khách bực bội (sentiment âm), không chắc, khẩn cấp; câu chuyển tiếp trong/ngoài giờ
+6. Nhắc khi chờ quá X phút (job mỗi phút) + Telegram (chỉ loại sự việc + link, không nội dung khách)
+7. FE: trang Hộp thư (3 cột, nổi bật ca cần người, số ca chờ trên tab), Cài đặt → Chuyển tiếp & giờ làm việc, nhân viên vào thẳng Hộp thư
+8. Test: luồng chuyển người → tiếp quản → nhắn → trả lại, cô lập tenant, quyền owner/staff, nhắc
+
+## Kế hoạch M4 (2026-10-04) — đã duyệt 2026-10-04 ("làm liền", đường hầm Cloudflare + haulp.io.vn)
+1. `feat(m4)`: Redis (`StackExchange.Redis`, `Testcontainers.Redis`) — `IDistributedStore`: khóa, state, chống trùng, bộ đếm
+2. `feat(m4)`: bảng `channel_connections` (token mã hóa, unique OA toàn hệ thống), `conversations.connection_id`, trạng thái gửi tin
+3. `feat(m4)`: `ZaloClient` (đổi code, làm mới token, gửi tin, phân loại lỗi), PKCE, chữ ký webhook, đọc sự kiện
+4. `feat(m4)`: kết nối OA (OAuth v4 + PKCE + state), danh sách / ngắt kết nối
+5. `feat(m4)`: webhook `/webhooks/zalo` (chữ ký, chống trùng, tin khách, nhân viên trả lời trong app OA, ảnh/sticker)
+6. `feat(m4)`: adapter Zalo (cắt tin dài, làm mới token khi lỗi, giới hạn gửi theo OA), job làm mới token định kỳ, job gửi lại tin pending
+7. `feat(m4)` (FE): trang Kết nối kênh
+8. `test(m4)`: chạy thật với OA test qua Cloudflare Tunnel
+
+## Kế hoạch M3 (2026-10-04) — đã duyệt 2026-10-04 ("làm liền 10 bước, test 1 lần")
+Chủ dự án chốt: chỉ Gemini (bỏ Claude); ngưỡng eval thường ≥ 85%, 0 bịa giá, an toàn 100%; chỉ ngành spa (Khoa Học Huyệt Đạo).
+1. `feat(m3)`: bảng contacts, conversations, messages (mã hóa), usage_records; cờ medically_reviewed; giọng văn tenant; migration `AddConversations`; test cô lập
+2. `feat(m3)`: `IChatProvider` Gemini (generateContent + JSON schema, model dự phòng khi 503, chi phí gồm token suy nghĩ) + fake
+3. `feat(m3)`: che dữ liệu cá nhân (SĐT, email, CCCD/CMND, tên) + ghép lại
+4. `feat(m3)`: mẫu ngành nhúng (spa đầy đủ + _default): persona, quy tắc, câu cấm, dấu hiệu nguy hiểm, thông tin thu thập, eval
+5. `feat(m3)`: `BotEngine` (prompt, JSON, thử lại, câu cấm, chặn bịa giá, khẩn cấp, câu báo AI, tóm tắt) + `IKnowledgeSearch`
+6. `feat(m3)`: `IChannelAdapter` + webchat; job `ProcessIncomingMessageJob` (idempotent, hàng đợi messages)
+7. `feat(m3)`: API chat thử, giọng văn, đánh dấu duyệt chuyên môn
+8. `feat(m3)` (FE): trang Chat thử (khung chat + "Vì sao bot trả lời vậy?" + giọng văn), nút duyệt chuyên môn
+9. `feat(m3)`: bộ eval spa 54 câu (24 an toàn) + lệnh `eval`
+10. `test(m3)`: chạy với Gemini thật trên dữ liệu Khoa Học Huyệt Đạo
+
+## Kế hoạch M2 (2026-10-03) — đã duyệt 2026-10-03
+Mở rộng so với CLAUDE.md M2 theo yêu cầu chủ dự án: kiến thức có cấu trúc theo **mẫu chuẩn có Mã** (`docs/KNOWLEDGE-FORMAT.md`) + **so sánh/gộp kiểu review pull request** khi nhập bản mới; tài liệu tự do vẫn nạp được (không so sánh từng mục). Dữ liệu nạp **từ FE**. Ước lượng ~2 tuần.
+1. `docs(m2)`: đặc tả mẫu (Excel/JSON, 5 loại mục), câu lệnh nhờ AI ngoài điền mẫu, dữ liệu mẫu Khoa Học Huyệt Đạo ở `C:\Zalo_Tool\sample-docs\` (ngoài repo), đổi tên tenant mẫu
+2. `feat(m2)`: bảng `knowledge_items`, `knowledge_imports`, `documents`, `chunks` (vector 768 + HNSW, lọc tenant trước), repository, test cô lập tenant
+3. `feat(m2)`: đọc/kiểm lỗi file mẫu (xlsx qua ClosedXML, json), báo lỗi theo sheet + dòng; tải file mẫu trống; xuất dữ liệu hiện tại ra mẫu
+4. `feat(m2)`: so sánh (thêm mới / thay đổi từng trường / có thể trùng / không còn trong file / không đổi) → bản xem trước → áp dụng mục được chọn; lịch sử nhập; audit log
+5. `feat(m2)`: Gemini embedding (skill `add-ai-provider`, kiểm tra docs chính thức trước), job đánh chỉ mục mục thay đổi, API tìm kiếm `searchChunks(tenantId, query, k)`
+6. `feat(m2)`: tài liệu tự do (pdf/docx/xlsx/txt/md ≤ 20MB) lưu file local (dev), job đọc + chia đoạn + embed, thay thế khi trùng tên (hỏi xác nhận), xóa
+7. `feat(m2)` (FE): trang Kho kiến thức — danh sách theo loại, nhập file, màn hình so sánh/duyệt, lịch sử, tải mẫu/xuất, tài liệu tự do, ô thử tìm kiếm
+8. `test(m2)`: chạy đầu-cuối với dữ liệu mẫu v1 → v2, kiểm tra tiêu chí xong M2
+Để sau: hệ thống tự trích PDF lộn xộn sang mẫu bằng AI (cần chat model, M3); so sánh từng dòng cho tài liệu tự do; nơi lưu file production.
+
+## Kế hoạch M1 (bản .NET, 2026-10-01) — đã duyệt 2026-10-02, hoàn thành 2026-10-03
 Thay kế hoạch pnpm ngày 2026-09-30 (xem DECISIONS.md). 8 bước, mỗi bước 1 commit, dừng sau mỗi bước để chủ dự án chạy thử:
 1. `chore(m1)`: BE solution .NET 10 (`ZaloAi.sln`, 7 project `src/` + 2 project `tests/`), `Directory.Build.props`, `Directory.Packages.props`, `.editorconfig`, docker-compose (pgvector pg16, redis 7), `.env.example`
 2. `feat(m1)`: Core + Infrastructure nền: Options có validate, Serilog có redact, crypto AES-256-GCM (định dạng `v1:iv:tag:ct`), exception chung, `ITenantContext`
@@ -32,9 +96,28 @@ Thay kế hoạch pnpm ngày 2026-09-30 (xem DECISIONS.md). 8 bước, mỗi bư
 - [x] B2: chỉ super admin tạo tenant (qua CLI), chưa mở đăng ký công khai
 - [x] B3: embedding 768 chiều
 - [x] B4: đồng ý cả 3: `audit_logs.tenant_id` nullable; unique `(tenant_id, external_msg_id)`; session lưu bằng cookie ticket của ASP.NET Core thay vì bảng `sessions`
-- [x] B5: 2 tenant mẫu: "Khoa Học Nguyệt Đạo" (bấm huyệt, massage → slug `spa`, rủi ro Cao) và "Sửa nhà An Phát" (sửa nhà, rủi ro thấp)
+- [x] B5: 2 tenant mẫu: "Khoa Học Nguyệt Đạo" (bấm huyệt, massage → slug `spa`, rủi ro Cao) — đổi thành "Khoa Học Huyệt Đạo" (tên thật) ngày 2026-10-03 và "Sửa nhà An Phát" (sửa nhà, rủi ro thấp)
 
 ## Đã xong
+- [x] **M6 đợt A code xong** (2026-10-04): migration `AddCustomerCare` (đã áp DB dev). BE 209 unit + 112 integration test (có test cô lập tenant cho khách/ghi chú/gợi ý); FE 43 test, lint + typecheck sạch (chưa chạy `pnpm build` vì `pnpm dev` đang chạy)
+- [x] **M5 code xong** (2026-10-04): migration `AddInbox` (đã áp DB dev). BE 187 unit + 105 integration test; FE 35 test. Test trọn luồng trên web được bằng Chat thử (tab khách) + Hộp thư (tab nhân viên)
+- [x] M4 bước 1–7 (2026-10-04): Redis, `channel_connections` (migration `AddChannelConnections`, đã áp DB dev), ZaloClient, kết nối OA, webhook, adapter + job làm mới token, trang Kết nối kênh. BE 186 unit + 100 integration test (Zalo giả lập: OAuth/PKCE/state 1 lần, chữ ký sai 401, webhook trùng, tin bot dội về, nhân viên trả lời trong app OA, token hết hạn tự làm mới, khách quá 7 ngày, ảnh). FE 32 test (sau M3 là 28 — báo cáo M3 ghi nhầm 33)
+- [x] **M3 code xong** (2026-10-04): 10 bước theo kế hoạch. Eval spa trên dữ liệu thật Khoa Học Huyệt Đạo, model `gemini-3.5-flash-lite` (model chính `gemini-3.8-flash` hết quota gói free 20 request/ngày): câu thường + ngoài phạm vi **30/30 = 100%**, bịa giá **0**, an toàn **24/24 = 100%** (lần chạy cuối, sau khi thêm câu cấm "hoàn toàn an toàn" và sửa quy tắc khẩn cấp chỉ cho dấu hiệu cấp tính). Chi phí ≈ $0.06 cho 54 câu. 163 unit + 78 integration test BE; 33 test FE. Còn: chủ dự án tự chat thử trên giao diện và đánh giá; chạy lại eval với `gemini-3.8-flash` khi có quota/gói trả phí
+- [x] **M2 đạt tiêu chí xong** (2026-10-03): chạy thử đầu-cuối qua FE với Gemini thật trên dữ liệu mẫu Khoa Học Huyệt Đạo — 6/6 câu hỏi mẫu ra đúng mục ở vị trí đầu (ví dụ "giá massage đông y 60 phút" → DV-MASSAGE-DONG-Y-60), nhập v2 ra đúng bản so sánh mong đợi, tài liệu tự do đọc + tìm được; tenant B không tìm thấy dữ liệu A (test). Còn: chủ dự án tự nạp qua giao diện, và thử với dữ liệu thật của DN dùng thử khi có
+- [x] M2 bước 8: chạy thử đầu-cuối (script qua FE, Gemini thật, tenant An Phát rồi dọn sạch); sửa OpenAPI sinh `number | string` (JSON chỉ nhận số thật) (2026-10-03)
+- [x] M2 bước 7 (FE): trang Kho kiến thức — tab Dữ liệu (lọc, xem chi tiết), Nhập file (tải mẫu, xuất Excel/JSON, lỗi theo dòng, câu lệnh nhờ AI có nút sao chép), Lịch sử nhập, Tài liệu tham khảo (thay thế khi trùng tên, xóa, tự cập nhật trạng thái), Thử tìm kiếm; trang duyệt so sánh `/knowledge/imports/[id]` (chọn từng mục, gộp/giữ cả hai/bỏ qua, khóa "vừa gộp vừa xóa", xác nhận trước khi áp dụng/hủy); 23 test FE (2026-10-03)
+- [x] M2 bước 6: tài liệu tự do PDF/Word/Excel/TXT/MD ≤ 20MB (kiểm nội dung khớp đuôi file, tên file an toàn, lưu local `%LOCALAPPDATA%zaloaiiles`), job đọc + chia đoạn ~1.500 ký tự chồng lấn ~15% theo mục + tạo vector, PDF ảnh scan/file hỏng → "failed" kèm lý do, thay thế khi trùng tên (409 document_exists), xóa (2026-10-03)
+- [x] M2 bước 5: `IEmbeddingProvider` + Gemini `gemini-embedding-2` 768 chiều qua REST (resilience: timeout, retry, circuit breaker; lỗi → AiProviderException → API 503 ai_unavailable), provider giả cho test; đánh chỉ mục sau khi áp dụng + job quét 5 phút/lần; `POST /knowledge/search`, `GET /knowledge/status`, `GET /knowledge/ai-prompt`; tổng 156 test BE (2026-10-03)
+- [x] M2 bước 4: so sánh file nhập với dữ liệu đang có (thêm mới / thay đổi từng trường / có thể trùng — bỏ dấu, số phải khớp / không còn trong file), bản xem trước lưu `knowledge_imports`, áp dụng mục được chọn trong 1 transaction (gộp vào mục cũ hoặc giữ cả hai; chặn vừa gộp vừa xóa; từ chối nếu mục bị sửa trong lúc chờ duyệt), hủy, lịch sử, `GET /knowledge/items`; mục đổi/thêm tạo đoạn chờ đánh chỉ mục; lệnh `knowledge diff`; dữ liệu mẫu v1→v2 cho kết quả đúng README; tổng 123 test (2026-10-03)
+- [x] M2 bước 3: đọc file mẫu Excel (ClosedXML) + JSON, kiểm lỗi từng ô báo theo sheet/dòng/cột (dễ dãi: tiêu đề khác hoa thường, giá "450.000đ", dòng trống), tạo file mẫu trống + xuất dữ liệu (`GET /knowledge/template`, `GET /knowledge/export`), lệnh `knowledge validate|convert`; dữ liệu mẫu có thêm bản .xlsx; tổng 108 test (2026-10-03)
+- [x] M2 bước 2: migration `AddKnowledgeBase` (knowledge_items, knowledge_imports, documents, chunks vector(768) + HNSW cosine, ràng buộc "đúng một nguồn"), 4 repository có tenant, tìm kiếm vector lọc tenant_id + `hnsw.iterative_scan`; 8 test cô lập (kể cả tìm kiếm vector, chuyển dòng sang tenant khác); tổng 85 test (2026-10-03)
+- [x] M2 bước 1: `docs/KNOWLEDGE-FORMAT.md` (mẫu dữ liệu 5 loại mục, quy tắc Mã, JSON, luồng so sánh/gộp, câu lệnh nhờ AI điền); dữ liệu mẫu Khoa Học Huyệt Đạo v1 (71 mục) + v2 giả lập (để test gộp) + 1 tài liệu tự do ở `C:Zalo_Toolsample-docs`; đổi tenant mẫu thành "Khoa Học Huyệt Đạo" (seed, test, DB dev) (2026-10-03)
+- [x] M1 bước 8: tách 7 skill BE ra `.claude/skills/` (bổ sung đường dẫn code thật), thêm 4 skill FE ở `zalo-ai-portal/.claude/skills/` (portal-page, portal-form, api-client-sync, portal-ui dùng `ui-ux-pro-max` — bản MIT đã rà soát, copy vào repo FE, chạy không cần Python), khung `docs/zalo-api-notes.md` (mọi mục CHƯA KIỂM CHỨNG, làm đầu M4), CLAUDE.md mục 10 thành bảng trỏ tới skill, tick task M1 (2026-10-03)
+- [x] **M1 đạt tiêu chí xong**: docker compose + api + worker + FE chạy, đăng nhập admin, test cô lập tenant pass, CI 2 repo (2026-10-03)
+- [x] M1 bước 7: Sentry (Sentry.AspNetCore cho Api + Sentry.Serilog cho cả Api và Worker, vùng EU, che SĐT/email và bỏ query/cookie/header trước khi gửi), `POST /dev/errors/test`; `scripts/backup-db.cmd` + `restore-db.cmd` (đã thử khôi phục vào DB tạm); CI GitHub Actions cả 2 repo; `docs/OPERATIONS.md` (2026-10-03)
+- [x] M1 bước 6: FE `zalo-ai-portal`: rewrite `/api/*` + `/hangfire` → BE, `proxy.ts` chặn sơ bộ khi chưa có cookie, trang đăng nhập, khung trang (đổi tenant, đăng xuất, link Hangfire cho super admin), trang cài đặt doanh nghiệp (owner sửa, staff xem), `pnpm gen:api` (openapi-typescript + openapi-fetch), shadcn/ui, vitest. BE thêm `GET /industries`, lỗi validate tiếng Việt (2026-10-02)
+- [x] M1 bước 5: Hangfire + Postgres (schema `hangfire`), Api chỉ đẩy job, Worker chạy job; job theo tenant (set tenant context đầu job); retry 5 lần backoff 10s→13.5 phút, hết lượt → Failed + log Error; dashboard `/hangfire` chỉ super admin; `POST /dev/jobs/sample`; tổng 72 test (2026-10-02)
+- [x] M1 bước 4: đăng nhập cookie (login, logout, me, switch-tenant), middleware kiểm membership + trạng thái tenant mỗi request, phân quyền owner/staff, `GET/PUT /tenant/settings` (FluentValidation, audit log), rate limit login 5/phút/IP, `/health` kiểm Postgres, ProblemDetails, OpenAPI `/openapi/v1.json`, khóa cookie lưu Postgres (`data_protection_keys`); tổng 68 test (2026-10-02)
 - [x] M1 bước 3: EF Core + Npgsql (snake_case, pgvector), migration `InitialCreate` (tenants, users, memberships, audit_logs), global query filter + chặn ghi sai tenant trong SaveChanges, repository có tenantId, lệnh `seed` (2 tenant mẫu + super admin), 10 test cô lập/seed bằng Testcontainers; tổng 46 test (2026-10-02)
 - [x] M1 bước 2: Options có validate khi khởi động (App, Security, Ai, Zalo), mã hóa AES-256-GCM `v1:nonce:tag:ct`, Serilog che token/PII (theo tên field + SĐT VN/email), exception chung, `ITenantContext`; 36 test (2026-10-02)
 - [x] M1 bước 1: solution `ZaloAi.sln` (7 project src + 2 test), `Directory.Build.props` (net10, nullable, warnings as errors, analyzers), `Directory.Packages.props`, `.editorconfig`, `global.json` (SDK 10.0.401), docker-compose (pgvector pg16 + redis 7), `.env.example`; `/health` tạm + test smoke (2026-10-02)
@@ -43,15 +126,40 @@ Thay kế hoạch pnpm ngày 2026-09-30 (xem DECISIONS.md). 8 bước, mỗi bư
 - [x] Viết ROADMAP.md (10 phase đến phát hành), FEATURE-SPECS.md (chuyển tiếp, "Cần chăm sóc", tình huống chăm sóc), INDUSTRIES.md (mẫu ngành, bộ an toàn y tế) (2026-10-01)
 
 ## Vấn đề mở / nợ kỹ thuật
-- Test "chuyển dòng sang tenant khác" hiện chỉ chạy trên memberships (tenant_id thuộc khóa chính, EF tự chặn). Thêm test cho bảng đầu tiên có tenant_id ngoài khóa (documents, M2)
-- Log: message của exception (ví dụ lỗi từ Zalo/AI trả về) chưa được che PII — xử lý khi viết ZaloClient (M4) và AI provider (M3)
+- Kết nối Telegram tự phục vụ đã làm (M6): **chủ dự án cần test** — chỉ chạy khi Worker chạy và có `Telegram:BotToken`. Bot ở chế độ riêng tư (mặc định) chỉ nhận lệnh có @tên_bot → giao diện hiện lệnh `/ketnoi@tên_bot MÃ`
+- Tìm khách theo tên/SĐT làm trong bộ nhớ (dữ liệu mã hóa), tối đa 5.000 khách/lần tải — đủ cho DN nhỏ; DN lớn cần chỉ mục tìm kiếm riêng (hash SĐT)
+- Gợi ý "Cần chăm sóc" gửi ghi chú nhân viên (đã che PII) cho Gemini → cùng ràng buộc gói trả phí như tin khách
+- Gợi ý mang tính quảng cáo (kéo khách cũ, ưu đãi) chưa lọc theo "đồng ý nhận tin" (FEATURE-SPECS mục 2) — chưa có dữ liệu đồng ý, làm cùng GĐ2
+- Realtime SSE đi qua rewrite của Next.js: chưa thử thực tế (FE có dự phòng tải lại 20 giây). Production: kiểm tra proxy không buffer SSE
+- Telegram: chưa có bot (chủ dự án tạo bằng @BotFather, lưu `Telegram:BotToken` user-secrets); thông báo chỉ gửi loại sự việc + link
+- Câu chuyển tiếp hệ thống có thể lặp ý với câu bot vừa nói ("em chuyển nhân viên") — cân nhắc chỉnh prompt sau khi DN dùng thử
+- Zalo: chưa kiểm bằng request thật: định dạng header chữ ký (`mac=`?), `timeStamp` có phải trường `timestamp`, PKCE Base64 chuẩn hay base64url, định dạng lỗi của endpoint OAuth → kiểm ở bước 8 (log định dạng header khi chữ ký sai)
+- Zalo: chưa có payload quan tâm/bỏ quan tâm (đang bỏ qua), chưa lấy tên OA / tên khách (cần docs API thông tin OA/người dùng)
+- Gửi tin: Zalo nhận tin nhưng mất phản hồi → job gửi lại 1 lần (rủi ro trùng nhỏ); tin dài cắt nhiều phần lỗi giữa chừng → phần đầu có thể gửi lại
+- needs_reauth mới chỉ ghi log Error (Sentry) + hiện trên trang Kênh; thông báo Telegram ở M5
+- Gói Gemini free: `gemini-3.8-flash` chỉ 20 request/ngày → chat thử hay rơi về model dự phòng lite. Nên bật billing (vừa để test thật, vừa bắt buộc cho production)
+- Eval câu thường chưa chạy lại sau lần sửa quy tắc khẩn cấp cuối (chỉ chạy lại phần an toàn)
+- Dữ liệu mẫu có ghi chú nội bộ ("⚠ ... bot phải ...") trong trường note — AI đọc được, không nên để trong dữ liệu thật của DN
+- Dữ liệu mẫu có 2 giờ đóng cửa khác nhau (21:00 ở chi nhánh, 21:30 ở "Giờ mở cửa")
+- Webchat chưa có câu chuyển tiếp/nhân viên trả lời (M5); hội thoại chuyển người chỉ "Trả lại cho bot" được trong chat thử
+- Deploy: cấu hình ForwardedHeaders sau reverse proxy, nếu không rate limit login tính theo IP của proxy (gộp mọi khách)
+- Đăng xuất chưa thu hồi cookie phía server: cookie bị đánh cắp còn dùng được tới khi hết hạn (12h trượt). Xóa user/membership thì mất quyền ngay. Cân nhắc thêm "security stamp" trên users (đổi mật khẩu, đăng xuất mọi nơi)
+- Super admin xem/chuyển sang tenant bất kỳ: làm ở M6
+- FE chưa có test giao diện (chỉ test hàm thuần bằng vitest). Cân nhắc Playwright cho luồng đăng nhập ở tuần 7–8 (thư viện mới, cần duyệt)
+- `pnpm gen:api` cần BE đang chạy. Có thể cho BE xuất file openapi lúc build (thêm gói Microsoft.Extensions.ApiDescription.Server) nếu bất tiện
+- Cảnh báo job lỗi: đã gửi Sentry (bước 7), thêm Telegram ở M5
+- File gốc tài liệu lưu local (`Storage:LocalRoot`), chưa nằm trong `scriptsbackup-db.cmd`; production cần object storage + backup riêng (chốt khi deploy)
+- Chưa ghi chi phí gọi embedding (`usage_records` làm ở M3); gói Gemini miễn phí chỉ dùng cho dev
+- Log console: message của exception (ví dụ lỗi từ Zalo/AI trả về) chưa được che PII (Sentry thì đã che từ bước 7) — xử lý khi viết ZaloClient (M4) và AI provider (M3)
+- Chưa có form thêm/sửa từng mục (FAQ, dịch vụ) trên giao diện — hiện sửa qua xuất → sửa file → nhập. Làm nếu DN dùng thử thấy bất tiện
 - Cân nhắc Postgres Row Level Security làm lớp phòng thủ thứ 3 (sau M1)
 - Next.js 16 có thay đổi lớn so với bản cũ: đọc `node_modules/next/dist/docs/` trước khi code FE
-- Khoa Học Nguyệt Đạo: nếu DN quảng cáo chữa bệnh (châm cứu, trị liệu YHCT) → thường cần giấy phép, thành ngành "chưa mở", hỏi luật sư. Chỉ massage/bấm huyệt thư giãn thì xếp `spa`
+- Khoa Học Huyệt Đạo (phòng khám có thật, khoahochuyetdao.com): website quảng cáo trị liệu bệnh (u xơ tử cung, nang ngực, tim, tuyến giáp, liệt dây VII...), châm cứu, "không tác dụng phụ", "giảm đau buổi đầu hoặc hoàn tiền" → trước khi chạy thật với khách của họ: hỏi luật sư, xác minh giấy phép; hiện chỉ dùng làm dữ liệu test. Nguyên tắc chung: nếu DN quảng cáo chữa bệnh (châm cứu, trị liệu YHCT) → thường cần giấy phép, thành ngành "chưa mở", hỏi luật sư. Chỉ massage/bấm huyệt thư giãn thì xếp `spa`
 - Chọn SDK AI .NET (chính thức hay REST) ở M3
 - Xác minh ở Phase 4 (docs Zalo): thời gian OA được nhắn tư vấn sau tin cuối của khách; webhook có sự kiện "OA gửi tin" khi nhân viên trả lời trong app Zalo không
 
 ## Việc chủ dự án cần làm
-- Hoàn thành Phần A và trả lời Phần B ở trên
+- Đặt Sentry DSN (`dotnet user-secrets set "Sentry:Dsn" ...`), bật branch protection cho `dev`/`main` ở cả 2 repo (docs/OPERATIONS.md mục 3)
+- Khi làm hồ sơ pháp lý: Sentry (EU) là bên nhận dữ liệu ở nước ngoài
 - Chọn ngành đầu tiên từ `docs/INDUSTRIES.md`; xem lại các mục "(đề xuất)" trong `docs/FEATURE-SPECS.md`
-- Các việc M0 (OA test, Zalo App, domain, Gemini key, DN dùng thử)
+- Các việc M0 còn lại: OA test, Zalo App, domain, liên hệ DN dùng thử (Gemini key: xong)

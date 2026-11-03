@@ -11,6 +11,8 @@
 
 Trợ lý AI chăm sóc khách hàng trên **Zalo Official Account (OA)**, cho doanh nghiệp **thuê theo tháng** (SaaS, multi-tenant).
 
+**Mở rộng (chủ dự án chốt 2026-10-15):** sản phẩm trở thành **CRM đầy đủ cho doanh nghiệp dịch vụ** (lịch hẹn, bán hàng, gói liệu trình, kho, nhân viên, báo cáo, nhiều chi nhánh) kết hợp AI chăm sóc khách. Kế hoạch và đợt làm: `docs/CRM-PLAN.md`; danh sách tính năng: `docs/CRM-FEATURES.md`. Quy tắc thêm: **AI chỉ đề xuất, hệ thống mới chốt** việc liên quan lịch và tiền.
+
 - Khách cuối nhắn tin vào Zalo OA của doanh nghiệp → bot trả lời 24/7 **dựa trên dữ liệu riêng** doanh nghiệp nạp vào (RAG).
 - Bot không chỉ trả lời mà còn **chủ động chăm sóc** qua flow: chào khách mới, nhắc lịch, hỏi thăm sau mua, xin đánh giá, kéo khách cũ.
 - Chủ doanh nghiệp và nhân viên dùng **trang quản trị web** để nạp dữ liệu, xem hội thoại, tiếp quản chat, xem khách tiềm năng và báo cáo.
@@ -82,8 +84,8 @@ Kết nối OA:
 | Auth | Email + mật khẩu (`PasswordHasher` của ASP.NET Core Identity), cookie authentication httpOnly | |
 | Rate limit | Middleware rate limiting có sẵn của ASP.NET Core | |
 | Gọi HTTP ra ngoài | `HttpClientFactory` + `Microsoft.Extensions.Http.Resilience` (Polly) | Timeout, retry, circuit breaker |
-| AI chat | `IAiProvider`: Gemini (dev, free) và Anthropic Claude (prod) | Model đặt trong config, không hardcode. SDK chính thức nếu ổn định, không thì gọi REST qua HttpClient (chốt ở M3) |
-| Embedding | Qua `IAiProvider.EmbedAsync` (Gemini embedding lúc đầu) | Số chiều vector đặt trong config. Đổi model = tạo lại toàn bộ vector |
+| AI chat | `IChatProvider`: Gemini, **Groq dự phòng** khi Gemini hết lượt/lỗi (chốt 2026-11-03, trước đó chỉ Gemini), gọi REST qua HttpClient | Model + thứ tự đặt trong config, không hardcode. Dev có thể dùng gói free; **production bắt buộc Gemini gói trả phí** (gói free cho Google dùng dữ liệu); Groq bật Zero Data Retention |
+| Embedding | Qua `IEmbeddingProvider` (Gemini embedding) | Số chiều vector đặt trong config. Đổi model = tạo lại toàn bộ vector |
 | Parse file | PdfPig (pdf), DocumentFormat.OpenXml (docx), ClosedXML (xlsx) | Chạy trong worker |
 | Logging | Serilog (JSON) | Không log token, không log PII; có destructuring policy để redact |
 | Lỗi | Sentry (`Sentry.AspNetCore`) | |
@@ -128,6 +130,9 @@ C:\Zalo_Tool\
 │   ├── INDUSTRIES.md          # mẫu ngành, mức rủi ro, bộ an toàn y tế, quy trình mở ngành
 │   ├── PROGRESS.md            # tiến độ, cập nhật sau mỗi task
 │   ├── DECISIONS.md           # ghi lại quyết định kỹ thuật quan trọng
+│   ├── CRM-FEATURES.md        # danh sách tính năng CRM (đầy đủ, theo nhóm)
+│   ├── CRM-PLAN.md            # đợt C1–C8 của CRM, schema từng đợt
+│   ├── TEST-PLAN.md / TEST-FLOW.md  # checklist + kịch bản test tay
 │   └── zalo-api-notes.md      # ghi chú API Zalo đã kiểm chứng từ docs chính thức
 ├── .claude/skills/            # skills (mục 10) tách ra từ file này ở M1
 ├── ZaloAi.sln
@@ -170,13 +175,12 @@ ConnectionStrings__Redis=localhost:6379
 
 Security__EncryptionKey=                     # 32 bytes base64, dùng AES-256-GCM cho token và dữ liệu nhạy cảm
 
-Ai__ChatProvider=gemini                      # gemini | anthropic
+Ai__ChatProvider=gemini                      # gemini | fake (test)
 Ai__ChatModel=
 Ai__EmbedProvider=gemini
 Ai__EmbedModel=
 Ai__EmbedDim=
 Ai__GeminiApiKey=
-Ai__AnthropicApiKey=
 
 Zalo__AppId=
 Zalo__AppSecret=
@@ -274,6 +278,9 @@ dotnet ef migrations add <Ten> -p src/ZaloAi.Infrastructure -s src/ZaloAi.Api
 dotnet ef database update -p src/ZaloAi.Infrastructure -s src/ZaloAi.Api
 dotnet run --project src/ZaloAi.Api -- seed   # 2 tenant mẫu + dữ liệu mẫu
 dotnet format | dotnet build | dotnet test
+dev                 # (Windows) bật Postgres/Redis + API + Worker + FE, mỗi cái một cửa sổ
+stop                # tắt API, Worker, FE; "stop all" tắt thêm Postgres/Redis
+scripts/backup-db.cmd                        # backup DB dev; khôi phục: scripts/restore-db.cmd <file>
 
 # repo FE (zalo-ai-portal)
 pnpm dev            # Next.js, cổng 3000
@@ -285,116 +292,21 @@ pnpm lint | pnpm typecheck | pnpm test
 
 ## 10. Skills
 
-Các quy trình lặp lại. Ở M1, Claude tách mỗi skill dưới đây thành `.claude/skills/<name>/SKILL.md` (giữ nguyên frontmatter). Trước khi tách, chúng vẫn có hiệu lực từ file này.
+Các quy trình lặp lại, mỗi skill là một file `.claude/skills/<name>/SKILL.md` (tách ra ở M1 bước 8). Claude Code tự nạp skill khi task khớp mô tả; nội dung chi tiết **chỉ sửa trong file skill**, không chép lại vào đây.
 
-### 10.1 `tenant-safe-feature`
-```markdown
----
-name: tenant-safe-feature
-description: Quy trình thêm bảng, endpoint, job hoặc màn hình admin đụng tới dữ liệu khách thuê. Dùng mỗi khi thêm hoặc sửa bất kỳ tính năng nào đọc/ghi dữ liệu của doanh nghiệp, kể cả khi task không nhắc tới "tenant".
----
-1. Bảng mới: thêm `tenant_id uuid not null references tenants(id) on delete cascade` + index.
-2. Entity implement `ITenantOwned` (để global query filter tự áp dụng). Thêm hàm trong repository `src/ZaloAi.Infrastructure/Repositories/<Name>Repository.cs`, tham số đầu tiên luôn là `Guid tenantId`.
-3. Endpoint API lấy `tenantId` từ `ITenantContext` (đọc từ cookie session), KHÔNG lấy từ body/query/route.
-4. Job Hangfire nhận `tenantId` làm tham số và set vào `ITenantContext` đầu job; tenantId do API/webhook xác định, không suy ra từ input của khách cuối.
-5. Kiểm tra quyền: owner, staff, super_admin.
-6. Viết test cô lập (`tests/ZaloAi.IntegrationTests`, Testcontainers): tenant A tạo dữ liệu, tenant B gọi cùng API → 404 (không phải 403, để không lộ sự tồn tại).
-7. Nếu có dữ liệu cá nhân: thêm vào luồng xóa/xuất dữ liệu (M6).
-```
+| Skill | Dùng khi |
+| --- | --- |
+| `tenant-safe-feature` | Thêm/sửa bảng, endpoint, job, màn hình đụng dữ liệu doanh nghiệp (kể cả khi task không nhắc "tenant") |
+| `db-migration` | Thêm/sửa/xóa bảng, cột, index, đổi số chiều vector |
+| `add-industry-template` | Thêm hoặc chỉnh mẫu ngành |
+| `add-ai-provider` | Thêm/đổi nhà cung cấp hoặc model AI |
+| `debug-bot-answer` | Bot trả lời sai, bịa, hoặc không trả lời |
+| `zalo-api-work` | Bất cứ việc gì với API Zalo (OAuth, webhook, gửi tin, ZNS, token) |
+| `add-care-flow` | Flow chăm sóc chủ động (GĐ2) |
 
-### 10.2 `db-migration`
-```markdown
----
-name: db-migration
-description: Cách thay đổi schema Postgres/EF Core an toàn. Dùng mỗi khi thêm/sửa/xóa bảng, cột, index, hoặc đổi số chiều vector.
----
-1. Sửa entity + cấu hình (`IEntityTypeConfiguration`) trong `src/ZaloAi.Infrastructure/Persistence/`.
-2. `dotnet ef migrations add <Ten> -p src/ZaloAi.Infrastructure -s src/ZaloAi.Api`, rồi `dotnet ef migrations script` để đọc lại SQL sinh ra.
-3. Không xóa cột đang dùng trong cùng một lần deploy: thêm cột mới → deploy code dùng cả hai → migrate dữ liệu → xóa cột cũ ở lần sau.
-4. Index trên bảng lớn dùng `CREATE INDEX CONCURRENTLY` (migration riêng, `migrationBuilder.Sql(..., suppressTransaction: true)`).
-5. Đổi model hoặc số chiều embedding: tạo cột/bảng vector mới, job re-embed toàn bộ, chuyển truy vấn, rồi mới xóa cái cũ.
-6. Cập nhật seed nếu cần. Ghi vào DECISIONS.md nếu thay đổi lớn.
-```
+Skill của FE nằm ở `../zalo-ai-portal/.claude/skills/`: `portal-page`, `portal-form`, `api-client-sync`, `portal-ui` (giao diện theo skill `ui-ux-pro-max` đặt trong repo FE, trong ranh giới dự án). Bảng mô tả ở CLAUDE.md của FE.
 
-### 10.3 `add-industry-template`
-```markdown
----
-name: add-industry-template
-description: Thêm mẫu ngành mới (spa, nha khoa, bất động sản, sửa chữa nhà...). Dùng khi chủ dự án muốn bot hỗ trợ ngành mới hoặc chỉnh kịch bản của ngành có sẵn.
----
-Đọc `docs/INDUSTRIES.md` trước (mức rủi ro, nội dung từng ngành, quy trình mở ngành). Không train model; ngành = mẫu ngành + kho kiến thức của DN.
-Tạo `src/ZaloAi.IndustryTemplates/Templates/<slug>/` (file nhúng `EmbeddedResource`) gồm:
-- `template.json`: slug, tên, mức rủi ro (low|medium|high), `medicalSafety` (bool), phiên bản.
-- `persona.md`: vai trò, giọng văn, xưng hô mặc định.
-- `rules.md`: điều bot phải làm/không làm trong ngành.
-- `forbidden.json`: cụm từ cấm (ví dụ ngành y, thẩm mỹ: "cam kết", "trị dứt điểm", "100%", "không tác dụng phụ"), kèm câu thay thế.
-- `danger_signals.json`: dấu hiệu cần chuyển người gấp/khẩn cấp + câu trả lời khẩn cấp.
-- `lead_fields.json`: thông tin cần thu thập (ví dụ sửa nhà: địa chỉ công trình, hạng mục, diện tích, thời gian muốn làm).
-- `required_docs.md`: tài liệu DN phải nạp trước khi bật bot.
-- `faq_sample.md`: dữ liệu mẫu để demo.
-- `care_flows.json` (GĐ2): flow chăm sóc mẫu.
-- `evals.json`: câu hỏi thường + câu bẫy; ngành `medicalSafety` thêm ≥ 20 câu an toàn (phải đạt 100%).
-Đăng ký slug trong `IndustryTemplateRegistry.cs`. Viết test: prompt builder nạp đúng template; câu trả lời chứa cụm cấm bị chặn; dấu hiệu nguy hiểm kích hoạt chuyển người khẩn cấp. Ngành mức "chưa mở" trong INDUSTRIES.md → không làm, báo chủ dự án hỏi luật sư.
-```
-
-### 10.4 `add-ai-provider`
-```markdown
----
-name: add-ai-provider
-description: Thêm hoặc đổi nhà cung cấp AI (Gemini, Claude, model khác). Dùng khi đổi model chat/embedding hoặc thêm provider mới.
----
-1. Implement `IAiProvider` trong `src/ZaloAi.Ai/Providers/`:
-   `Task<ChatResult> ChatAsync(ChatRequest req, CancellationToken ct)` — req: `System, Messages, JsonSchema?, MaxTokens, Timeout`; result: `Text, Json?, Usage(InputTokens, OutputTokens), CostUsd`
-   `Task<float[][]> EmbedAsync(IReadOnlyList<string> texts, CancellationToken ct)`
-2. Đọc model và key từ config (Options), không hardcode.
-3. Map lỗi của provider về exception chung: `AiRateLimitedException`, `AiTimeoutException`, `AiProviderException` để job Hangfire retry đúng.
-4. Tính chi phí từ bảng giá trong config (cập nhật thủ công theo trang giá của provider).
-5. Chạy bộ eval nhỏ (`src/ZaloAi.Ai/Evals/`) so sánh chất lượng trả lời tiếng Việt với provider cũ trước khi đổi ở production.
-6. Nhắc chủ dự án: production chỉ dùng gói trả phí có cam kết không dùng dữ liệu để huấn luyện.
-```
-
-### 10.5 `debug-bot-answer`
-```markdown
----
-name: debug-bot-answer
-description: Điều tra vì sao bot trả lời sai, bịa, hoặc không trả lời. Dùng khi chủ dự án hoặc khách báo "bot nói sai giá", "bot trả lời lạ", "bot không trả lời".
----
-1. Tìm tin nhắn trong `messages` (theo tenant, thời gian). Lấy `ai_trace` gồm: chunk ids đã dùng, prompt version, model, output JSON, lý do handoff.
-2. Kiểm tra theo thứ tự:
-   a. Dữ liệu có thông tin đúng không? (tài liệu cũ, chưa ingest xong, ingest lỗi)
-   b. Search có lấy đúng chunk không? (chạy lại search với câu hỏi, xem điểm similarity)
-   c. Prompt có hướng dẫn đúng không?
-   d. Model có làm theo không?
-3. Sửa đúng tầng gây lỗi. Thêm câu hỏi đó vào bộ eval để không tái diễn.
-4. Không tắt quy tắc "không biết thì chuyển người" để sửa lỗi.
-```
-
-### 10.6 `zalo-api-work`
-```markdown
----
-name: zalo-api-work
-description: Làm bất cứ việc gì với API Zalo (OAuth, webhook, gửi tin, ZNS, token). Dùng mỗi khi code đụng tới src/ZaloAi.Channels/Zalo hoặc callback/webhook Zalo.
----
-1. Đọc `docs/zalo-api-notes.md` trước. Nếu thông tin cần dùng chưa có hoặc cũ hơn 3 tháng → nhờ chủ dự án kiểm tra docs chính thức, ghi lại kèm ngày.
-2. Mọi lệnh gọi Zalo đi qua `ZaloClient` (typed HttpClient) trong adapter, có timeout, retry (resilience handler), log (đã redact).
-3. Refresh token: dùng Redis lock theo OA, đọc lại token sau khi lấy được lock (có thể worker khác đã refresh), lưu token mới trong cùng transaction.
-4. Lỗi token không hợp lệ/bị thu hồi → đánh dấu connection `needs_reauth`, thông báo DN, dừng gửi.
-5. Tôn trọng khung thời gian được phép nhắn chủ động; ngoài khung chỉ gửi ZNS theo mẫu đã duyệt.
-6. Test bằng fixture payload thật (đã xóa PII) lưu ở `tests/ZaloAi.UnitTests/Fixtures/Zalo/`.
-```
-
-### 10.7 `add-care-flow` (GĐ2)
-```markdown
----
-name: add-care-flow
-description: Thêm loại flow chăm sóc khách hàng hoặc bước mới trong flow (chờ, điều kiện, gửi tin, gắn nhãn, báo nhân viên). Dùng khi làm tính năng chăm sóc chủ động.
----
-1. Flow = trigger → [condition] → action → wait → ... lưu dạng JSON (jsonb), validate bằng FluentValidation.
-2. Trước mỗi lần gửi: kiểm tra đồng ý nhận tin, khung giờ, tần suất tối đa, điều kiện dừng (đã mua, đã phản hồi, đã hủy).
-3. Chọn kênh: còn trong khung → tin tư vấn; ngoài khung → ZNS (nếu có mẫu phù hợp) → không gửi được thì bỏ qua và ghi log.
-4. Khách trả lời giữa flow → chuyển về luồng hội thoại bình thường, flow tạm dừng.
-5. Mọi lần gửi ghi vào `flow_runs` để báo cáo và làm bằng chứng tuân thủ.
-```
+Vận hành (Sentry, backup, CI): `docs/OPERATIONS.md`.
 
 ---
 
@@ -412,14 +324,14 @@ Thứ tự bắt buộc: M0 → M1 → M2 → M3 → M4 → M5 → M6. Không nh
 
 ### M1 — Nền tảng (tuần 1)
 Task:
-- [ ] BE: solution .NET 10 (`ZaloAi.sln`, `Directory.Build.props`, `Directory.Packages.props`), analyzers, `dotnet format`, xUnit; docker-compose (pgvector/pgvector:pg16, redis:7).
-- [ ] `ZaloAi.Core` + `ZaloAi.Infrastructure`: Options có validate, Serilog có redact, crypto AES-256-GCM, exception chung, `ITenantContext`.
-- [ ] EF Core: DbContext + migration đầu tiên (bảng bên dưới), global query filter tenant, repository có tenant, seed 2 tenant.
-- [ ] `ZaloAi.Api`: `/health`, auth (đăng nhập, đăng xuất, cookie httpOnly), gắn `tenantId` + `role`, rate limit, OpenAPI, endpoint cài đặt tenant.
-- [ ] `ZaloAi.Worker`: Hangfire server, 1 job mẫu, retry backoff, job lỗi hết lượt → cảnh báo.
-- [ ] Repo FE `zalo-ai-portal`: Next.js, trang đăng nhập, layout, trang cài đặt tenant (tên, ngành, tên bot, xưng hô, link chính sách bảo mật); rewrite `/api/*` → BE; `pnpm gen:api`.
-- [ ] Sentry cho api + worker. Script backup database.
-- [ ] Tách skills ra `.claude/skills/`. Tạo `docs/PROGRESS.md`, `docs/DECISIONS.md`, `docs/zalo-api-notes.md`.
+- [x] BE: solution .NET 10 (`ZaloAi.sln`, `Directory.Build.props`, `Directory.Packages.props`), analyzers, `dotnet format`, xUnit; docker-compose (pgvector/pgvector:pg16, redis:7).
+- [x] `ZaloAi.Core` + `ZaloAi.Infrastructure`: Options có validate, Serilog có redact, crypto AES-256-GCM, exception chung, `ITenantContext`.
+- [x] EF Core: DbContext + migration đầu tiên (bảng bên dưới), global query filter tenant, repository có tenant, seed 2 tenant.
+- [x] `ZaloAi.Api`: `/health`, auth (đăng nhập, đăng xuất, cookie httpOnly), gắn `tenantId` + `role`, rate limit, OpenAPI, endpoint cài đặt tenant.
+- [x] `ZaloAi.Worker`: Hangfire server, 1 job mẫu, retry backoff, job lỗi hết lượt → cảnh báo.
+- [x] Repo FE `zalo-ai-portal`: Next.js, trang đăng nhập, layout, trang cài đặt tenant (tên, ngành, tên bot, xưng hô, link chính sách bảo mật); rewrite `/api/*` → BE; `pnpm gen:api`.
+- [x] Sentry cho api + worker. Script backup database.
+- [x] Tách skills ra `.claude/skills/`. Tạo `docs/PROGRESS.md`, `docs/DECISIONS.md`, `docs/zalo-api-notes.md`.
 
 Bảng dữ liệu khởi đầu (thêm dần theo module):
 ```
@@ -444,72 +356,73 @@ Tiêu chí xong: `docker compose up` + `dotnet run` (api, worker) + `pnpm dev` (
 
 ### M2 — Kho kiến thức (tuần 2)
 Task:
-- [ ] API upload file (pdf, docx, xlsx, txt, md) ≤ 20MB → lưu file (local dev / object storage prod) → tạo `documents` pending → enqueue `ingest`.
-- [ ] Worker ingest: parse → làm sạch → chia chunk (~500–800 token, overlap ~15%, giữ tiêu đề mục trong meta) → embed theo batch → lưu `chunks`. Cập nhật status, lỗi thì ghi `error`.
-- [ ] CRUD FAQ (câu hỏi + trả lời) → mỗi FAQ là một document nhỏ, sửa là re-embed.
-- [ ] Xóa document → xóa chunks.
-- [ ] Index HNSW trên `embedding`; hàm `searchChunks(tenantId, query, k)` lọc tenant trước.
-- [ ] Admin: trang Kho kiến thức (danh sách, trạng thái, upload, FAQ, xóa), ô "thử tìm kiếm".
+- [x] API upload file (pdf, docx, xlsx, txt, md) ≤ 20MB → lưu file (local dev / object storage prod) → tạo `documents` pending → enqueue `ingest`.
+- [x] Worker ingest: parse → làm sạch → chia chunk (~500–800 token, overlap ~15%, giữ tiêu đề mục trong meta) → embed theo batch → lưu `chunks`. Cập nhật status, lỗi thì ghi `error`.
+- [x] CRUD FAQ (câu hỏi + trả lời) → mỗi FAQ là một document nhỏ, sửa là re-embed. — Làm qua mẫu dữ liệu (sheet "Câu hỏi thường gặp"; sửa = xuất → sửa → nhập, chỉ mục đổi được đánh chỉ mục lại). Chưa có form sửa từng câu trên giao diện (để sau nếu DN cần).
+- [x] Xóa document → xóa chunks.
+- [x] Index HNSW trên `embedding`; hàm `searchChunks(tenantId, query, k)` lọc tenant trước.
+- [x] Admin: trang Kho kiến thức (danh sách, trạng thái, upload, FAQ, xóa), ô "thử tìm kiếm".
+- [x] (Mở rộng, chủ dự án duyệt 2026-10-03) Mẫu dữ liệu chuẩn có Mã + so sánh/gộp kiểu review pull request khi nhập bản mới — `docs/KNOWLEDGE-FORMAT.md`.
 
 Tiêu chí xong: upload bảng giá thật của DN dùng thử, tìm "giá sơn lại phòng 20m2" (ví dụ) ra đúng chunk; tenant B không tìm thấy dữ liệu tenant A (có test).
 
 ### M3 — Lõi AI + chat thử (tuần 3)
 Task:
-- [ ] `aiProvider` với 2 implementation: gemini, anthropic (skill 10.4).
-- [ ] PII masking: nhận diện SĐT VN, email, số CCCD, (tên/địa chỉ nếu khách tự khai trong form thu thập) → thay bằng placeholder trước khi gửi AI; ghép lại khi cần.
-- [ ] Prompt builder: persona + rules ngành + cài đặt tenant + chunks (có id) + tóm tắt hội thoại + N tin gần nhất.
-- [ ] Output JSON có cấu trúc:
+- [x] `IChatProvider`: Gemini (+ `fake` cho test). Bỏ Claude — chủ dự án chốt 2026-10-04 (skill add-ai-provider).
+- [x] PII masking: nhận diện SĐT VN, email, số CCCD, (tên/địa chỉ nếu khách tự khai trong form thu thập) → thay bằng placeholder trước khi gửi AI; ghép lại khi cần.
+- [x] Prompt builder: persona + rules ngành + cài đặt tenant + chunks (có id) + tóm tắt hội thoại + N tin gần nhất.
+- [x] Output JSON có cấu trúc:
   `{ reply, used_chunk_ids[], confidence: high|medium|low, needs_human, handoff_reason, lead_fields{}, sentiment }`
   Parse lỗi → retry 1 lần → vẫn lỗi thì trả câu mặc định và chuyển người.
-- [ ] Quy tắc: không có chunk liên quan hoặc confidence low → không trả lời bừa, xin thông tin liên hệ và chuyển người.
-- [ ] Bộ lọc câu cấm theo ngành chạy trên `reply` trước khi gửi.
-- [ ] Khung mẫu ngành theo `docs/INDUSTRIES.md`; gợi ý gói khi khách hỏi; ngành rủi ro cao: bộ an toàn y tế (cờ `medically_reviewed`, dấu hiệu nguy hiểm, `urgency`, chuyển khẩn cấp).
-- [ ] Tin chào đầu tiên có câu báo trợ lý AI + link chính sách.
-- [ ] Tóm tắt hội thoại dài định kỳ để tiết kiệm token.
-- [ ] Ghi `ai_trace` và `usage_records` cho mọi lần gọi.
-- [ ] `ChannelAdapter` interface + adapter `webchat` (dùng cho khung chat thử trong admin, cùng luồng hàng đợi/worker với Zalo sau này).
-- [ ] Admin: trang "Chat thử" và trang cài đặt giọng văn.
-- [ ] `src/ZaloAi.Ai/Evals/`: 20–30 câu hỏi mẫu của ngành đầu tiên + đáp án mong đợi, script chạy eval.
+- [x] Quy tắc: không có chunk liên quan hoặc confidence low → không trả lời bừa, xin thông tin liên hệ và chuyển người.
+- [x] Bộ lọc câu cấm theo ngành chạy trên `reply` trước khi gửi.
+- [x] Khung mẫu ngành theo `docs/INDUSTRIES.md`; gợi ý gói khi khách hỏi; ngành rủi ro cao: bộ an toàn y tế (cờ `medically_reviewed`, dấu hiệu nguy hiểm, `urgency`, chuyển khẩn cấp).
+- [x] Tin chào đầu tiên có câu báo trợ lý AI + link chính sách.
+- [x] Tóm tắt hội thoại dài định kỳ để tiết kiệm token.
+- [x] Ghi `ai_trace` và `usage_records` cho mọi lần gọi.
+- [x] `ChannelAdapter` interface + adapter `webchat` (dùng cho khung chat thử trong admin, cùng luồng hàng đợi/worker với Zalo sau này).
+- [x] Admin: trang "Chat thử" và trang cài đặt giọng văn.
+- [x] `src/ZaloAi.Ai/Evals/`: 20–30 câu hỏi mẫu của ngành đầu tiên + đáp án mong đợi, script chạy eval.
 
 Tiêu chí xong: chủ DN dùng thử tự chat trên khung chat thử và đánh giá câu trả lời đạt; eval pass ≥ mức chủ dự án chốt; câu hỏi ngoài dữ liệu được chuyển người, không bịa. **Chưa đạt thì chưa sang M4.**
 
 ### M4 — Kết nối Zalo (tuần 4)
 Trước khi code: dùng skill `zalo-api-work`, cập nhật `docs/zalo-api-notes.md` (OAuth cho OA, đổi/làm mới token, thời hạn token, chữ ký webhook, API gửi tin tư vấn, các loại sự kiện, giới hạn tốc độ).
 Task:
-- [ ] Adapter `zalo`: `ZaloClient` (timeout, retry, redact), parse sự kiện webhook → định dạng chung.
-- [ ] OAuth: `/connect/zalo/start` (tạo state, PKCE nếu cần) → `/connect/zalo/callback` → lưu connection mã hóa. Hỗ trợ nhiều OA/tenant.
-- [ ] Webhook `/webhooks/zalo`: xác thực chữ ký → dedupe `external_msg_id` → tìm connection theo OA ID → enqueue `incoming-message` → 200.
-- [ ] Worker dùng chung luồng với webchat; gửi trả lời qua Zalo API.
-- [ ] Job `token-refresh` chạy định kỳ, refresh trước hạn, Redis lock theo OA; lỗi → `needs_reauth` + thông báo.
-- [ ] Xử lý sự kiện: tin text, ảnh (GĐ1 chỉ ghi nhận + chuyển người hoặc trả lời chung), follow/unfollow.
-- [ ] Rate limit gửi theo OA; retry với backoff.
-- [ ] Admin: trang Kết nối kênh (kết nối, trạng thái, ngắt kết nối).
-- [ ] Hướng dẫn chạy local với ngrok/cloudflared trong README.
+- [x] Adapter `zalo`: `ZaloClient` (timeout, retry, redact), parse sự kiện webhook → định dạng chung.
+- [x] OAuth: `/connect/zalo/start` (tạo state, PKCE nếu cần) → `/connect/zalo/callback` → lưu connection mã hóa. Hỗ trợ nhiều OA/tenant.
+- [x] Webhook `/webhooks/zalo`: xác thực chữ ký → dedupe `external_msg_id` → tìm connection theo OA ID → enqueue `incoming-message` → 200.
+- [x] Worker dùng chung luồng với webchat; gửi trả lời qua Zalo API.
+- [x] Job `token-refresh` chạy định kỳ, refresh trước hạn, Redis lock theo OA; lỗi → `needs_reauth` + thông báo.
+- [ ] Xử lý sự kiện: tin text, ảnh (GĐ1 chỉ ghi nhận + chuyển người hoặc trả lời chung), follow/unfollow. — Text, ảnh/file/sticker, OA gửi tin (nhân viên trả lời trong app OA) xong; follow/unfollow chờ docs payload (hiện bỏ qua).
+- [x] Rate limit gửi theo OA; retry với backoff.
+- [x] Admin: trang Kết nối kênh (kết nối, trạng thái, ngắt kết nối).
+- [x] Hướng dẫn chạy local với ngrok/cloudflared trong README.
 
 Tiêu chí xong: nhắn vào OA test từ Zalo cá nhân → nhận câu trả lời đúng trong vài giây; ngắt kết nối → dừng trả lời; giả lập token hết hạn → tự refresh; gửi webhook trùng → chỉ trả lời 1 lần; chữ ký sai → 401.
 
 ### M5 — Inbox + tiếp quản (tuần 5)
 Task:
-- [ ] API danh sách hội thoại (lọc: cần xử lý, đang bot, đang người, theo nhãn), chi tiết tin nhắn.
-- [ ] Realtime bằng SSE (đơn giản hơn websocket) cho admin.
-- [ ] Nút "Tiếp quản" (mode=human, gán nhân viên) và "Trả lại cho bot".
-- [ ] Nhân viên gửi tin từ admin → đi qua adapter kênh.
-- [ ] Tự chuyển người khi: `needs_human`, khách đòi gặp người, sentiment tiêu cực, low confidence liên tiếp, dấu hiệu khẩn cấp. Câu chuyển tiếp cho 4 tình huống + chữ ký nhân viên + giờ làm việc, cấu hình theo tenant (`docs/FEATURE-SPECS.md` mục 1).
-- [ ] Hội thoại ở mode human quá X phút không ai trả lời → nhắc lại / cảnh báo.
-- [ ] Thông báo nhân viên qua Telegram (GĐ1), mỗi tenant cấu hình chat id.
-- [ ] Phân quyền owner/staff cơ bản; audit log khi xem/xuất dữ liệu.
+- [x] API danh sách hội thoại (lọc: cần xử lý, đang bot, đang người, theo nhãn), chi tiết tin nhắn.
+- [x] Realtime bằng SSE (đơn giản hơn websocket) cho admin.
+- [x] Nút "Tiếp quản" (mode=human, gán nhân viên) và "Trả lại cho bot".
+- [x] Nhân viên gửi tin từ admin → đi qua adapter kênh.
+- [x] Tự chuyển người khi: `needs_human`, khách đòi gặp người, sentiment tiêu cực, low confidence (chuyển ngay từ lần đầu, chặt hơn "liên tiếp"), dấu hiệu khẩn cấp. Câu chuyển tiếp cho 4 tình huống + chữ ký nhân viên + giờ làm việc, cấu hình theo tenant (`docs/FEATURE-SPECS.md` mục 1).
+- [x] Hội thoại ở mode human quá X phút không ai trả lời → nhắc lại / cảnh báo.
+- [x] Thông báo nhân viên qua Telegram (GĐ1), mỗi tenant cấu hình chat id.
+- [x] Phân quyền owner/staff cơ bản; audit log khi xem/xuất dữ liệu. — Xem hội thoại có audit; xuất dữ liệu ở M6.
 
 Tiêu chí xong: nhân viên thấy tin mới realtime, tiếp quản và trả lời từ admin tới được Zalo của khách; bot không chen vào khi đang human.
 
 ### M6 — Khách tiềm năng, báo cáo, quản trị (tuần 6)
 Task:
-- [ ] Gộp `lead_fields` từ AI vào `contacts` (theo template ngành), lead_status tự động + sửa tay.
-- [ ] Trang Khách tiềm năng: lọc, xem hội thoại, xuất Excel (ghi audit log).
-- [ ] Trang "Cần chăm sóc": AI gợi ý khách nhân viên nên chủ động nhắn (mức độ, lý do, tin nháp, hạn nhắn OA, gán nhân viên), bảng `care_suggestions` (`docs/FEATURE-SPECS.md` mục 2).
-- [ ] Dashboard: hội thoại/ngày, khách tiềm năng mới, tỷ lệ bot tự xử lý, danh sách câu bot không trả lời được.
-- [ ] Xóa/xuất dữ liệu một khách cuối; xóa toàn bộ dữ liệu tenant.
-- [ ] Super admin (chỉ chủ dự án): danh sách tenant, gói, hạn, trạng thái, chi phí AI theo tháng, khóa/mở tenant.
-- [ ] Hạn mức hội thoại/tháng theo gói: gần hết → cảnh báo; hết → theo cấu hình (chuyển hết sang người hoặc chặn).
+- [x] Gộp `lead_fields` từ AI vào `contacts` (theo template ngành), lead_status tự động + sửa tay. — 5 tầng Mới → Quan tâm → Nóng → Đã chốt → Không tiềm năng (chủ dự án chốt 2026-10-04), nhãn, nhật ký chăm sóc của nhân viên.
+- [x] Trang Khách tiềm năng: lọc, xem hội thoại, xuất Excel (ghi audit log). — trang "Khách hàng" + hồ sơ khách.
+- [x] Trang "Cần chăm sóc": AI gợi ý khách nhân viên nên chủ động nhắn (mức độ, lý do, tin nháp, hạn nhắn OA, gán nhân viên), bảng `care_suggestions` (`docs/FEATURE-SPECS.md` mục 2).
+- [x] Dashboard: hội thoại/ngày, khách tiềm năng mới, tỷ lệ bot tự xử lý, danh sách câu bot không trả lời được.
+- [x] Xóa/xuất dữ liệu một khách cuối; xóa toàn bộ dữ liệu tenant.
+- [x] Super admin (chỉ chủ dự án): danh sách tenant, gói, hạn, trạng thái, chi phí AI theo tháng, khóa/mở tenant. — kèm tạo DN + mật khẩu tạm, tự khóa khi quá hạn 3 ngày.
+- [x] Hạn mức hội thoại/tháng theo gói: gần hết → cảnh báo; hết → theo cấu hình (chuyển hết sang người hoặc chặn). — chủ dự án chốt: hết → khách MỚI chuyển nhân viên, khách đã nhắn trong tháng vẫn được bot trả lời.
 
 Tiêu chí xong: DN dùng thử xem được lead và báo cáo tuần; nhân viên nhắn được khách từ trang "Cần chăm sóc"; chủ dự án thấy chi phí AI từng tenant.
 
@@ -533,6 +446,18 @@ Tiêu chí xong: DN dùng thử xem được lead và báo cáo tuần; nhân vi
 - Thanh toán tự động (QR chuyển khoản, cổng thanh toán), hóa đơn.
 - Zalo Mini App (đặt lịch, xem sản phẩm), PWA cho admin.
 - Kênh Facebook Messenger, chat website (adapter mới trong `src/ZaloAi.Channels`).
+
+### Giai đoạn CRM (chốt 2026-10-15, làm TRƯỚC tuần 7–8 và trước Giai đoạn 2/3)
+Thứ tự bắt buộc C1 → C8, chi tiết và schema ở `docs/CRM-PLAN.md`. Mỗi đợt: kế hoạch → duyệt → code → test → chủ dự án test tay.
+- [x] C1 Nền CRM: chi nhánh, danh mục (dịch vụ/gói/sản phẩm ↔ kho kiến thức), nhân viên + ca làm, quyền chi tiết. (2026-10-15)
+- [x] C2 Lịch hẹn: lịch theo nhân viên/giường, đặt tay, bot tự chốt/đổi/hủy (hệ thống kiểm tra chỗ), nhắc lịch, check-in, tóm tắt khách, định kỳ, hàng chờ. (2026-10-15)
+- [x] C3 Bán hàng & gói: hóa đơn, giảm giá có duyệt, thanh toán + VietQR, phiếu thu qua Zalo, gói trừ buổi, thẻ trả trước, voucher, chốt ca. (2026-10-15; cọc giữ chỗ → C8 cùng trang đặt lịch online)
+- [x] C4 Kho hàng: tồn kho theo chi nhánh, nhập/xuất/kiểm kê/chuyển, định mức vật tư, cảnh báo. (2026-10-15)
+- [x] C5 Nhân viên nâng cao: hoa hồng, hiệu suất, chấm công. (2026-10-15)
+- [x] C6 Báo cáo: hôm nay, doanh thu đủ chiều, hiệu quả AI, lấp đầy, giữ chân, công nợ, báo cáo tuần, hỏi số liệu tiếng Việt. (2026-10-15)
+- [ ] C7 AI dùng CRM: chăm sóc sau buổi theo hóa đơn, khảo sát, gói sắp hết, kéo khách, sinh nhật, giới thiệu, báo giá chủ động.
+- [ ] C8 Trải nghiệm: PWA + push, đặt lịch online, hạng thành viên, ảnh trước/sau, phiếu cam kết.
+Các tính năng GĐ2/GĐ3 trùng với CRM (đặt lịch, nhắc lịch, sinh nhật, kéo khách, nhiều nhân viên) được làm trong CRM.
 
 ---
 

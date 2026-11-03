@@ -5,20 +5,45 @@
     <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
   <ItemGroup>
+    <!-- Bản vá bảo mật cho gói gián tiếp (2026-10-14): 10.0.0–10.0.12 có lỗi DoS (CVE-2026-70162, CVE-2026-84008,
+         CVE-2026-96958/96959/96960), vá ở 10.0.13. Bỏ ghim khi các gói kéo nó vào đã tự lên bản vá. -->
+    <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
+    <PackageVersion Include="System.Security.Cryptography.Xml" Version="10.0.13" />
     <!-- Hosting -->
     <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.12" />
     <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.12" />
     <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.12" />
     <PackageVersion Include="Microsoft.Extensions.Options.DataAnnotations" Version="10.0.12" />
     <PackageVersion Include="Microsoft.Extensions.Identity.Core" Version="10.0.12" />
+    <!-- Api -->
+    <PackageVersion Include="FluentValidation" Version="12.1.1" />
+    <PackageVersion Include="FluentValidation.DependencyInjectionExtensions" Version="12.1.1" />
+    <PackageVersion Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.12" />
     <!-- Database -->
     <PackageVersion Include="EFCore.NamingConventions" Version="10.0.1" />
+    <!-- Gọi HTTP ra ngoài -->
+    <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="10.10.0" />
+    <!-- Đọc/ghi file -->
+    <PackageVersion Include="DocumentFormat.OpenXml" Version="3.5.1" />
+    <PackageVersion Include="PdfPig" Version="0.1.16" />
+    <PackageVersion Include="ClosedXML" Version="0.105.1" />
+    <!-- Mã QR thanh toán VietQR (CRM C3, 2026-10-15): MIT, thuần .NET (PngByteQRCode) -->
+    <PackageVersion Include="QRCoder" Version="1.8.1" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.12" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Abstractions" Version="10.0.12" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.12" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.12" />
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
     <PackageVersion Include="Pgvector.EntityFrameworkCore" Version="0.3.0" />
+    <!-- Jobs -->
+    <PackageVersion Include="StackExchange.Redis" Version="3.3.1" />
+    <PackageVersion Include="Hangfire.AspNetCore" Version="1.8.25" />
+    <PackageVersion Include="Hangfire.Core" Version="1.8.25" />
+    <PackageVersion Include="Hangfire.NetCore" Version="1.8.25" />
+    <PackageVersion Include="Hangfire.PostgreSql" Version="1.21.1" />
+    <!-- Hangfire.Core kéo Newtonsoft.Json 11 (lỗ hổng GHSA-5crp-9r3c-p9vr): ghim bản đã vá. -->
+    <PackageVersion Include="Newtonsoft.Json" Version="13.0.4" />
     <!-- Logging -->
     <PackageVersion Include="Serilog" Version="4.4.0" />
     <PackageVersion Include="Serilog.AspNetCore" Version="10.0.0" />
@@ -26,9 +51,13 @@
     <PackageVersion Include="Serilog.Formatting.Compact" Version="3.0.0" />
     <PackageVersion Include="Serilog.Settings.Configuration" Version="10.0.1" />
     <PackageVersion Include="Serilog.Sinks.Console" Version="6.1.1" />
+    <!-- Errors -->
+    <PackageVersion Include="Sentry.AspNetCore" Version="6.12.0" />
+    <PackageVersion Include="Sentry.Serilog" Version="6.12.0" />
     <!-- Test -->
     <PackageVersion Include="Shouldly" Version="4.3.0" />
     <PackageVersion Include="Testcontainers.PostgreSql" Version="4.15.0" />
+    <PackageVersion Include="Testcontainers.Redis" Version="4.15.0" />
     <PackageVersion Include="coverlet.collector" Version="6.0.4" />
     <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.12" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />

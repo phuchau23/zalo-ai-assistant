@@ -1,4 +1,5 @@
 using System.Reflection;
+using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using ZaloAi.Core.Entities;
 using ZaloAi.Core.Errors;
@@ -13,15 +14,132 @@ namespace ZaloAi.Infrastructure.Persistence;
 /// 2. SaveChanges từ chối ghi/sửa/xóa dòng không thuộc tenant hiện tại.
 /// Cấm IgnoreQueryFilters() trừ code super admin / job hệ thống có comment lý do (CLAUDE.md mục 8).
 /// </summary>
-public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenantContext tenantContext) : DbContext(options)
+public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenantContext tenantContext)
+    : DbContext(options), IDataProtectionKeyContext
 {
     public DbSet<Tenant> Tenants => Set<Tenant>();
+
+    /// <summary>Khóa mã hóa cookie đăng nhập của ASP.NET Core. Bảng hệ thống, không thuộc tenant.</summary>
+    public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
 
     public DbSet<User> Users => Set<User>();
 
     public DbSet<Membership> Memberships => Set<Membership>();
 
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+
+    public DbSet<KnowledgeItem> KnowledgeItems => Set<KnowledgeItem>();
+
+    public DbSet<KnowledgeImport> KnowledgeImports => Set<KnowledgeImport>();
+
+    public DbSet<KnowledgeDocument> Documents => Set<KnowledgeDocument>();
+
+    public DbSet<Chunk> Chunks => Set<Chunk>();
+
+    public DbSet<Contact> Contacts => Set<Contact>();
+
+    public DbSet<Conversation> Conversations => Set<Conversation>();
+
+    public DbSet<ChannelConnection> ChannelConnections => Set<ChannelConnection>();
+
+    public DbSet<HandoffSettings> HandoffSettings => Set<HandoffSettings>();
+
+    public DbSet<Message> Messages => Set<Message>();
+
+    public DbSet<UsageRecord> UsageRecords => Set<UsageRecord>();
+
+    public DbSet<ContactNote> ContactNotes => Set<ContactNote>();
+
+    public DbSet<CareSuggestion> CareSuggestions => Set<CareSuggestion>();
+
+    // CRM C1
+    public DbSet<Branch> Branches => Set<Branch>();
+
+    public DbSet<BranchHour> BranchHours => Set<BranchHour>();
+
+    public DbSet<BranchClosure> BranchClosures => Set<BranchClosure>();
+
+    public DbSet<CatalogItem> CatalogItems => Set<CatalogItem>();
+
+    public DbSet<CatalogItemBranch> CatalogItemBranches => Set<CatalogItemBranch>();
+
+    public DbSet<PackageContent> PackageContents => Set<PackageContent>();
+
+    public DbSet<StaffMember> StaffMembers => Set<StaffMember>();
+
+    public DbSet<StaffSkill> StaffSkills => Set<StaffSkill>();
+
+    public DbSet<StaffShiftTemplate> StaffShiftTemplates => Set<StaffShiftTemplate>();
+
+    public DbSet<StaffShift> StaffShifts => Set<StaffShift>();
+
+    public DbSet<StaffTimeOff> StaffTimeOffs => Set<StaffTimeOff>();
+
+    public DbSet<CrmSettings> CrmSettings => Set<CrmSettings>();
+
+    // CRM C2
+    public DbSet<Resource> Resources => Set<Resource>();
+
+    public DbSet<Appointment> Appointments => Set<Appointment>();
+
+    public DbSet<AppointmentItem> AppointmentItems => Set<AppointmentItem>();
+
+    public DbSet<AppointmentEvent> AppointmentEvents => Set<AppointmentEvent>();
+
+    public DbSet<AppointmentSeries> AppointmentSeries => Set<AppointmentSeries>();
+
+    public DbSet<WaitlistEntry> WaitlistEntries => Set<WaitlistEntry>();
+
+    // CRM C3
+    public DbSet<Invoice> Invoices => Set<Invoice>();
+
+    public DbSet<InvoiceLine> InvoiceLines => Set<InvoiceLine>();
+
+    public DbSet<Payment> Payments => Set<Payment>();
+
+    public DbSet<CustomerPackage> CustomerPackages => Set<CustomerPackage>();
+
+    public DbSet<PackageRedemption> PackageRedemptions => Set<PackageRedemption>();
+
+    public DbSet<Wallet> Wallets => Set<Wallet>();
+
+    public DbSet<WalletTransaction> WalletTransactions => Set<WalletTransaction>();
+
+    public DbSet<Voucher> Vouchers => Set<Voucher>();
+
+    public DbSet<CashShift> CashShifts => Set<CashShift>();
+
+    public DbSet<RevenueEntry> RevenueEntries => Set<RevenueEntry>();
+
+    public DbSet<TenantBankAccount> TenantBankAccounts => Set<TenantBankAccount>();
+
+    // CRM C4
+    public DbSet<Supplier> Suppliers => Set<Supplier>();
+
+    public DbSet<StockLevel> StockLevels => Set<StockLevel>();
+
+    public DbSet<StockMovement> StockMovements => Set<StockMovement>();
+
+    public DbSet<PurchaseOrder> PurchaseOrders => Set<PurchaseOrder>();
+
+    public DbSet<PurchaseOrderLine> PurchaseOrderLines => Set<PurchaseOrderLine>();
+
+    public DbSet<StockTransfer> StockTransfers => Set<StockTransfer>();
+
+    public DbSet<StockTransferLine> StockTransferLines => Set<StockTransferLine>();
+
+    public DbSet<StockCount> StockCounts => Set<StockCount>();
+
+    public DbSet<StockCountLine> StockCountLines => Set<StockCountLine>();
+
+    public DbSet<ServiceConsumable> ServiceConsumables => Set<ServiceConsumable>();
+
+    // CRM C5
+    public DbSet<CommissionRule> CommissionRules => Set<CommissionRule>();
+
+    public DbSet<CommissionEntry> CommissionEntries => Set<CommissionEntry>();
+
+    public DbSet<Attendance> Attendance => Set<Attendance>();
 
     /// <summary>EF đọc lại giá trị này mỗi lần truy vấn (tham số hóa theo instance DbContext).</summary>
     public Guid? CurrentTenantId => tenantContext.TenantId;
