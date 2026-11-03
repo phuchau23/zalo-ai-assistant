@@ -119,6 +119,45 @@ public sealed class InboxEndpointsTests(PostgresFixture db)
     }
 
     [Fact]
+    public async Task Reminder_sweep_reminds_test_chat_once_and_real_chat_every_interval()
+    {
+        var (testTenant, _, testChat) = await HandedOffAsync("Nhắc chat thử");
+        var (realTenant, _, realChat) = await HandedOffAsync("Nhắc chat thật");
+        await SetWaitingAsync(testTenant, testChat, isTest: true, lastReminderAt: null);
+        await SetWaitingAsync(realTenant, realChat, isTest: false, lastReminderAt: null);
+        var (testQueued, realQueued) = (QueuedReminders(testChat), QueuedReminders(realChat));
+
+        await RunReminderSweepAsync();
+        QueuedReminders(testChat).ShouldBe(testQueued + 1);
+        QueuedReminders(realChat).ShouldBe(realQueued + 1);
+
+        // Đã nhắc 1 lần, quá khoảng nhắc lần nữa: chat thật nhắc tiếp, chat thử thôi.
+        await SetWaitingAsync(testTenant, testChat, isTest: true, lastReminderAt: DateTimeOffset.UtcNow.AddMinutes(-11));
+        await SetWaitingAsync(realTenant, realChat, isTest: false, lastReminderAt: DateTimeOffset.UtcNow.AddMinutes(-11));
+        await RunReminderSweepAsync();
+        QueuedReminders(testChat).ShouldBe(testQueued + 1);
+        QueuedReminders(realChat).ShouldBe(realQueued + 2);
+    }
+
+    private async Task SetWaitingAsync(Guid tenantId, Guid conversationId, bool isTest, DateTimeOffset? lastReminderAt)
+    {
+        await using var context = db.CreateDbContext(tenantId);
+        var c = await context.Conversations.SingleAsync(x => x.Id == conversationId);
+        c.IsTest = isTest;
+        c.NeedsAttentionSince = DateTimeOffset.UtcNow.AddMinutes(-30);
+        c.LastReminderAt = lastReminderAt;
+        await context.SaveChangesAsync();
+    }
+
+    private async Task RunReminderSweepAsync()
+    {
+        using var scope = db.Api.Services.CreateScope();
+        await scope.ServiceProvider.GetRequiredService<AttentionReminderSweepJob>().RunAsync(CancellationToken.None);
+    }
+
+    private int QueuedReminders(Guid conversationId) => Queued<AttentionReminderJob>(JobQueues.Default, conversationId);
+
+    [Fact]
     public async Task Return_to_bot_after_staff_answered_does_not_reply_again()
     {
         var (tenantId, owner, conversationId) = await HandedOffAsync("Trả lại bot đã trả lời");
