@@ -147,19 +147,22 @@ chị muốn hỏi gói giảm mỡ bụng
 **Đúng khi:** đợi 15 giây, bot KHÔNG trả lời; tin hiện trong Hộp thư cho nhân viên.
 
 ### 2.4 Trả lại cho bot
-💻 bấm **"Trả lại cho bot"**. 📱 gửi:
+💻 (tin cuối đang là tin khách ở 2.3, chưa ai trả lời) bấm **"Trả lại cho bot"**.
+**Đúng khi:** khách KHÔNG cần nhắn lại — trong vài giây bot tự trả lời tin "gói giảm mỡ bụng" ở 2.3: **10 buổi, 120 phút/buổi, 13.000.000đ**.
+📱 gửi tiếp:
 ```
 gói giảm mỡ bụng bao nhiêu buổi vậy em
 ```
-**Đúng khi:** bot trả lời lại: **10 buổi, 120 phút/buổi, 13.000.000đ**.
+**Đúng khi:** bot trả lời bình thường. (Nhân viên đã trả lời rồi mới bấm "Trả lại cho bot" → bot không nhắn gì thêm.)
 
 ### 2.5 Nhắc khi nhân viên bỏ quên
-💻 Cài đặt → Chuyển nhân viên → đặt số phút nhắc **nhỏ nhất** cho được → Lưu.
+Nên làm **sau 2.7** (đã kết nối Telegram) — lời nhắc chủ yếu gửi qua Telegram.
+💻 Cài đặt → **Thông báo** → "Nhắc lại khi khách chờ quá" = **5 phút** (nhỏ nhất) → Lưu.
 📱 ✎ → gửi `cho chị gặp nhân viên` → 💻 bấm Tiếp quản nhưng **không trả lời**; 📱 gửi thêm `alo em ơi`.
-**Đúng khi:** qua số phút đã đặt, Hộp thư có cảnh báo cuộc chat chờ lâu (và Telegram nếu đã kết nối).
+**Đúng khi:** Hộp thư: cuộc chat in đậm, có dòng "Khách đang chờ nhân viên · N phút" đếm lên; sau 5–6 phút nhóm Telegram nhận "[Chat thử] ⏰ Khách đã chờ quá 5 phút chưa ai trả lời". Chat thử chỉ nhắc **1 lần**; khách Zalo thật thì cứ mỗi 5 phút nhắc lại tới khi nhân viên trả lời.
 
 ### 2.6 Câu chuyển tiếp + giờ làm việc
-💻 Cài đặt → Chuyển nhân viên:
+💻 **Thiết lập trợ lý → Chuyển nhân viên**:
 - Sửa câu chuyển tiếp (thêm chữ dễ nhận ra, vd "— test 2.6") → Lưu → 📱 ✎ → `cho chị gặp nhân viên` → câu bot dùng đúng câu đã sửa.
 - Đặt giờ làm việc **kết thúc trước giờ hiện tại** (vd 08:00–09:00) → Lưu → 📱 ✎ → `cho chị gặp nhân viên` → bot dùng câu **ngoài giờ**.
 - Xong nhớ **đặt lại giờ làm việc đúng**.
