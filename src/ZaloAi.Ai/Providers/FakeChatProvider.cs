@@ -14,6 +14,9 @@ public sealed partial class FakeChatProvider : IChatProvider
 {
     public const string ModelName = "fake-chat";
 
+    /// <summary>Tin khách chứa chuỗi này → AI giả trả sai định dạng JSON (test luồng lỗi AI).</summary>
+    public const string BrokenOutputTrigger = "#fake-ai-error";
+
     private static readonly string[] NoKnowledgeMessages = ["Dạ câu này em chưa có thông tin, em chuyển nhân viên hỗ trợ mình nhé."];
     private static readonly string[] BookingLeadIn = ["Dạ để em kiểm tra lịch cho mình nha."];
 
@@ -56,6 +59,10 @@ public sealed partial class FakeChatProvider : IChatProvider
                 suggested_action = "Hỏi lại nhu cầu và mời đặt lịch.",
                 draft_message = declined ? "" : "Dạ em chào mình, em nhắn hỏi thăm mình còn quan tâm dịch vụ bên em không ạ?",
             });
+        }
+        else if (last.Contains(BrokenOutputTrigger, StringComparison.Ordinal))
+        {
+            text = "không phải json"; // giả lập AI trả sai định dạng (test luồng lỗi AI → chuyển người)
         }
         else
         {

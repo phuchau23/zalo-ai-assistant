@@ -83,7 +83,7 @@ public sealed partial class BotEngine(
             if (answer is null)
             {
                 trace.Guards.Add("invalid_output");
-                return Finish(request, texts, trace, vault, usage, Handoff(texts, "ai_error"));
+                return Finish(request, texts, trace, vault, usage, Handoff("ai_error"));
             }
 
             var violations = Violations(template, answer, chunks);
@@ -101,7 +101,7 @@ public sealed partial class BotEngine(
                 if (answer is null || Violations(template, answer, chunks).Count > 0)
                 {
                     trace.Guards.Add("forbidden_blocked");
-                    return Finish(request, texts, trace, vault, usage, Handoff(texts, "forbidden_phrase"));
+                    return Finish(request, texts, trace, vault, usage, Handoff("forbidden_phrase"));
                 }
             }
         }
@@ -109,7 +109,7 @@ public sealed partial class BotEngine(
         {
             LogAiFailed(logger, ex.GetType().Name);
             trace.Guards.Add("ai_unavailable");
-            return Finish(request, texts, trace, vault, usage, Handoff(texts, "ai_error"));
+            return Finish(request, texts, trace, vault, usage, Handoff("ai_error"));
         }
 
         return Finish(request, texts, trace, vault, usage, Decide(template, texts, answer, chunks, trace));
@@ -255,13 +255,13 @@ public sealed partial class BotEngine(
         if (used.Count == 0 && PriceDetector.MentionsPrice(reply))
         {
             trace.Guards.Add("price_without_source");
-            return Handoff(texts, "no_knowledge") with { Sentiment = answer.Sentiment, LeadFields = answer.LeadFields };
+            return Handoff("no_knowledge") with { Sentiment = answer.Sentiment, LeadFields = answer.LeadFields };
         }
 
         if (messages.Count == 0)
         {
             trace.Guards.Add("empty_reply");
-            return Handoff(texts, "ai_error");
+            return Handoff("ai_error");
         }
 
         if (answer.Confidence == "low" && !needsHuman)
@@ -309,8 +309,12 @@ public sealed partial class BotEngine(
             || folded.Contains(" bac si ", StringComparison.Ordinal);
     }
 
-    private static Decision Handoff(BotTexts texts, string reason) =>
-        new([texts.Handoff], true, reason, Urgency.None, "low", null, []);
+    /// <summary>
+    /// Bot không trả lời được → chuyển người, KHÔNG kèm câu riêng: câu chuyển tiếp DN cài (trong/ngoài giờ) do hệ thống gửi
+    /// sau đó (InboxService.AfterBotHandoffAsync) — trước đây khách nhận 2 tin gần giống nhau (chủ dự án chốt 2026-11-06).
+    /// </summary>
+    private static Decision Handoff(string reason) =>
+        new([], true, reason, Urgency.None, "low", null, []);
 
     private static BotTurnResult Finish(
         BotTurnRequest request,
@@ -502,8 +506,6 @@ public sealed partial class BotEngine(
 internal sealed class BotTexts(BotProfile profile, string salutation, string urgentReply)
 {
     public string Urgent => Fill(urgentReply);
-
-    public string Handoff => Fill("Dạ {bot} xin phép chuyển {khach} sang nhân viên của {ten_doanh_nghiep} để hỗ trợ chính xác hơn ạ. Nhân viên sẽ phản hồi {khach} sớm nhất có thể.");
 
     public string Media => Fill("Dạ {bot} đã nhận được tin của {khach}. Hiện {bot} chưa xem được hình ảnh, âm thanh hay tệp đính kèm, {khach} mô tả giúp {bot} bằng chữ nhé. {bot} cũng đã báo nhân viên của {ten_doanh_nghiep} hỗ trợ {khach} ạ.");
 

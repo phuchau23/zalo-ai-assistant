@@ -52,6 +52,20 @@ try
         return 0;
     }
 
+    // `dotnet run --project src/ZaloAi.Api -- seed-demo`: tạo lại doanh nghiệp demo đầy dữ liệu ảo (chỉ Development), rồi thoát.
+    if (args is ["seed-demo", ..])
+    {
+        Console.WriteLine(await DemoSeeder.RunAsync(app.Services, app.Environment, CancellationToken.None));
+        return 0;
+    }
+
+    // `dotnet run --project src/ZaloAi.Api -- clear-demo`: xóa hẳn doanh nghiệp demo + 2 tài khoản demo (chỉ Development), rồi thoát.
+    if (args is ["clear-demo", ..])
+    {
+        Console.WriteLine(await DemoSeeder.ClearAsync(app.Services, app.Environment, CancellationToken.None));
+        return 0;
+    }
+
     // `dotnet run --project src/ZaloAi.Api -- eval ...`: chạy bộ eval của mẫu ngành bằng AI thật, rồi thoát.
     if (EvalCli.IsEvalCommand(args))
     {
