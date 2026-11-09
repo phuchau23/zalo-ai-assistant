@@ -119,7 +119,7 @@ public sealed class BotMessagesTests
 
         result.NeedsHuman.ShouldBeTrue();
         result.HandoffReason.ShouldBe("no_knowledge");
-        result.Messages.ShouldHaveSingleItem().ShouldNotContain("300k");
+        result.Messages.ShouldBeEmpty(); // không gửi giá bịa; câu chuyển tiếp DN cài gửi sau
     }
 
     [Fact]
@@ -152,7 +152,7 @@ public sealed class BotMessagesTests
         var chat = new ScriptedChat(_ => "không phải json");
         var result = await Engine(chat, new StaticSearch()).ReplyAsync(TurnWith("alo", null, false), CancellationToken.None);
 
-        result.Reply.ShouldContain("chuyển mình sang nhân viên");
+        result.NeedsHuman.ShouldBeTrue();
         var system = chat.Requests[0].System;
         system.ShouldContain("gọi khách là \"mình\"");
         system.ShouldNotContain("gọi khách là \"anh/chị\"");
@@ -164,7 +164,7 @@ public sealed class BotMessagesTests
         var chat = new ScriptedChat(_ => "không phải json");
         var result = await Engine(chat, new StaticSearch()).ReplyAsync(TurnWith("alo", "chị", true), CancellationToken.None);
 
-        result.Reply.ShouldContain("chuyển chị sang nhân viên");
+        result.NeedsHuman.ShouldBeTrue();
         chat.Requests[0].System.ShouldContain("Nhân viên đã xác định: gọi khách là \"chị\"");
     }
 

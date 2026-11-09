@@ -382,3 +382,61 @@ Chủ dự án: key Gemini miễn phí chỉ ~20 lượt/ngày/model, hết là 
 - **Riêng tư**: mọi yêu cầu sang Groq đều đã che SĐT/email/CCCD/tên như với Gemini. Sửa thêm: diễn giải báo cáo trước đây gửi **tên khách chưa che** (khách chi nhiều nhất, công nợ) cho AI → nay che rồi ghép lại (áp dụng cả Gemini). Groq mặc định không lưu dữ liệu, có thể lưu tới 30 ngày khi điều tra sự cố/lạm dụng; mọi tài khoản bật được **Zero Data Retention** (chủ dự án cần bật); dữ liệu lưu ở Mỹ (docs console.groq.com/docs/your-data, kiểm tra 2026-11-03). Groq là **thêm một bên nhận dữ liệu ở nước ngoài** → bổ sung hồ sơ chuyển dữ liệu ra nước ngoài + chính sách bảo mật trước khi chạy thật với khách.
 - **Giới hạn**: embedding vẫn chỉ Gemini (Groq không có API embedding) — key Gemini hết lượt embedding thì bot không tìm được kho kiến thức → chuyển người. Gói Groq miễn phí giới hạn token/phút thấp (gói Developer gpt-oss-120b: 30 lượt/phút, 1.000 lượt/ngày, 8.000 token/phút) → khoảng 1–2 câu bot/phút: đủ test, không đủ cho nhiều khách cùng lúc. Production vẫn cần Gemini trả phí. Chất lượng tiếng Việt của gpt-oss chưa đo: chạy eval với `Ai__ChatProviders=groq` trước khi tin dùng.
 - **Kiểm chứng thật 2026-11-03**: eval 2 câu chỉ qua Groq đạt; schema trả lời của bot được nhận ở chế độ strict. Gói Free của chủ dự án: mỗi model gpt-oss 30 lượt/phút, 1.000 lượt/ngày, 8.000 token/phút, 200.000 token/ngày (giới hạn thật là token/ngày ≈ 50 câu bot/model/ngày). Key dán dính dấu xuống dòng làm request lỗi định dạng header (không phải AiProviderException → không chuyển người được) → nay cắt khoảng trắng 2 đầu key khi gọi, xuống dòng/khoảng trắng giữa key báo lỗi ngay khi khởi động.
+
+## 2026-11-06 — Bot chuyển nhân viên: chỉ gửi câu chuyển tiếp của doanh nghiệp (chủ dự án chốt)
+
+**Quyết định:** Khi bot không trả lời được (lỗi AI, câu cấm không sửa được, không có dữ liệu, có giá mà không có nguồn), bot KHÔNG gửi câu cố định "…xin phép chuyển … sang nhân viên … để hỗ trợ chính xác hơn" nữa. Khách chỉ nhận câu chuyển tiếp DN cài ở Cài đặt → Chuyển tiếp & giờ làm việc (trong/ngoài giờ).
+
+**Lý do:** test tay 2026-11-01 (Buổi 3): khách nhận 2 tin gần giống nhau liền nhau.
+
+**Hệ quả:**
+- Khi bot không có tin riêng, câu chuyển tiếp được lưu là tin của **bot** (không phải "system"), mang `ai_trace` và `reply_to_message_id` = tin khách → Tổng quan vẫn đếm "câu bot chưa trả lời được", "Vì sao bot trả lời vậy?" vẫn xem được, chạy lại job không gửi trùng.
+- Lượt trả lời đầu tiên vẫn có câu báo trợ lý AI + link chính sách (luật mục 7), đi trước câu chuyển tiếp.
+- Khẩn cấp không đổi: câu khẩn cấp của mẫu ngành, không thêm câu chuyển tiếp.
+- AI giả (`fake`) có chuỗi `#fake-ai-error` để test luồng lỗi AI.
+
+## 2026-11-06 — Giao diện C5/C6 + đợt 3 (biểu đồ tự viết, ô số liệu thống nhất) — FE nhánh `feat/ui-redesign`
+
+**Quyết định (chủ dự án giao: "làm UI đẹp, thể hiện tối đa"):**
+- Trang **Báo cáo** `/reports` (6 tab, ô Hỏi số liệu) và 3 trang **Nhân viên**: Hiệu suất, Hoa hồng, Chấm công. Mỗi tab/trang là một đường dẫn, khoảng ngày/chi nhánh/kỳ lưu trên URL → gửi link là người nhận thấy đúng chỗ.
+- **Biểu đồ tự viết bằng SVG** (`src/components/charts/`: đường+vùng, cột, thanh xếp hạng, vành khuyên, bản đồ nhiệt, vòng %, đường nhỏ) — KHÔNG thêm thư viện biểu đồ. Mỗi biểu đồ: vẽ theo bề ngang thật, rê/chạm xem số, bàn phím ← →, bảng số liệu ẩn cho trình đọc màn hình, tôn trọng "giảm chuyển động". Đường cong monotone để doanh thu 0 không bị vẽ âm.
+- **Bảng màu biểu đồ** `--chart-3` đổi tím → xanh ngọc, `--chart-4` → hổ phách: tím chỉ dành cho AI.
+- **Hai loại ô số liệu**: `StatCard` (trang phân tích: số lớn, so kỳ trước, đường nhỏ) và `MetricTile` (trang làm việc: gọn, biểu tượng trái). Gộp 3 bản chép tay ở Lịch hẹn/Bán hàng/Kho hàng.
+- `FilterLayout`: cột bộ lọc tối đa 17.5rem thay vì tỷ lệ 3/7 — ở màn 1440px bảng Khách hàng/Bán hàng bị mất cột cuối.
+- `useApiQuery`: tải lại khi khoảng ngày đổi, giữ số cũ trong lúc tải (không nháy trắng).
+- Thanh bên tự cuộn tới mục đang mở (laptop 900px, menu dài hơn khung sau khi thêm Báo cáo).
+
+**Hệ quả:** không đổi BE/API. Ảnh chụp kiểm tra dùng dữ liệu mẫu chặn trong trình duyệt (không ghi DB). Test hàm thuần: `lib/reports`, `charts/geometry`, `reports/report-params`, `staff/commissions/commission-rules`.
+
+## 2026-11-06 — Thương hiệu Mến + làm lại giao diện theo Hallmark (chủ dự án giao toàn quyền)
+
+**Quyết định:** Sản phẩm đổi tên hiển thị thành **Mến** ("thân mến", "khách mến"; câu định vị *Giữ khách như người quen*). Hệ thống thiết kế khóa ở `zalo-ai-portal/design.md`: màu chàm làm điểm nhấn duy nhất (≤ 5% màn hình), **nút chính màu mực**, chữ tiêu đề Bricolage Grotesque + thân Be Vietnam Pro, thẻ phẳng viền mảnh, bố cục thanh bên sát vùng làm việc (bỏ tấm nội dung bo 22px).
+
+**Lý do:**
+- Chủ dự án muốn giao diện "đẹp, dễ dùng, không giống AI làm". Rà theo bộ quy tắc Hallmark: giao diện cũ mắc gần như mọi dấu hiệu AI — dải màu xanh→tím, chữ dải màu, quầng sáng/blob mờ, lưới chấm, phát sáng, ✨ cho mọi thứ AI, ô biểu tượng cạnh mọi tiêu đề, màu nhấn phủ nhiều.
+- Tên cũ "Trợ lý Zalo AI" chứa thương hiệu Zalo (của VNG) — rủi ro khi bán; nên kiểm tra với luật sư trước khi đăng ký tên/miền.
+
+**Hệ quả:**
+- Đổi tập trung qua token + tiện ích dùng chung (`globals.css`, `IconTile`, `PageHeader`, `EmptyState`, `Button`, thanh bên, logo, trang đăng nhập) nên mọi trang đổi theo; xóa 35+ khối trang trí, thay 13 dải màu bằng màu phẳng, ✨ → biểu tượng `Bot`.
+- Chỉ đổi FE (tiêu đề trang, logo, đăng nhập). Tên trong BE (email, tin nhắn, tài liệu) và tên miền/repo giữ nguyên — đổi khi chủ dự án chốt tên chính thức.
+- Có sẵn bảng màu tối (`.dark`) nhưng chưa có nút bật — làm khi cần.
+
+**Cập nhật cùng ngày — tên chính thức: Remi.** Chủ dự án chốt **Remi** là tên công ty và sản phẩm (thay "Mến"; tên miền chưa quan trọng). Gốc *remember* + *reminder*, đọc "rê-mi". Logo: ô chàm chữ `r` + chữ `remi`. Màu, chữ, bố cục giữ nguyên như hệ thống ở trên (chủ dự án để Claude chọn màu). Tên trợ lý trả lời khách vẫn do từng doanh nghiệp đặt — khách cuối không thấy chữ Remi. BE, tài liệu, repo vẫn tên cũ cho tới khi đổi.
+
+**Cập nhật cùng ngày — Remi Bento (đợt 2).** Chủ dự án thấy bản phẳng tối giản "cơ bản, không phá cách". Theo xu hướng 2025–2026 (bento grid, chữ số cực lớn, một màu nhấn đậm — tham khảo các bài tổng hợp xu hướng dashboard SaaS và mẫu dashboard salon/spa): nền kem ấm, mực than làm màu chính, **xanh chanh** làm chữ ký (logo, ô số chính, vùng biểu đồ, mục menu đang mở), ô số tô khối pastel, số lớn Bricolage nén, nút/tab dạng viên, thẻ bo 18px, bỏ thẻ lồng thẻ ở Tổng quan. Chàm giữ cho việc trợ lý làm. Chi tiết: `zalo-ai-portal/design.md`.
+
+**Cập nhật cùng ngày — đổi nền.** Chủ dự án thích phong cách Bento nhưng chưa ưng nền kem ("màu cháo lòng"). Đổi sang **trắng sứ / xám sương mát** (hue 250): thanh bên và thẻ trắng, vùng làm việc `oklch(97% 0.004 250)`, mực than xanh đen `oklch(20% 0.016 262)`; pastel tươi hơn; chanh giữ nguyên (nổi hơn trên nền mát). Sửa luôn: nạp trục `wdth` cho Bricolage (trước đó số "chữ hẹp" chưa hẹp). Tài liệu mang đi: `C:\Zalo_Tool\REMI-BENTO-DESIGN-SYSTEM.md`.
+
+**Cập nhật cùng ngày — màu Zalo.** Mọi nút/biểu tượng nói về Zalo (kết nối OA, kênh Zalo, mở Zalo) dùng **xanh Zalo nền + chữ trắng** (`--zalo`, nút `variant="zalo"`), để chủ DN nhận ra ngay; không dùng xanh này cho việc khác.
+
+## 2026-11-06 — Dữ liệu demo cho trang quản trị (`seed-demo`)
+
+**Quyết định:** Thêm lệnh `dotnet run --project src/ZaloAi.Api -- seed-demo` (bọc trong `scripts/seed-demo.cmd`) tạo **một doanh nghiệp demo riêng** "Spa Thảo Mộc An Nhiên" (id cố định `0199a000-…-0000000000d1`, đăng nhập `demo@remi.local` / `lan@remi.local`) đầy dữ liệu ảo 60 ngày: 2 chi nhánh, 6 nhân viên + ca, 8 dịch vụ / 3 gói / 4 sản phẩm, 220 khách, ~1.100 lịch hẹn, ~770 hóa đơn + thanh toán + doanh thu ghi nhận + hoa hồng, chấm công, 160 hội thoại Zalo có `ai_trace`, gợi ý chăm sóc, ghi chú.
+
+**Lý do:** DB dev gần như trống nên Báo cáo, Hiệu suất, Tổng quan không có số để xem/duyệt giao diện. Viết bằng C# trong app (không phải file SQL) để: trường mã hóa đi qua `IFieldEncryptor`, SĐT có dấu vân tay `IPhoneHasher`, enum đúng dạng lưu, `ai_trace` đúng hình BotEngine ghi → mọi báo cáo tính đúng như dữ liệu thật.
+
+**Hệ quả:**
+- Chỉ chạy ở Development (ngoài Development → báo lỗi, không làm gì). Chạy lại bao nhiêu lần cũng được: xóa sạch DN demo (SQL có `tenant_id`) rồi tạo lại theo ngày hôm nay; không đụng DN khác. Random có hạt cố định → cùng ngày chạy ra cùng số.
+- Phải tắt API trước khi chạy (file build bị khóa); script tự kiểm tra Postgres đang chạy và API đang tắt.
+- Xóa hẳn: `scripts/clear-demo.cmd` (lệnh `-- clear-demo`) xóa DN demo + 2 tài khoản demo (chỉ khi tài khoản không thuộc DN nào khác; mọi khóa ngoại tới `users` là SET NULL/CASCADE). Hỏi xác nhận trước, `/y` để bỏ qua.
+- Lý do chuyển người trong dữ liệu demo dùng đúng mã BE (`no_knowledge`, `customer_request`, `low_confidence`, `negative_sentiment`).

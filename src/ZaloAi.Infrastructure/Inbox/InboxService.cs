@@ -34,7 +34,11 @@ public sealed class InboxService(
     /// đánh dấu chờ người, thông báo Telegram. Gọi trong job, sau khi đã lưu tin bot.
     /// </summary>
     /// <param name="replyToMessageId">Câu chuyển tiếp là câu trả lời DUY NHẤT cho tin khách này (khi bot không trả lời, ví dụ hết hạn mức) → gắn khóa chống gửi trùng.</param>
-    public async Task<Message?> AfterBotHandoffAsync(Guid tenantId, Conversation conversation, Urgency urgency, string? salutation, Guid? replyToMessageId, CancellationToken cancellationToken)
+    /// <param name="botTraceJson">
+    /// Bot đã chạy nhưng không có tin riêng (lỗi AI, không có dữ liệu...) → câu chuyển tiếp là tin trả lời của bot, mang ai_trace
+    /// (Tổng quan đếm "câu bot chưa trả lời được", "Vì sao bot trả lời vậy?" đọc ai_trace trên tin bot).
+    /// </param>
+    public async Task<Message?> AfterBotHandoffAsync(Guid tenantId, Conversation conversation, Urgency urgency, string? salutation, Guid? replyToMessageId, CancellationToken cancellationToken, string? botTraceJson = null)
     {
         ArgumentNullException.ThrowIfNull(conversation);
         MarkNeedsAttention(conversation);
@@ -43,7 +47,13 @@ public sealed class InboxService(
         {
             var tenant = await tenants.GetAsync(tenantId, cancellationToken) ?? throw new NotFoundException();
             var settings = await handoffSettings.GetAsync(tenantId, cancellationToken);
-            notice = delivery.AddOutgoing(tenantId, conversation, MessageSender.System, HandoffTexts.Handoff(settings, tenant.Name, time.GetUtcNow(), salutation), replyToMessageId: replyToMessageId);
+            notice = delivery.AddOutgoing(
+                tenantId,
+                conversation,
+                botTraceJson is null ? MessageSender.System : MessageSender.Bot,
+                HandoffTexts.Handoff(settings, tenant.Name, time.GetUtcNow(), salutation),
+                replyToMessageId: replyToMessageId,
+                traceJson: botTraceJson);
         }
 
         await conversations.SaveChangesAsync(cancellationToken);

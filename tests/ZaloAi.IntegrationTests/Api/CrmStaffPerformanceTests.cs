@@ -90,7 +90,9 @@ public sealed class CrmStaffPerformanceTests(PostgresFixture db)
         (await owner.PatchAsJsonAsync(Url($"/appointments/{contact.Id}/assign"), new AssignAppointmentRequest(lan.Id, null))).StatusCode.ShouldBe(HttpStatusCode.NoContent);
         (await owner.PatchAsJsonAsync(Url($"/appointments/{contact.Id}/status"), new SetAppointmentStatusRequest("done"))).StatusCode.ShouldBe(HttpStatusCode.NoContent);
 
-        var performance = (await owner.GetFromJsonAsync<List<StaffPerformanceResponse>>(Url("/staff/performance")))!;
+        // Khoảng rõ ràng: lịch hẹn ở "mai 06:00 UTC" nằm ngoài mặc định (đến now + 1 ngày) khi chạy test trước 06:00 UTC.
+        var window = $"from={Uri.EscapeDataString(DateTimeOffset.UtcNow.AddDays(-30).ToString("O"))}&to={Uri.EscapeDataString(DateTimeOffset.UtcNow.AddDays(3).ToString("O"))}";
+        var performance = (await owner.GetFromJsonAsync<List<StaffPerformanceResponse>>(Url($"/staff/performance?{window}")))!;
         var lanRow = performance.Single(p => p.StaffMemberId == lan.Id);
         // Hoàn thành lịch (gói còn bao) → tự trừ 1 buổi do Lan làm → thêm 50.000 hoa hồng gói.
         (lanRow.AppointmentsDone, lanRow.Commission, lanRow.Customers).ShouldBe((1, 140000, 1));
