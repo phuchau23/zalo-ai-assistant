@@ -213,9 +213,21 @@ public sealed partial class ProcessIncomingMessageJob(
         }
 
         // Chuyển người: câu chuyển tiếp (trong/ngoài giờ) + chờ người + Telegram + báo hộp thư.
-        var notice = result.NeedsHuman
-            ? await inbox.AfterBotHandoffAsync(tenantId, conversation, result.Urgency, contact.Salutation, replyToMessageId: null, cancellationToken)
-            : null;
+        // Bot không có tin nào (lỗi AI, không có dữ liệu...) → câu chuyển tiếp là trả lời DUY NHẤT → gắn khóa chống gửi trùng.
+        Message? notice = null;
+        if (result.NeedsHuman)
+        {
+            try
+            {
+                var only = replies.Count == 0;
+                notice = await inbox.AfterBotHandoffAsync(
+                    tenantId, conversation, result.Urgency, contact.Salutation, only ? message.Id : null, cancellationToken, botTraceJson: only ? result.TraceJson : null);
+            }
+            catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+            {
+                return; // job khác vừa chuyển người cho cùng tin này
+            }
+        }
 
         for (var i = 0; i < replies.Count; i++)
         {
