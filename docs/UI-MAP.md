@@ -1,4 +1,4 @@
-# Sơ đồ giao diện trang quản trị (cập nhật 2026-11-01)
+# Sơ đồ giao diện trang quản trị (cập nhật 2026-11-06)
 
 Mỗi tính năng nằm đúng một chỗ. Menu chia theo việc trong ngày; trang con (ví dụ `/settings/team`) sáng mục cha.
 Cấu hình menu: `zalo-ai-portal/src/components/shell/nav-config.ts`. Mỗi trang có nút **"Cách dùng trang này"** (hướng dẫn ngắn).
@@ -9,6 +9,7 @@ Máy tính: thanh bên trắng (điểm nhấn xanh Zalo) thu gọn được (n�
 | Nhóm | Mục | Đường dẫn | Có gì |
 | --- | --- | --- | --- |
 | — | Tổng quan | `/` | Cần xử lý ngay · Hôm nay (doanh thu, lịch, khách mới, hóa đơn, lịch sắp tới) · Trợ lý AI 30 ngày · Thiết lập hệ thống · Hoạt động của bot. Nhân viên vào thẳng Hộp thư |
+| — | Báo cáo | `/reports` | Quyền "Xem báo cáo". Ô **Hỏi số liệu** (tiếng Việt → mở đúng báo cáo) · tab `?tab=` Tổng quan · Doanh thu (ngày/tuần/tháng, theo dịch vụ/nhân viên/chi nhánh/loại/cách trả/nguồn, Excel) · Khách hàng · Lấp đầy lịch (theo ngày, bản đồ nhiệt giờ đông, gợi ý) · Trợ lý AI · Công nợ. Khoảng ngày + chi nhánh chung, lưu trên URL (`?from=&to=&branch=`). Tab có tiền cần "Xem doanh thu toàn công ty" |
 | Vận hành | Lịch hẹn | `/appointments` | Lịch ngày/tuần/danh sách, đặt lịch (`?new=1` mở sẵn), hàng chờ, check-in, thanh toán từ lịch |
 | | Hộp thư | `/inbox` | Kiểu Messenger, chiếm trọn màn: danh sách (tìm, lọc) · khung chat · thông tin khách + "Vì sao bot trả lời vậy?" (màn ≥ 1280px, màn hẹp mở bằng menu ⋯). Tiếp quản, trả lại bot, giao nhân viên. Huy hiệu = khách chờ nhân viên |
 | | Bán hàng | `/sales` | Hóa đơn (`?new=1` mở sẵn), ca thu ngân, voucher |
@@ -20,7 +21,7 @@ Máy tính: thanh bên trắng (điểm nhấn xanh Zalo) thu gọn được (n�
 | | Kênh Zalo | `/channels` | Kết nối / ngắt Zalo OA |
 | Quản lý | Danh mục | `/catalog` | Dịch vụ, gói liệu trình, sản phẩm, giá |
 | | Kho hàng | `/inventory` | Tồn, nhập hàng, chuyển kho, kiểm kê, định mức vật tư, lịch sử |
-| | Nhân viên | `/staff` | Hồ sơ nhân viên, dịch vụ làm được, ca làm, nghỉ phép |
+| | Nhân viên | `/staff` | 4 tab (đường dẫn riêng): Hồ sơ & ca làm (`/staff`) · Hiệu suất (`/staff/performance`: dẫn đầu, bảng xếp hạng sắp xếp được) · Hoa hồng (`/staff/commissions?period=yyyy-MM`: bảng kê từng người, đánh dấu đã trả, quy tắc tính) · Chấm công (`/staff/attendance`: nút Vào ca/Ra ca + đồng hồ, ai đang trong ca, nhật ký, sửa giờ). Nhân viên thường chỉ thấy số của mình |
 | (chân thanh bên) | Cài đặt | `/settings` | Doanh nghiệp · `/settings/branches` Chi nhánh & giờ mở cửa (giường/phòng) · `/settings/team` Tài khoản & phân quyền · `/settings/booking` Lịch hẹn & bán hàng · `/settings/payments` Thanh toán (VietQR) · `/settings/notifications` Thông báo (Telegram, nhắc chờ lâu) |
 | (thẻ người dùng) | Tài khoản | `/account` | Đổi mật khẩu |
 
@@ -37,5 +38,4 @@ Thanh dưới: Tổng quan · Lịch hẹn · Hộp thư · Khách hàng · **Th
 
 ## Chưa có giao diện
 
-- Báo cáo (C6): API `/reports/*` đã có; Tổng quan đang dùng `/reports/today` và `/reports/ai`. Trang Báo cáo đầy đủ làm cùng FE C5/C6.
-- Hoa hồng, chấm công, hiệu suất (C5): API đã có, chưa có trang.
+- C7, C8 (chưa làm BE).
