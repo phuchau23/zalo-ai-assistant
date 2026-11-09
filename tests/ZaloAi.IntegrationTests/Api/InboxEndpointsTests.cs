@@ -72,6 +72,34 @@ public sealed class InboxEndpointsTests(PostgresFixture db)
     }
 
     [Fact]
+    public async Task Ai_error_sends_only_the_tenant_handoff_text_once_with_trace()
+    {
+        var (tenantId, owner, conversationId) = await HandedOffAsync("Lỗi AI chỉ một câu chuyển tiếp");
+        (await owner.PostAsync(Inbox($"/{conversationId}/return-to-bot"), null)).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        (await owner.PostAsJsonAsync(new Uri($"/chat-test/conversations/{conversationId}/messages", UriKind.Relative), new { text = $"alo {ZaloAi.Ai.Providers.FakeChatProvider.BrokenOutputTrigger}" }))
+            .StatusCode.ShouldBe(HttpStatusCode.Accepted);
+        await RunPendingJobsAsync(tenantId);
+
+        var detail = (await owner.GetFromJsonAsync<InboxConversationDetail>(Inbox($"/{conversationId}")))!;
+        var customerId = detail.Messages.Last(m => m.Sender == "customer").Id;
+        var after = detail.Messages.SkipWhile(m => m.Id != customerId).Skip(1).ToList();
+        var only = after.ShouldHaveSingleItem(); // không còn câu cố định "…để hỗ trợ chính xác hơn" của bot
+        only.Sender.ShouldBe("bot");
+        only.Text.ShouldContain("chuyên viên chăm sóc khách hàng"); // câu chuyển tiếp DN cài
+        only.Trace.ShouldNotBeNull().HandoffReason.ShouldBe("ai_error");
+        detail.Conversation.Mode.ShouldBe("human");
+
+        // Chạy lại job cùng tin → không gửi trùng.
+        using (var scope = db.Api.Services.CreateScope())
+        {
+            await scope.ServiceProvider.GetRequiredService<ProcessIncomingMessageJob>().RunAsync(tenantId, customerId, CancellationToken.None);
+        }
+
+        var again = (await owner.GetFromJsonAsync<InboxConversationDetail>(Inbox($"/{conversationId}")))!;
+        again.Messages.SkipWhile(m => m.Id != customerId).Skip(1).Count().ShouldBe(1);
+    }
+
+    [Fact]
     public async Task Staff_takes_over_replies_with_signature_then_returns_to_bot()
     {
         var (tenantId, owner, conversationId) = await HandedOffAsync("Tiếp quản");

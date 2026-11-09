@@ -277,6 +277,8 @@ dotnet run --project src/ZaloAi.Worker     # Hangfire worker
 dotnet ef migrations add <Ten> -p src/ZaloAi.Infrastructure -s src/ZaloAi.Api
 dotnet ef database update -p src/ZaloAi.Infrastructure -s src/ZaloAi.Api
 dotnet run --project src/ZaloAi.Api -- seed   # 2 tenant mẫu + dữ liệu mẫu
+scripts\seed-demo.cmd                         # DN demo đầy số liệu ảo (tắt API trước); demo@remi.local / Dev@123456
+scripts\clear-demo.cmd                        # xóa hẳn DN demo + 2 tài khoản demo (hỏi xác nhận; /y bỏ qua)
 dotnet format | dotnet build | dotnet test
 dev                 # (Windows) bật Postgres/Redis + API + Worker + FE, mỗi cái một cửa sổ
 stop                # tắt API, Worker, FE; "stop all" tắt thêm Postgres/Redis

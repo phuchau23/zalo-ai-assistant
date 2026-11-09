@@ -80,7 +80,7 @@ public sealed class GroqCallSiteTests
 
         result.NeedsHuman.ShouldBeTrue();
         result.HandoffReason.ShouldBe("ai_error");
-        result.Messages.ShouldNotBeEmpty();
+        result.Messages.ShouldBeEmpty(); // câu chuyển tiếp do DN cài, hệ thống gửi sau (InboxService)
     }
 
     [Fact]

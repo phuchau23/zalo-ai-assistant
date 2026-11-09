@@ -37,22 +37,23 @@ Máy tính mở **Hộp thư**, điện thoại đóng vai khách.
 - [x] 2.7 Telegram: lấy mã kết nối, gõ `/ketnoi@<bot> MÃ` trong nhóm → web báo "Đã kết nối", khách đòi gặp nhân viên → nhóm nhận tin báo.
 
 ## Buổi 3 — Khách hàng & chăm sóc chủ động (≈ 30 phút)
-- [ ] 3.1 Khách hàng: danh sách có tầng (Mới/Quan tâm/Nóng/Đã chốt/Không tiềm năng), lọc được, tìm theo tên/SĐT.
-- [ ] 3.2 Hồ sơ khách: đổi tầng tay, gắn nhãn, đổi "Cách bot gọi khách" → bot gọi đúng ở tin sau.
+- [x] 3.1 Khách hàng: danh sách có tầng (Mới/Quan tâm/Nóng/Đã chốt/Không tiềm năng), lọc được, tìm theo tên/SĐT.
+- [x] 3.2 Hồ sơ khách: đổi tầng tay, gắn nhãn, đổi "Cách bot gọi khách" → bot gọi đúng ở tin sau.
 - [x] 3.3 Bot tự nhắn (nhanh): khách hỏi giá rồi im → hồ sơ khách bấm "AI chăm sóc khách này" → 10–30 giây sau bot tự nhắn hỏi thăm trên điện thoại; trang Cần chăm sóc hiện "Bot đã nhắn".
 - [x] 3.4 Bot tự nhắn (hẹn giờ): Nhật ký chăm sóc → ghi chú "Đã làm buổi 1 gói …" loại "Đã dùng dịch vụ" + "Chăm sóc lại: 5 phút nữa" → tới giờ bot hỏi thăm đúng gói.
-- [ ] 3.5 Khách trả lời tin bot → bot chat tiếp bình thường; bot KHÔNG nhắn tin chủ động thứ hai khi khách chưa trả lời.
-  - 2026-11-01: chưa test xong — lúc trả lời tin bot thì key Gemini miễn phí hết lượt trong ngày (~20 lượt/model) → bot chuyển nhân viên (ai_error), không phải lỗi logic. Test lại khi có lượt AI.
-- [ ] 3.6 Khách nhắn "hủy" → bot xác nhận; hồ sơ: "Bot được chủ động nhắn" tắt và không bật lại được.
-- [ ] 3.7 Ghi chú có chuyện sức khỏe/phàn nàn ("đau lưng sau buổi bấm") → bot KHÔNG tự nhắn, khách hiện ở Cần chăm sóc để nhân viên liên hệ (có tin nháp).
+- [x] 3.5 Khách trả lời tin bot → bot chat tiếp bình thường; bot KHÔNG nhắn tin chủ động thứ hai khi khách chưa trả lời.
+  - 2026-11-04: đạt, làm với khách mới (SĐT 0987654321).
+- [x] 3.6 Khách nhắn "hủy" → bot xác nhận; hồ sơ: "Bot được chủ động nhắn" tắt và không bật lại được.
+- [x] 3.7 Ghi chú có chuyện sức khỏe/phàn nàn ("đau lưng sau buổi bấm") → bot KHÔNG tự nhắn, khách hiện ở Cần chăm sóc để nhân viên liên hệ (có tin nháp).
 - [ ] 3.8 Chuyển "Ai nhắn khách?" sang "Chỉ gợi ý" → AI chỉ soạn nháp, nhân viên sửa rồi gửi.
 - [ ] 3.9 Xuất Excel danh sách khách; hồ sơ một khách → "Tải toàn bộ dữ liệu" (4 sheet).
-- [ ] 3.10 Xóa một khách CHAT THỬ (gõ XÓA) → khách biến mất. (Đừng xóa khách thật.)
+  - 2026-11-04: hồ sơ 1 khách → 4 sheet đạt; "Xuất Excel" danh sách ra file trống vì cố ý bỏ khách chat thử (mà mới chỉ có khách chat thử) — chờ chủ dự án chọn cách sửa.
+- [x] 3.10 Xóa một khách CHAT THỬ (gõ XÓA) → khách biến mất. (Đừng xóa khách thật.)
 
 ## Buổi 3b — Nhập danh sách khách (≈ 20 phút)
-- [ ] 3b.1 Khách hàng → "Nhập danh sách" → Tải file mẫu → mở xem sheet "Hướng dẫn".
-- [ ] 3b.2 Điền 3–5 khách (có 1 dòng SĐT sai, 1 dòng trùng SĐT) → chọn file → bản xem trước hiện đúng Khách mới / Cập nhật / Lỗi kèm lý do.
-- [ ] 3b.3 Bấm Nhập → danh sách Khách hàng có khách mới với nhãn "Chỉ có SĐT"; hồ sơ có cách gọi (Nam→anh, Nữ→chị), nhật ký "đã dùng dịch vụ", "Nhận tin ưu đãi".
+- [x] 3b.1 Khách hàng → "Nhập danh sách" → Tải file mẫu → mở xem sheet "Hướng dẫn".
+- [x] 3b.2 Điền 3–5 khách (có 1 dòng SĐT sai, 1 dòng trùng SĐT) → chọn file → bản xem trước hiện đúng Khách mới / Cập nhật / Lỗi kèm lý do.
+- [x] 3b.3 Bấm Nhập → danh sách Khách hàng có khách mới với nhãn "Chỉ có SĐT"; hồ sơ có cách gọi (Nam→anh, Nữ→chị), nhật ký "đã dùng dịch vụ", "Nhận tin ưu đãi".
 - [ ] 3b.4 Nhập lại đúng file đó → không tạo khách/ghi chú trùng (chỉ "cập nhật").
 - [ ] 3b.5 Một khách có "Hẹn nhắn lúc" là vài phút tới → tới giờ, trang Cần chăm sóc hiện mục "Tới hẹn – chưa nhắn OA được" có SĐT (bấm gọi được trên điện thoại) → bấm "Đã liên hệ" → biến mất.
 - [ ] 3b.6 Tài khoản nhân viên cũng nhập được file.
