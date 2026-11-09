@@ -160,7 +160,7 @@ public sealed class BotEngineTests
         chat.Requests[1].Temperature.ShouldBe(0);
         result.NeedsHuman.ShouldBeTrue();
         result.HandoffReason.ShouldBe("ai_error");
-        result.Reply.ShouldContain("chuyển mình sang nhân viên của Khoa Học Huyệt Đạo");
+        result.Reply.ShouldNotContain("chuyển"); // câu chuyển tiếp do DN cài, hệ thống gửi sau (InboxService)
         result.Usage.Count.ShouldBe(2);
     }
 
