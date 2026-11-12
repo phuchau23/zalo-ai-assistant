@@ -440,3 +440,25 @@ Chủ dự án: key Gemini miễn phí chỉ ~20 lượt/ngày/model, hết là 
 - Phải tắt API trước khi chạy (file build bị khóa); script tự kiểm tra Postgres đang chạy và API đang tắt.
 - Xóa hẳn: `scripts/clear-demo.cmd` (lệnh `-- clear-demo`) xóa DN demo + 2 tài khoản demo (chỉ khi tài khoản không thuộc DN nào khác; mọi khóa ngoại tới `users` là SET NULL/CASCADE). Hỏi xác nhận trước, `/y` để bỏ qua.
 - Lý do chuyển người trong dữ liệu demo dùng đúng mã BE (`no_knowledge`, `customer_request`, `low_confidence`, `negative_sentiment`).
+
+## 2026-11-11 — Chạy Zalo thật ở dev: xác thực tên miền bằng file, webhook chưa có khóa trả 200
+
+**Quyết định:**
+- API trả file `/zalo_verifier<mã>.html` khi có `Zalo:SiteVerificationToken` (mã chỉ gồm chữ, số, `_`, `-`; không bí mật vì cũng nằm trong bản ghi DNS TXT công khai).
+- Webhook khi máy **chưa cấu hình** `Zalo:AppId`/`Zalo:WebhookSecret`: trả **200** nhưng không lưu, không xếp job, ghi cảnh báo kèm định dạng request (không ghi nội dung). Có khóa rồi thì sai chữ ký vẫn **401** (chủ dự án chọn, thay vì "luôn 200").
+
+**Lý do (thử thật trên developers.zalo.me):**
+- Callback URL chỉ lưu được khi tên miền đã xác thực; xác thực `haulp.io.vn` không bao `dev-api.haulp.io.vn`. Không thêm TXT cho `dev-api` được vì Cloudflare không cho TXT trùng tên với bản ghi tunnel (CNAME) → dùng kiểu "Tiền tố URL" + file HTML.
+- Zalo gọi thử Webhook URL lúc khai báo và chỉ cho lưu khi nhận 200, nhưng OA Secret Key chỉ hiện sau khi lưu URL → trước đây API trả 401 nên không lưu được.
+
+**Hệ quả:** production (`api.haulp.io.vn`, app Zalo riêng) đặt mã xác thực của app đó qua biến môi trường `Zalo__SiteVerificationToken`, không sửa code. Nếu sau này đổi Webhook URL khi đã có khóa mà Zalo gọi thử không ký → tạm bỏ khóa, đổi URL, đặt lại khóa (xem log "chưa cấu hình" để biết request thử có ký không).
+
+## 2026-11-11 — Zalo chặn gửi ở cấp OA (-224 chưa mua gói, -221 chưa xác thực): báo chủ DN + chuyển nhân viên
+
+**Quyết định (chủ dự án đồng ý):** khi gửi tin bị -224/-221:
+- Ghi mã vào `channel_connections.last_error`, **giữ trạng thái active** (kết nối lại không chữa được). Trang Kênh Zalo hiện "Chưa gửi được tin" + cách xử lý (oa.zalo.me). Làm mới token không xóa cảnh báo; **gửi được tin lần sau thì tự xóa**.
+- Hội thoại đang ở chế độ bot → chuyển nhân viên (`handoff_reason = channel_blocked`), đánh dấu chờ người, báo Telegram + hộp thư. Hội thoại đã ở chế độ nhân viên thì không báo trùng.
+
+**Lý do:** thử thật OA test (2026-11-11): webhook + AI chạy, nhưng gửi bị -224 và trước đây hệ thống chỉ đánh dấu tin "failed" rồi im lặng → khách bị bỏ rơi, chủ DN không biết.
+
+**Hệ quả:** mọi DN thuê phải có gói OA đủ quyền gửi tin qua API (gói nào: chưa kiểm chứng) → đưa vào hướng dẫn đăng ký và cân nhắc khi chốt giá.

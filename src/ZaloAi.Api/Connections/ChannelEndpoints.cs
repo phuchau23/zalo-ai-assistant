@@ -134,11 +134,12 @@ internal static partial class ChannelEndpoints
                 ZaloApiException z => z.ShortCode.Replace(':', '_'),
                 _ => "zalo_unavailable",
             };
-            LogCallbackFailed(loggerFactory.CreateLogger("ZaloAi.Api.Connections"), reason);
+            // ZaloApiException.Message = mã + câu mô tả lỗi cố định của Zalo (không có token/code) → ghi để chẩn đoán.
+            LogCallbackFailed(loggerFactory.CreateLogger("ZaloAi.Api.Connections"), reason, ex is ZaloApiException ? ex.Message : ex.GetType().Name);
             return TypedResults.Redirect($"{target}?error={Uri.EscapeDataString(reason)}");
         }
     }
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Kết nối Zalo không hoàn tất: {Reason}")]
-    private static partial void LogCallbackFailed(ILogger logger, string reason);
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Kết nối Zalo không hoàn tất: {Reason} ({Detail})")]
+    private static partial void LogCallbackFailed(ILogger logger, string reason, string detail);
 }

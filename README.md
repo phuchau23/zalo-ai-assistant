@@ -34,20 +34,26 @@ Zalo phải gọi được vào máy dev qua **https công khai** (callback OAut
    cloudflared tunnel create zaloai-dev
    cloudflared tunnel route dns zaloai-dev dev-api.haulp.io.vn
    ```
-3. Chạy tunnel mỗi khi test Zalo (trỏ về API cổng 4000):
+3. `dev` tự bật tunnel (cửa sổ "ZaloAi Tunnel", `stop` tự tắt) khi đã cài `cloudflared` và đăng nhập. Chạy tay:
    ```
-   cloudflared tunnel run --url http://localhost:4000 zaloai-dev
+   cloudflared tunnel --config scripts\tunnel-dev.yml run zaloai-dev
    ```
-4. Trên developers.zalo.me → app → **Official Account → Thiết lập chung**: Callback URL = `https://dev-api.haulp.io.vn/connect/zalo/callback`.
+   `scripts/tunnel-dev.yml` chỉ mở các đường Zalo gọi vào (`/webhooks/zalo`, `/connect/zalo/callback`, file `zalo_verifier…html`,
+   `/health`); đăng nhập, API quản trị, Hangfire, OpenAPI trả 404 từ ngoài internet. **Không** dùng `--url` (mở toàn bộ API dev).
+4. **Xác thực tên miền** (Zalo bắt buộc trước khi lưu Callback URL; mỗi tên miền con xác thực riêng, `haulp.io.vn` KHÔNG bao `dev-api.haulp.io.vn`):
+   app → **Xác thực domain** → khung **Tiền tố URL** → `https://dev-api.haulp.io.vn` → lấy mã trong tên file `zalo_verifier<mã>.html`, rồi
+   `dotnet user-secrets set "Zalo:SiteVerificationToken" "<mã>" --project src/ZaloAi.Api`, chạy lại API, mở thử
+   `https://dev-api.haulp.io.vn/zalo_verifier<mã>.html` → bấm **Xác thực** trên Zalo. (Không dùng bản ghi TXT cho `dev-api` được vì đã có bản ghi tunnel.)
+5. Trên developers.zalo.me → app → **Official Account → Thiết lập chung**: Callback URL = `https://dev-api.haulp.io.vn/connect/zalo/callback`.
    **Webhook**: URL = `https://dev-api.haulp.io.vn/webhooks/zalo`, tắt "Lọc cú pháp", bật Webhook Retry, bật các sự kiện
    `user_send_*` và `oa_send_*`. Lấy **OA Secret Key** trên trang này.
-5. Lưu cấu hình (một lần, dùng chung cho Api và Worker):
+6. Lưu cấu hình (một lần, dùng chung cho Api và Worker):
    ```
    dotnet user-secrets set "Zalo:AppId" "<App ID>" --project src/ZaloAi.Api
    dotnet user-secrets set "Zalo:AppSecret" "<Khóa bí mật của ứng dụng>" --project src/ZaloAi.Api
    dotnet user-secrets set "Zalo:WebhookSecret" "<OA Secret Key>" --project src/ZaloAi.Api
    dotnet user-secrets set "Zalo:OAuthRedirectUrl" "https://dev-api.haulp.io.vn/connect/zalo/callback" --project src/ZaloAi.Api
    ```
-6. Chạy `dev`, vào trang **Kết nối kênh** → "Kết nối Zalo OA" → đồng ý trên Zalo → nhắn thử từ Zalo cá nhân vào OA.
+7. Chạy `dev`, vào trang **Kết nối kênh** → "Kết nối Zalo OA" → đồng ý trên Zalo → nhắn thử từ Zalo cá nhân vào OA.
 
 Ghi chú API Zalo đã kiểm chứng: `docs/zalo-api-notes.md`.

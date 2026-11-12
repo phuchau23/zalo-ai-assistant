@@ -1,5 +1,5 @@
 @echo off
-rem Tắt môi trường dev do dev.cmd mở: API, Worker, FE (đóng luôn các cửa sổ).
+rem Tắt môi trường dev do dev.cmd mở: API, Worker, FE, tunnel Zalo (đóng luôn các cửa sổ).
 rem   stop       tắt API, Worker, FE. Postgres/Redis vẫn chạy (lần sau bật nhanh hơn).
 rem   stop all   tắt thêm Postgres/Redis (dữ liệu vẫn giữ, không bị xóa).
 chcp 65001 >nul
@@ -14,7 +14,7 @@ taskkill /IM ZaloAi.Api.exe /F >nul 2>&1
 taskkill /IM ZaloAi.Worker.exe /F >nul 2>&1
 for /f "tokens=5" %%p in ('netstat -ano ^| findstr /r /c:":3000 .*LISTENING"') do taskkill /PID %%p /T /F >nul 2>&1
 
-echo Đã tắt API, Worker, FE.
+echo Đã tắt API, Worker, FE, tunnel.
 
 if /i "%~1"=="all" (
   docker compose stop

@@ -79,6 +79,16 @@ public sealed class ZaloClientTests
         var ex = await Should.ThrowAsync<ZaloApiException>(() => client.RefreshAsync("RT", CancellationToken.None));
         ex.Message.ShouldNotContain("RT-should-not-leak");
         ex.Code.ShouldBe(-14014);
+        ex.Message.ShouldContain("Invalid refresh token"); // endpoint OAuth không có "message" → lấy error_name
+    }
+
+    [Fact]
+    public async Task Oauth_error_description_is_kept_for_diagnosis()
+    {
+        var (client, _) = Create((_, _) => Json("""{"error":-14013,"error_reason":"","error_description":"some fixed reason"}"""));
+
+        var ex = await Should.ThrowAsync<ZaloApiException>(() => client.ExchangeCodeAsync("c", "v", CancellationToken.None));
+        ex.Message.ShouldBe("Zalo lỗi -14013: some fixed reason");
     }
 
     [Fact]
@@ -114,6 +124,20 @@ public sealed class ZaloClientTests
         ex.IsAuthorizationError.ShouldBe(authorization);
         ex.IsRecipientError.ShouldBe(recipient);
         ex.ShortCode.ShouldBe($"zalo:{code}");
+    }
+
+    [Theory]
+    [InlineData(-224, true)]
+    [InlineData(-221, true)]
+    [InlineData(-230, false)]
+    [InlineData(-223, false)]
+    public async Task Oa_level_send_blocks_are_recognised(int code, bool blocked)
+    {
+        var (client, _) = Create((_, _) => Json($$"""{"error":{{code}},"message":"x"}"""));
+
+        var ex = await Should.ThrowAsync<ZaloApiException>(() => client.SendTextAsync("AT", "u", "hi", CancellationToken.None));
+        ex.IsOaRestriction.ShouldBe(blocked);
+        ZaloApiException.OaRestrictionCodes.Contains(ex.ShortCode).ShouldBe(blocked);
     }
 
     [Fact]
@@ -161,6 +185,18 @@ public sealed class ZaloSecurityTests
         ZaloPkce.Challenge(verifier).ShouldBe(expected);
         ZaloPkce.Challenge(verifier).ShouldNotEndWith("=");
         ZaloPkce.NewState().ShouldNotBe(ZaloPkce.NewState());
+    }
+
+    [Fact]
+    public void Pkce_challenge_is_the_same_in_base64_and_base64url()
+    {
+        for (var i = 0; i < 200; i++)
+        {
+            var challenge = ZaloPkce.Challenge(ZaloPkce.NewVerifier());
+            challenge.ShouldNotContain('+');
+            challenge.ShouldNotContain('/');
+            challenge.Length.ShouldBe(43);
+        }
     }
 
     [Fact]

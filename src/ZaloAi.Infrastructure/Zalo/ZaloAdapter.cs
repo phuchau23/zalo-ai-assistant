@@ -11,6 +11,7 @@ namespace ZaloAi.Infrastructure.Zalo;
 /// <summary>
 /// Gửi tin tư vấn qua Zalo OA (docs/zalo-api-notes.md mục 6–7). Lỗi tạm (mạng, -32, -200) → ném để job thử lại;
 /// lỗi vĩnh viễn (khách không còn nhận được, OA mất quyền) → <see cref="ChannelPermanentException"/>, job đánh dấu Failed.
+/// OA bị chặn gửi (-224 chưa mua gói, -221 chưa xác thực) → ghi lỗi lên kết nối + ChannelBlocked (chuyển nhân viên); gửi được lại thì xóa.
 /// Token hỏng (-216/-220) → làm mới (có khóa) rồi gửi lại đúng 1 lần.
 /// </summary>
 public sealed class ZaloAdapter(
@@ -56,6 +57,7 @@ public sealed class ZaloAdapter(
             firstId ??= result.MessageId;
         }
 
+        await connections.ClearSendBlockedAsync(message.TenantId, connectionId, cancellationToken);
         return new SendResult(firstId);
     }
 
@@ -77,6 +79,12 @@ public sealed class ZaloAdapter(
         {
             await connections.MarkNeedsReauthAsync(message.TenantId, connectionId, ex.ShortCode, cancellationToken);
             return new ChannelPermanentException(ex.ShortCode, "Kết nối Zalo mất quyền gửi tin.");
+        }
+
+        if (ex.IsOaRestriction)
+        {
+            await connections.RecordSendBlockedAsync(message.TenantId, connectionId, ex.ShortCode, cancellationToken);
+            return new ChannelPermanentException(ex.ShortCode, "Zalo chưa cho OA gửi tin qua API (OA chưa mua gói / chưa xác thực).", channelBlocked: true);
         }
 
         if (ex.Code == -200)
