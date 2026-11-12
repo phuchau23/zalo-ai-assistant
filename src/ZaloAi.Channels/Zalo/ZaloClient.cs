@@ -185,8 +185,12 @@ public sealed class ZaloClient(HttpClient http, IOptions<ZaloOptions> options)
             return;
         }
 
-        // message của Zalo là câu mô tả lỗi cố định (vd "Access token is invalid"), không chứa dữ liệu khách — giữ để chẩn đoán.
-        var message = root.TryGetProperty("message", out var m) && m.ValueKind == JsonValueKind.String ? m.GetString() : null;
+        // Câu mô tả lỗi của Zalo là chuỗi cố định (vd "Access token is invalid"), không chứa dữ liệu khách — giữ để chẩn đoán.
+        // Open API dùng "message"; endpoint OAuth (định dạng chưa kiểm chứng) có thể dùng error_name / error_reason / error_description.
+        string? Text(string name) => root.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String && v.GetString() is { Length: > 0 } s
+            ? (s.Length > 200 ? s[..200] : s)
+            : null;
+        var message = Text("message") ?? Text("error_description") ?? Text("error_reason") ?? Text("error_name");
         throw code == -32 ? new ZaloTransientException($"Zalo -32: vượt giới hạn tốc độ ({message}).") : new ZaloApiException(code, message);
     }
 

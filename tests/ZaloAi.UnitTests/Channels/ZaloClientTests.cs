@@ -79,6 +79,16 @@ public sealed class ZaloClientTests
         var ex = await Should.ThrowAsync<ZaloApiException>(() => client.RefreshAsync("RT", CancellationToken.None));
         ex.Message.ShouldNotContain("RT-should-not-leak");
         ex.Code.ShouldBe(-14014);
+        ex.Message.ShouldContain("Invalid refresh token"); // endpoint OAuth không có "message" → lấy error_name
+    }
+
+    [Fact]
+    public async Task Oauth_error_description_is_kept_for_diagnosis()
+    {
+        var (client, _) = Create((_, _) => Json("""{"error":-14013,"error_reason":"","error_description":"some fixed reason"}"""));
+
+        var ex = await Should.ThrowAsync<ZaloApiException>(() => client.ExchangeCodeAsync("c", "v", CancellationToken.None));
+        ex.Message.ShouldBe("Zalo lỗi -14013: some fixed reason");
     }
 
     [Fact]
