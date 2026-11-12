@@ -213,7 +213,7 @@ public sealed partial class ProcessIncomingMessageJob(
         }
 
         // Chuyển người: câu chuyển tiếp (trong/ngoài giờ) + chờ người + Telegram + báo hộp thư.
-        // Bot không có tin nào (lỗi AI, không có dữ liệu...) → câu chuyển tiếp là trả lời DUY NHẤT → gắn khóa chống gửi trùng.
+            // Bot không có tin nào (lỗi AI, không có dữ liệu...) → câu chuyển tiếp là trả lời DUY NHẤT → gắn khóa chống gửi trùng.
         Message? notice = null;
         if (result.NeedsHuman)
         {
@@ -408,3 +408,4 @@ public sealed partial class ProcessIncomingMessageJob(
     [LoggerMessage(Level = LogLevel.Warning, Message = "Tóm tắt hội thoại lỗi ({ErrorType}), sẽ thử ở tin sau")]
     private static partial void LogSummaryFailed(ILogger logger, string errorType);
 }
+    
