@@ -164,6 +164,18 @@ public sealed class ZaloSecurityTests
     }
 
     [Fact]
+    public void Pkce_challenge_is_the_same_in_base64_and_base64url()
+    {
+        for (var i = 0; i < 200; i++)
+        {
+            var challenge = ZaloPkce.Challenge(ZaloPkce.NewVerifier());
+            challenge.ShouldNotContain('+');
+            challenge.ShouldNotContain('/');
+            challenge.Length.ShouldBe(43);
+        }
+    }
+
+    [Fact]
     public void Signature_is_sha256_of_appid_body_timestamp_secret()
     {
         const string body = """{"event_name":"user_send_text"}""";
