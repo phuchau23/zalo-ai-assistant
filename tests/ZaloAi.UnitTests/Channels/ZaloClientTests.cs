@@ -126,6 +126,20 @@ public sealed class ZaloClientTests
         ex.ShortCode.ShouldBe($"zalo:{code}");
     }
 
+    [Theory]
+    [InlineData(-224, true)]
+    [InlineData(-221, true)]
+    [InlineData(-230, false)]
+    [InlineData(-223, false)]
+    public async Task Oa_level_send_blocks_are_recognised(int code, bool blocked)
+    {
+        var (client, _) = Create((_, _) => Json($$"""{"error":{{code}},"message":"x"}"""));
+
+        var ex = await Should.ThrowAsync<ZaloApiException>(() => client.SendTextAsync("AT", "u", "hi", CancellationToken.None));
+        ex.IsOaRestriction.ShouldBe(blocked);
+        ZaloApiException.OaRestrictionCodes.Contains(ex.ShortCode).ShouldBe(blocked);
+    }
+
     [Fact]
     public async Task Rate_limit_and_server_errors_are_transient()
     {

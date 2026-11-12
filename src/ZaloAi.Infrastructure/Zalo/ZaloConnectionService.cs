@@ -136,7 +136,7 @@ public sealed partial class ZaloConnectionService(
         try
         {
             var tokens = await zalo.RefreshAsync(encryptor.Decrypt(connection.RefreshTokenEnc), cancellationToken);
-            Apply(connection, tokens, time.GetUtcNow());
+            Apply(connection, tokens, time.GetUtcNow(), keepSendBlock: true);
             await connections.SaveChangesAsync(cancellationToken);
             return connection;
         }
@@ -158,6 +158,27 @@ public sealed partial class ZaloConnectionService(
         }
     }
 
+    /// <summary>
+    /// Zalo chặn gửi ở cấp OA (-224 chưa mua gói, -221 chưa xác thực): ghi lỗi để trang Kênh Zalo báo chủ DN.
+    /// Giữ trạng thái active (cấp quyền lại không giúp; tin khách vẫn vào để nhân viên trả lời tay trong app OA).
+    /// </summary>
+    public async Task RecordSendBlockedAsync(Guid tenantId, Guid connectionId, string code, CancellationToken cancellationToken)
+    {
+        var connection = await connections.GetAsync(tenantId, connectionId, cancellationToken);
+        if (connection is null || connection.LastError == code)
+        {
+            return;
+        }
+
+        connection.LastError = code;
+        await connections.SaveChangesAsync(cancellationToken);
+        LogSendBlocked(logger, connection.Id, connection.TenantId, code);
+    }
+
+    /// <summary>Gửi được tin → OA hết bị chặn (vd chủ DN đã mua gói): xóa cảnh báo trên trang Kênh Zalo.</summary>
+    public Task ClearSendBlockedAsync(Guid tenantId, Guid connectionId, CancellationToken cancellationToken) =>
+        connections.ClearLastErrorAsync(tenantId, connectionId, ZaloApiException.OaRestrictionCodes, cancellationToken);
+
     private async Task MarkNeedsReauthAsync(ChannelConnection connection, string code, CancellationToken cancellationToken)
     {
         connection.Status = ConnectionStatus.NeedsReauth;
@@ -169,7 +190,8 @@ public sealed partial class ZaloConnectionService(
     private bool NeedsRefresh(ChannelConnection connection) =>
         connection.AccessTokenExpiresAt - time.GetUtcNow() < TimeSpan.FromMinutes(options.Value.RefreshBeforeExpiryMinutes);
 
-    private void Apply(ChannelConnection connection, ZaloTokens tokens, DateTimeOffset now)
+    /// <param name="keepSendBlock">Làm mới token không chữa được OA bị chặn gửi (chưa mua gói...) → giữ cảnh báo tới khi gửi được tin.</param>
+    private void Apply(ChannelConnection connection, ZaloTokens tokens, DateTimeOffset now, bool keepSendBlock = false)
     {
         connection.AccessTokenEnc = encryptor.Encrypt(tokens.AccessToken);
         connection.RefreshTokenEnc = encryptor.Encrypt(tokens.RefreshToken);
@@ -177,7 +199,10 @@ public sealed partial class ZaloConnectionService(
         connection.RefreshTokenExpiresAt = now.Add(RefreshTokenLifetime);
         connection.LastRefreshedAt = now;
         connection.Status = ConnectionStatus.Active;
-        connection.LastError = null;
+        if (!(keepSendBlock && connection.LastError is { } error && ZaloApiException.OaRestrictionCodes.Contains(error)))
+        {
+            connection.LastError = null;
+        }
     }
 
     /// <summary>Chờ tối đa ~10 giây nếu bản khác đang giữ khóa (thường là đang làm mới xong).</summary>
@@ -201,4 +226,7 @@ public sealed partial class ZaloConnectionService(
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Kết nối Zalo {ConnectionId} của tenant {TenantId} cần cấp quyền lại ({Code})")]
     private static partial void LogNeedsReauth(ILogger logger, Guid connectionId, Guid tenantId, string code);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Zalo chặn gửi tin ở cấp OA cho kết nối {ConnectionId} của tenant {TenantId} ({Code}) — chủ DN cần xử lý trên oa.zalo.me")]
+    private static partial void LogSendBlocked(ILogger logger, Guid connectionId, Guid tenantId, string code);
 }

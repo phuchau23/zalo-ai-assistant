@@ -24,7 +24,13 @@ public interface IChannelAdapter
 /// Không thể gửi và gửi lại cũng vô ích (khách không còn nhận được tin, kênh mất quyền...). Job đánh dấu tin Failed, không thử lại.
 /// <see cref="Code"/> ngắn, không chứa nội dung (vd "zalo:-230").
 /// </summary>
-public sealed class ChannelPermanentException(string code, string message) : Exception(message)
+public sealed class ChannelPermanentException(string code, string message, bool channelBlocked = false) : Exception(message)
 {
     public string Code { get; } = code;
+
+    /// <summary>
+    /// Kênh chặn MỌI tin (vd OA chưa mua gói Zalo cho tính năng gửi tin) chứ không riêng khách này → bot không trả lời được ai,
+    /// cần chuyển nhân viên trả lời tay và báo chủ DN.
+    /// </summary>
+    public bool ChannelBlocked { get; } = channelBlocked;
 }

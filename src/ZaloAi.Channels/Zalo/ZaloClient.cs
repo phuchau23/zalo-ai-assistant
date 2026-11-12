@@ -225,5 +225,14 @@ public sealed class ZaloApiException(int code, string? zaloMessage, Exception? i
     /// <summary>Người nhận không nhận được tin (chưa tương tác 7 ngày, khóa, chặn...) → không gửi lại.</summary>
     public bool IsRecipientError => Code is -213 or -227 or -230 or -232 or -244 or -218;
 
+    /// <summary>
+    /// Zalo chặn gửi ở cấp OA: -224 OA chưa mua gói cho tính năng này (gặp thật 2026-11-11), -221 OA chưa xác thực.
+    /// Mọi tin đều lỗi tới khi chủ DN xử lý trên oa.zalo.me; cấp quyền lại không giúp được.
+    /// </summary>
+    public bool IsOaRestriction => Code is -224 or -221;
+
+    /// <summary>Mã ngắn (dạng lưu ở channel_connections.last_error) của các lỗi <see cref="IsOaRestriction"/>.</summary>
+    public static IReadOnlyList<string> OaRestrictionCodes { get; } = ["zalo:-224", "zalo:-221"];
+
     public string ShortCode => $"zalo:{Code.ToString(CultureInfo.InvariantCulture)}";
 }
