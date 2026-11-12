@@ -138,6 +138,37 @@ public sealed class ZaloWebhookTests(PostgresFixture db) : IAsyncLifetime, IDisp
         (await MessagesAsync(tenantId)).ShouldBeEmpty();
     }
 
+    /// <summary>Có AppId nhưng chưa có OA Secret Key (lúc đang khai báo webhook trên Zalo).</summary>
+    private sealed class NoWebhookSecretFactory(string connectionString, string redisConnectionString)
+        : ApiFactory(connectionString, redisConnectionString: redisConnectionString)
+    {
+        protected override Dictionary<string, string?> Settings
+        {
+            get
+            {
+                var settings = base.Settings;
+                settings["Zalo:AppId"] = ZaloApiFactory.AppId;
+                return settings;
+            }
+        }
+    }
+
+    [Fact]
+    public async Task Without_webhook_secret_answers_200_so_zalo_can_save_the_url_but_stores_nothing()
+    {
+        var (tenantId, oaId, _) = await ConnectedTenantAsync("Chưa có khóa webhook");
+        await using var unconfigured = new NoWebhookSecretFactory(db.ConnectionString, db.RedisConnectionString);
+        using var request = new HttpRequestMessage(HttpMethod.Post, new Uri("/webhooks/zalo", UriKind.Relative))
+        {
+            Content = new StringContent(UserText(oaId, NewId(), "msg-probe", "hi"), Encoding.UTF8, "application/json"),
+        };
+
+        using var response = await unconfigured.CreateClient().SendAsync(request);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        (await MessagesAsync(tenantId)).ShouldBeEmpty();
+    }
+
     [Fact]
     public async Task Duplicate_webhook_is_answered_once()
     {
