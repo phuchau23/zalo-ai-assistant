@@ -88,6 +88,8 @@ public sealed class AttentionNotifyJob(
         "medical" => "câu hỏi chuyên môn sức khỏe",
         "media" => "khách gửi hình ảnh/tệp",
         "quota_exceeded" => "đã hết hạn mức hội thoại tháng này, khách mới cần nhân viên trả lời",
+        MessageDeliveryService.ChannelBlockedReason =>
+            "Zalo chưa cho OA gửi tin qua hệ thống (xem trang Kênh Zalo) — nhân viên trả lời khách trong ứng dụng Zalo OA",
         _ => "bot cần người hỗ trợ",
     };
 }
