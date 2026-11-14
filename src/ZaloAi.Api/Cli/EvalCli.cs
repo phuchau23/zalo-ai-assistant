@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using ZaloAi.Ai.Evals;
 using ZaloAi.Core.Ai;
+using ZaloAi.Core.Entities;
 using ZaloAi.IndustryTemplates;
 using ZaloAi.Infrastructure.Persistence.Seed;
 using ZaloAi.Infrastructure.Repositories;
@@ -105,9 +106,12 @@ internal static class EvalCli
     private static async Task<BotTurnResult> AskAsync(IBotEngine bot, BotProfile profile, Guid tenantId, EvalCase evalCase, int delayMs)
     {
         BotTurnResult result = null!;
+        var history = (evalCase.BotBefore ?? []).Select(text => new BotHistoryTurn(MessageSender.Bot, text))
+            .Concat((evalCase.History ?? []).Select(t => new BotHistoryTurn(t.From == "customer" ? MessageSender.Customer : MessageSender.Bot, t.Text)))
+            .ToList();
         for (var attempt = 0; attempt <= MaxRetries; attempt++)
         {
-            result = await bot.ReplyAsync(new BotTurnRequest(tenantId, profile, evalCase.Question, [], null, IsFirstBotReply: false), CancellationToken.None);
+            result = await bot.ReplyAsync(new BotTurnRequest(tenantId, profile, evalCase.Question, history, null, IsFirstBotReply: false), CancellationToken.None);
             if (!result.TraceJson.Contains("\"ai_unavailable\"", StringComparison.Ordinal) || attempt == MaxRetries)
             {
                 break;
