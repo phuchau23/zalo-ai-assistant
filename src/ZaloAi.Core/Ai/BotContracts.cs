@@ -41,6 +41,10 @@ public sealed record BotHistoryTurn(MessageSender Sender, string Text);
 /// <param name="Salutation">Cách gọi khách đã lưu (<see cref="CustomerSalutation"/>); null = chưa biết.</param>
 /// <param name="SalutationByStaff">Nhân viên đã đặt cách gọi → AI không đổi theo cách khách tự xưng.</param>
 /// <param name="Booking">Đặt lịch qua chat đang bật (CRM C2) và thông tin lịch sắp tới của khách để AI hiểu "dời/hủy".</param>
+/// <param name="MaxMessages">
+/// Số tin tối đa lượt này (nick Zalo cá nhân đang gần hết lượt gửi, hoặc ban đêm). null = theo giọng văn (1–4 tin).
+/// Nơi gọi vẫn gộp cứng bằng <see cref="MessageParts.Fit"/> phòng AI viết thừa.
+/// </param>
 public sealed record BotTurnRequest(
     Guid TenantId,
     BotProfile Profile,
@@ -51,7 +55,8 @@ public sealed record BotTurnRequest(
     string? CustomerName = null,
     string? Salutation = null,
     bool SalutationByStaff = false,
-    BookingContext? Booking = null);
+    BookingContext? Booking = null,
+    int? MaxMessages = null);
 
 /// <summary>Lịch sắp tới của khách (đưa vào prompt, không PII ngoài tên dịch vụ/giờ).</summary>
 /// <param name="StartLocal">Giờ địa phương "dddd dd/MM HH:mm".</param>

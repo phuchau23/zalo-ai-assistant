@@ -17,4 +17,10 @@ public interface IDistributedStore
 
     /// <summary>Tăng bộ đếm; lần tăng đầu tiên đặt hạn <paramref name="window"/>. Trả giá trị sau khi tăng.</summary>
     Task<long> IncrementAsync(string key, TimeSpan window, CancellationToken cancellationToken);
+
+    /// <summary>Đọc (không xóa). null = không có hoặc đã hết hạn.</summary>
+    Task<string?> GetAsync(string key, CancellationToken cancellationToken);
+
+    /// <summary>Ghi đè kèm hạn <paramref name="ttl"/>.</summary>
+    Task SetAsync(string key, string value, TimeSpan ttl, CancellationToken cancellationToken);
 }
