@@ -29,6 +29,8 @@ internal sealed class ContactConfiguration : IEntityTypeConfiguration<Contact>
         builder.HasIndex(c => new { c.TenantId, c.Channel, c.ExternalUserId }).IsUnique();
         builder.HasIndex(c => new { c.TenantId, c.LeadStatus });
         builder.HasIndex(c => new { c.TenantId, c.LastCustomerMessageAt });
+        builder.Property(c => c.Origin).HasMaxLength(20);
+        builder.HasOne<Contact>().WithMany().HasForeignKey(c => c.ReferredByContactId).OnDelete(DeleteBehavior.SetNull);
 
         builder.HasOne<Tenant>().WithMany().HasForeignKey(c => c.TenantId).OnDelete(DeleteBehavior.Cascade);
     }
