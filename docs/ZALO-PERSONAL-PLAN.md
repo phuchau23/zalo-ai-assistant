@@ -343,8 +343,20 @@ Dùng khi khách **của DN** chưa nhắn trực tiếp được qua nick (khá
   2. Từ ô dán SĐT hàng loạt (6.9): số nào nhắn thẳng không được thì mời kết bạn. Hàng đợi chạy dần theo giới hạn mục 7,
      không gửi dồn.
   3. **(Chủ dự án chốt 2026-11-14)** Người dán SĐT đã **trả lời** tin chào mà chưa là bạn bè → 3 phút sau tự gửi 1 lời mời
-     (`OutreachGreeting.InviteAfterReply`), cùng giới hạn lời mời/ngày + khoảng cách; trạng thái giữ "Đang tư vấn". Không mời cùng
-     lúc với tin chào (tốn lượt mời cho người không trả lời, lời mời bị bỏ qua nhiều dễ bị hạn chế nick).
+     (`OutreachGreeting.InviteAfterReply`), cùng giới hạn lời mời/ngày + khoảng cách; trạng thái giữ "Đang tư vấn".
+  4. **(Chủ dự án chốt lại 2026-11-15 — kết bạn linh hoạt, thay mục 3 phần "không mời cùng tin chào")** Người mới tới lượt: còn lượt
+     mời cho người mới → **kết bạn trước** (lời chào trong lời mời, chưa nhắn gì); hết lượt (hoặc đã là bạn của nick) → **nhắn trước**.
+     Lượt mời trong ngày giữ ~1/3 (ít nhất 1) cho người **đã trả lời** (`OutreachTenantJob.ColdInviteCap`: 3 → 2, 5 → 4, 10 → 7);
+     hàng đợi xử lý người đã trả lời / đã kết bạn trước người mới. Lời mời kết bạn trước cũng tính là "người mới hôm nay". Zalo từ chối
+     lời mời → lượt sau nhắn trước. Mỗi người chỉ được chủ động chạm **một lần**: đã mời mà không chấp nhận thì không nhắn thêm,
+     14 ngày rút lời mời.
+  5. **Sau khi chấp nhận (2026-11-15):** chưa nói chuyện → tin đầu: cảm ơn + báo trợ lý AI + nói sơ bên mình hỗ trợ được gì (theo nhóm
+     dịch vụ) + hỏi xin phép. Đã nói chuyện rồi mới chấp nhận → **một** câu cảm ơn + giới thiệu sơ (không chào lại), gửi khi hội thoại
+     yên ≥ 2 phút và bot đang tự lo (nhân viên / chủ nick đang chat thì thôi).
+  6. **Lời chào do AI viết riêng từng người (2026-11-15, thay "mẫu cố định")** — `IOutreachWriter` / `OutreachWriter`: theo người giới
+     thiệu, ghi chú đợt dán, nhóm dịch vụ; hệ thống kiểm luật (có "trợ lý AI" ở tin mở đầu, không giá/số/khuyến mãi/câu cấm, không
+     "anh/chị", đủ ngắn, không placeholder lạ) → sai thì thử lại 1 lần → vẫn sai dùng mẫu `OutreachGreeting` (vài biến thể ngẫu nhiên).
+     Tên khách / người giới thiệu / ghi chú được che trước khi gửi AI.
 - **Lời chào trong lời mời:** AI soạn ngắn theo hồ sơ (tên DN, cách gọi khách, dịch vụ đã dùng), qua bộ lọc câu cấm; chỉ là lời
   chào/hỏi thăm, không quảng cáo. Độ dài tối đa của lời mời Zalo: chưa kiểm chứng → cắt an toàn ~150 ký tự, đo ở buổi test thật.
 - **Mỗi người 1 lần:** không gửi lại. 14 ngày không chấp nhận → `expired`, rút lời mời (`undoFriendRequest`), thôi.
