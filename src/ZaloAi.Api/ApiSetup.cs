@@ -140,6 +140,8 @@ internal static class ApiSetup
         app.MapChannelEndpoints();
         app.MapZaloWebhookEndpoints();
         app.MapZaloSiteVerificationEndpoints();
+        app.MapZaloPersonalEndpoints();
+        app.MapZaloPersonalInternalEndpoints();
         app.MapInboxEndpoints();
         app.MapHandoffSettingsEndpoints();
         app.MapCustomerEndpoints();
