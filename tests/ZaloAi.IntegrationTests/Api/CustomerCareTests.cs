@@ -320,6 +320,12 @@ public sealed class CustomerCareTests(PostgresFixture db)
         contact.Salutation.ShouldBe("cô");
         contact.SalutationSource.ShouldBe("staff");
 
+        // Câu tiếp quản mặc định tắt (2026-11-14) → DN bật lên để thử.
+        var s = (await owner.GetFromJsonAsync<HandoffSettingsResponse>(Url("/tenant/handoff-settings")))!;
+        (await owner.PutAsJsonAsync(Url("/tenant/handoff-settings"), new UpdateHandoffSettingsRequest(
+            s.HandoffMessage, s.AfterHoursMessage, TakeoverMessageEnabled: true, s.TakeoverMessage, s.ReturnToBotMessageEnabled, s.ReturnToBotMessage,
+            s.StaffSignatureEnabled, s.ResponseTime, s.OpenTime, s.CloseTime, s.WorkingDays, s.ReminderMinutes, s.TelegramChatId,
+            s.CareEnabled, s.CareColdHours, s.CareAutoSend, s.CareSendStart, s.CareSendEnd))).StatusCode.ShouldBe(HttpStatusCode.OK);
         (await owner.PostAsync(Url($"/inbox/conversations/{conversationId}/take-over"), null)).StatusCode.ShouldBe(HttpStatusCode.NoContent);
         var detail = (await owner.GetFromJsonAsync<InboxConversationDetail>(Url($"/inbox/conversations/{conversationId}")))!;
         detail.Messages[^1].Text.ShouldStartWith("Dạ chào cô,");
