@@ -26,7 +26,11 @@ public sealed class HandoffSettings : ITenantOwned
     /// <summary>Câu chuyển người ngoài giờ làm việc (luôn bật).</summary>
     public string AfterHoursMessage { get; set; } = DefaultAfterHoursMessage;
 
-    public bool TakeoverMessageEnabled { get; set; } = true;
+    /// <summary>
+    /// Câu nhân viên tự giới thiệu khi tiếp quản. Mặc định TẮT (chủ dự án chốt 2026-11-14): khách đang chat với chính tài khoản đó,
+    /// tự giới thiệu thêm thấy lạ, nhất là trên nick Zalo cá nhân. DN muốn thì bật trong cài đặt chuyển tiếp.
+    /// </summary>
+    public bool TakeoverMessageEnabled { get; set; }
 
     public string TakeoverMessage { get; set; } = DefaultTakeoverMessage;
 
@@ -34,8 +38,8 @@ public sealed class HandoffSettings : ITenantOwned
 
     public string ReturnToBotMessage { get; set; } = DefaultReturnToBotMessage;
 
-    /// <summary>Chữ ký cuối tin nhân viên: "— {tên}, CSKH".</summary>
-    public bool StaffSignatureEnabled { get; set; } = true;
+    /// <summary>Chữ ký cuối tin nhân viên: "— {tên}, CSKH". Mặc định TẮT (2026-11-14), cùng lý do với câu tiếp quản.</summary>
+    public bool StaffSignatureEnabled { get; set; }
 
     /// <summary>Thời gian phản hồi dự kiến, chèn vào câu chuyển người (ví dụ "15 phút").</summary>
     public string ResponseTime { get; set; } = "15 phút";

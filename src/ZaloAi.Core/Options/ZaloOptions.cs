@@ -22,6 +22,14 @@ public sealed class ZaloOptions : IValidatableObject
     /// <summary>"OA Secret Key" trên trang Webhook của app — dùng kiểm chữ ký X-ZEvent-Signature. KHÁC AppSecret.</summary>
     public string? WebhookSecret { get; set; }
 
+    /// <summary>
+    /// Mã xác thực tên miền của Zalo App (trang app → Xác thực domain). Không bí mật: cũng nằm trong bản ghi DNS TXT công khai.
+    /// Có giá trị → API trả file /zalo_verifier{mã}.html để Zalo xác thực kiểu "Tiền tố URL" cho chính tên miền của API
+    /// (Zalo không tính tên miền con như dev-api.haulp.io.vn thuộc haulp.io.vn đã xác thực).
+    /// </summary>
+    [RegularExpression("^[A-Za-z0-9_-]{8,128}$", ErrorMessage = "Zalo:SiteVerificationToken chỉ gồm chữ, số, '_' và '-'.")]
+    public string? SiteVerificationToken { get; set; }
+
     [Url]
     public string OAuthBaseUrl { get; set; } = "https://oauth.zaloapp.com/v4/oa/";
 

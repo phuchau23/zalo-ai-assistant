@@ -57,6 +57,19 @@ public sealed class RedisDistributedStore(IConnectionMultiplexer redis) : IDistr
         return value;
     }
 
+    public async Task<string?> GetAsync(string key, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var value = await Db.StringGetAsync(Prefix + key);
+        return value.IsNull ? null : value.ToString();
+    }
+
+    public Task SetAsync(string key, string value, TimeSpan ttl, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Db.StringSetAsync(Prefix + key, value, ttl);
+    }
+
     private sealed class Lock(IDatabase db, RedisKey key, string token) : IAsyncDisposable
     {
         public async ValueTask DisposeAsync() =>

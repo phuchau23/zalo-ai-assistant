@@ -19,6 +19,15 @@ public sealed class ChannelConnectionRepository(AppDbContext db, ITenantContext 
             .ToListAsync(cancellationToken);
     }
 
+    /// <summary>Xóa lỗi gần nhất nếu đang là một trong các mã cho trước — một câu UPDATE, không tải bản ghi.</summary>
+    public Task<int> ClearLastErrorAsync(Guid tenantId, Guid connectionId, IReadOnlyList<string> codes, CancellationToken cancellationToken)
+    {
+        EnsureTenant(tenantId);
+        return Db.ChannelConnections
+            .Where(c => c.TenantId == tenantId && c.Id == connectionId && c.LastError != null && codes.Contains(c.LastError))
+            .ExecuteUpdateAsync(s => s.SetProperty(c => c.LastError, (string?)null), cancellationToken);
+    }
+
     /// <summary>Được track. Không thuộc tenant → null.</summary>
     public Task<ChannelConnection?> GetAsync(Guid tenantId, Guid connectionId, CancellationToken cancellationToken)
     {
@@ -92,7 +101,7 @@ public sealed class ChannelConnectionLookup(AppDbContext db)
     {
         var rows = await db.ChannelConnections.IgnoreQueryFilters()
             .AsNoTracking()
-            .Where(c => c.Status == ConnectionStatus.Active && c.AccessTokenExpiresAt < before)
+            .Where(c => c.Channel == ChannelKind.Zalo && c.Status == ConnectionStatus.Active && c.AccessTokenExpiresAt < before)
             .Select(c => new { c.Id, c.TenantId })
             .ToListAsync(cancellationToken);
         return rows.Select(r => (r.Id, r.TenantId)).ToList();

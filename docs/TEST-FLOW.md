@@ -565,6 +565,149 @@ Nếu đã kết nối Telegram: Cài đặt → Thông báo → bấm "Gửi th
 
 ---
 
+## Buổi 13 — Zalo cá nhân, chạy giả lập (≈ 40 phút)
+
+Chưa cần nick thật: sidecar chạy **giả lập** (cửa sổ "ZaloAi Personal :4100"). Khung **"Giả lập Zalo cá nhân"** ở cuối thẻ nick (trang Kênh Zalo) đóng vai khách; câu trả lời của bot xem ở **Hộp thư**.
+Bot qua Zalo cá nhân trả lời **chậm hơn chat thử: 15–30 giây** (gom tin 8 giây + giả gõ 3–12 giây, cho giống người thật). Việc bot tự đi nhắn (dán SĐT) chạy **mỗi phút một lượt**.
+
+### 13.0 Chuẩn bị
+1. `.\stop` rồi `.\dev` → phải đủ 4 cửa sổ **API, Worker, Portal, ZaloAi Personal :4100**.
+2. 💻 Đăng nhập `owner@khoahochuyetdao.local` / `Dev@123456` (DN có kho kiến thức nên bot trả lời có nội dung).
+3. Mở 2 tab: **Tab A** = Kênh Zalo (`/channels`), **Tab B** = Hộp thư (`/inbox`).
+4. Test trong **8:00–20:00** (ngoài giờ bot không tự đi nhắn).
+
+### 13.1 Kết nối nick bằng QR
+Tab A → mục **Zalo cá nhân** → **Kết nối nick** → tích ô rủi ro → tiếp tục.
+- Bấm **Giả lập từ chối** → **Đúng khi:** báo bị từ chối, có nút thử lại.
+- Thử lại → **Giả lập hết hạn** → **Đúng khi:** báo mã hết hạn.
+- Thử lại → **Giả lập quét** → **Đúng khi:** báo kết nối xong; thẻ "Nick thử" **Đang chạy**; thẻ *Chế độ an toàn* hiện 0/3 lời mời, 0/20 người mới, "IP riêng: chưa có" (dev không bắt buộc proxy).
+
+### 13.2 Khách lạ nhắn → bot trả lời
+Tab A → mở **Giả lập Zalo cá nhân** → Mã Zalo (uid) `khach-1`, Tên `Chị Mai`, **bỏ tích** "Là bạn bè", nội dung:
+```
+trị liệu cổ vai gáy 60 phút giá bao nhiêu
+```
+**Đúng khi:** Tab B có hội thoại Chị Mai ghi tên nick; 15–30 giây sau bot trả lời, tin đầu báo là trợ lý AI, giá **550.000đ/lượt**.
+Gửi lại có tích **Nhắn trong nhóm** → **Đúng khi:** Hộp thư không có gì mới (bot không đọc nhóm).
+
+### 13.3 Chủ nick nhắn tay → bot tạm im
+Tab A, uid vẫn `khach-1`, ô **Chủ nick nhắn tay**: `Dạ chị đợi em xíu nhé` → Gửi.
+- **Đúng khi:** Tab B hiện tin đó và dải "Bot đang tạm im đến HH:mm vì chủ nick vừa nhắn tay" (30 phút).
+- Khách (`khach-1`) nhắn `còn slot chiều nay không em` → **Đúng khi:** bot **không** trả lời.
+- Bấm **Bật lại bot** → khách nhắn tiếp → **Đúng khi:** bot trả lời.
+
+### 13.4 Bạn bè nhắn → bot không đọc
+uid `ban-1`, tên `Anh Tuấn`, **tích "Là bạn bè"**, nội dung bất kỳ → Gửi.
+- **Đúng khi:** Hộp thư không có hội thoại Anh Tuấn; nút **Người quen nhắn** trên thẻ nick có số 1.
+- Mở **Người quen nhắn** → **Đúng khi:** thấy Anh Tuấn, *không* thấy nội dung tin. Bấm **Đây là khách** → Anh Tuấn nhắn tiếp → bot trả lời. (Bấm **Riêng tư** thì bot không bao giờ đọc.)
+
+### 13.5 Dán SĐT → bot tự nhắn chào
+Menu **Chăm sóc Zalo cá nhân** → tab **Thêm SĐT** → dán:
+```
+0911222333, chị Lan
+0911222000, anh Bình
+0911222333
+abc
+```
+Nguồn **Khách giới thiệu người quen**, Người giới thiệu tên `Chị Hoa`, tích ô xác nhận → **Bắt đầu chăm sóc**.
+- **Đúng khi:** nhận 2, bỏ qua 2 (1 trùng, 1 sai định dạng), có số ngày dự kiến.
+- Đợi 1–2 phút → tab **Đang chăm sóc**: chị Lan **Đã nhắn, chờ trả lời**; anh Bình **Không có Zalo – gọi điện** (giả lập: số đuôi `000` = không có Zalo).
+- Tab B, hội thoại chị Lan: tin chào báo trợ lý AI, nhắc "Chị Hoa có giới thiệu chị Lan…", chỉ hỏi xin phép, **không có giá**.
+- Thẻ Chế độ an toàn: **Người mới nhắn lần đầu 1/20**.
+
+### 13.6 Khách trả lời → bot tư vấn
+Tab A giả lập: uid `fake-0911222333` (giả lập đặt uid = `fake-` + SĐT), tên `chị Lan`, nội dung `ừ em gửi chị xem với` → Gửi.
+**Đúng khi:** Đang chăm sóc → chị Lan **Đang tư vấn**; Tab B bot tư vấn theo kho kiến thức (15–30 giây).
+
+### 13.7 Khách nhắn "hủy" → không bao giờ nhắn lại
+uid `fake-0911222333` nhắn `hủy`. Rồi dán lại `0911222333` ở Thêm SĐT.
+**Đúng khi:** bị bỏ qua với lý do đã từ chối nhận tin. Trong vòng 1 giờ (job dọn chạy phút thứ 20 mỗi giờ) chị Lan chuyển **Từ chối**.
+
+### 13.8 (Tùy chọn) Zalo từ chối tin → mời kết bạn, lỗi thì dừng hẳn
+Dán `0911222444, [[blocked]]` (tên `[[blocked]]` làm giả lập từ chối mọi tin có chữ đó).
+**Đúng khi:** lượt đầu → **Đã mời kết bạn** (Lời mời kết bạn hôm nay 1/3) → giả lập tự chấp nhận → **Đã kết bạn** → lượt sau tin vẫn bị từ chối → **Lỗi**, và đứng yên ở Lỗi (Hộp thư chỉ có 2 tin lỗi, không tăng thêm mỗi phút).
+
+### 13.9 Nhịp gửi
+Tab A → **Nhịp gửi**. **Đúng khi:** An toàn hiện 3 / 20 / 200 và giải thích; chọn **Tùy chỉnh** → mỗi ô có khuyến cáo, không ô nào vượt trần; lưu số cao hơn mức an toàn phải tích "Tôi hiểu và tự chịu rủi ro…". Lưu xong thẻ hiện "Nhịp gửi: Tùy chỉnh". Đổi lại **An toàn**.
+
+### 13.10 Mất kết nối
+Trong khung giả lập:
+- **Rớt mạng** → **Đúng khi:** vài giây sau tự **Đang chạy** lại (chưa đổi thì tải lại trang).
+- **Mở Zalo Web nơi khác** → **Đúng khi:** thẻ báo "Bị ngắt vì mở Zalo Web", bot ngừng trả lời nick này → bấm **Kết nối lại** (không cần QR) → Đang chạy.
+- **Phiên hết hạn** → **Đúng khi:** thẻ báo "Cần quét lại mã QR" → **Quét lại** → **Giả lập quét** → **chính nick cũ** chạy lại (không thêm nick thứ hai, cài đặt và người quen còn nguyên).
+- **Proxy hỏng** → **Đúng khi:** "Đường kết nối riêng đang lỗi", bot tạm dừng ở nick này → **Kết nối lại**.
+- Có cài Telegram thì nhóm nhận báo nick mất kết nối.
+
+### 13.11 Tin nhắn mẫu
+Cài đặt → **Tin nhắn mẫu** → **Thêm mẫu**: Tên `Bảng giá cổ vai gáy`, Phím tắt `gia`, Nội dung bất kỳ → Lưu.
+Hộp thư → hội thoại Chị Mai → **Tiếp quản** → ô trả lời gõ `/gia` → **Đúng khi:** hiện danh sách mẫu, Enter chèn nội dung, gửi được.
+
+### 13.12 Quyền + super admin
+- Đăng nhập `nhanvien1@khoahochuyetdao.local` (nếu đã tạo ở 5b) → **Đúng khi:** vào được Chăm sóc Zalo cá nhân và dán SĐT được; ở Kênh Zalo chỉ xem, không có nút sửa.
+- Đăng nhập `admin@zaloai.local` → **Proxy Zalo cá nhân** → **Đúng khi:** thấy "Nick thử" của Khoa Học Huyệt Đạo, chưa có IP riêng. (Không cần thêm proxy ở dev.)
+
+---
+
+## Buổi 14 — Zalo cá nhân với nick THẬT (≈ 45 phút)
+
+Không cần tunnel/tên miền như OA: sidecar tự kết nối ra Zalo. Dev không bắt buộc proxy (buổi này dùng mạng nhà; proxy ở 14.9).
+
+### 14.0 Chuẩn bị
+- **Nick phụ**: SIM trả trước + điện thoại cũ, đã dùng bình thường ~1 tuần (ảnh, tên, vài bạn bè, vài tin). **Không bao giờ** kết nối nick chính vào Remi.
+- **Nick chính** của bạn đóng vai khách. Trong Zalo nick chính: Cài đặt → Quyền riêng tư → bật cho người khác **tìm thấy bằng số điện thoại** (để bot tìm được).
+- Test trong **8:00–20:00**. Chỉ dán số của chính bạn hoặc người đã đồng ý.
+
+### 14.1 Gỡ nick giả lập
+Đăng nhập `owner@anphat.local` và `owner@khoahochuyetdao.local` → Kênh Zalo → **Ngắt kết nối** "Nick thử…" ở cả hai.
+**Vì sao:** để chế độ thật không đem phiên giả gửi lên Zalo; mỗi DN tối đa 2 nick.
+
+### 14.2 Chuyển sang chế độ thật
+1. Sửa `connectors\zalo-personal\.env`: `REMI_MODE=real`
+2. PowerShell ở `zalo-ai-assistant` (API và Worker dùng chung kho bí mật):
+   ```
+   dotnet user-secrets set ZaloPersonal:Mode Real --project src/ZaloAi.Api
+   ```
+3. `.\stop` rồi `.\dev`. **Đúng khi:** trang Kênh Zalo không còn khung "Giả lập".
+
+### 14.3 Kết nối nick phụ
+`owner@khoahochuyetdao.local` → Kênh Zalo → **Kết nối nick** → tích ô rủi ro → mã QR thật.
+Điện thoại nick phụ: Zalo → biểu tượng **quét QR** (cạnh ô tìm kiếm) → quét → **xác nhận đăng nhập**.
+**Đúng khi:** vài giây sau thẻ nick **Đang chạy**, đúng tên nick phụ. Không lên → chụp cửa sổ "ZaloAi Personal :4100".
+
+### 14.4 Bot tự tìm và chào (làm TRƯỚC khi nick chính nhắn)
+Chăm sóc Zalo cá nhân → Thêm SĐT → dán `<SĐT nick chính>, <tên bạn>` → nguồn **Khách cũ đã dùng dịch vụ** → tích xác nhận → Bắt đầu.
+**Đúng khi (từ 2026-11-15 — kết bạn trước khi còn lượt mời):** trong 1–2 phút nick chính nhận **lời mời kết bạn kèm lời chào**
+(báo trợ lý AI, không giá) → trạng thái **Đã mời kết bạn**, chưa có tin nhắn nào.
+- Chấp nhận lời mời → trong 1–2 phút nhận tin: cảm ơn + báo trợ lý AI + nói sơ bên mình có các liệu trình gì + hỏi xin phép → **Đã nhắn, chờ trả lời**.
+- Lời chào do AI viết riêng (mỗi người một kiểu, không văn mẫu). Muốn thử luồng "nhắn trước": Kênh Zalo → ⋯ → Nhịp gửi → Tùy chỉnh, lời mời/ngày = 1 (lượt duy nhất giữ cho người đã trả lời).
+- Báo **Không có Zalo** → xem lại quyền "tìm bằng số điện thoại" ở 14.0.
+(Nick chính nhắn trước thì số này bị bỏ qua vì "đang chat".)
+
+### 14.5 Khách trả lời → bot tư vấn
+Nick chính trả lời `ừ gửi mình xem`, rồi `trị liệu cổ vai gáy 60 phút giá bao nhiêu`.
+**Đúng khi:** 15–30 giây bot trả lời trên Zalo nick chính, giá 550.000đ; Đang chăm sóc → **Đang tư vấn**; Hộp thư có hội thoại ghi tên nick.
+
+### 14.6 Chủ nick nhắn tay + nhân viên trả lời
+- Trên điện thoại nick phụ, nhắn tay cho nick chính → **Đúng khi:** Hộp thư hiện tin đó + "Bot đang tạm im"; nick chính nhắn tiếp → bot im; **Bật lại bot** → bot trả lời.
+- Hộp thư → **Tiếp quản** → gõ trả lời (thử `/` chèn mẫu) → **Đúng khi:** nick chính nhận; **Trả lại cho bot**.
+
+### 14.7 Mất kết nối
+- Mở https://chat.zalo.me bằng nick phụ trên trình duyệt → **Đúng khi:** Remi báo "Bị ngắt vì mở Zalo Web". Đăng xuất Zalo Web → **Kết nối lại** → Đang chạy.
+- `.\stop` rồi `.\dev` → **Đúng khi:** nick tự chạy lại, không cần quét QR.
+
+### 14.8 Ghi lại gửi Claude (để ghi vào zalo-api-notes)
+Quét QR tới Đang chạy mất bao lâu; bot trả lời mất bao lâu; tìm SĐT có ra không; lời mời có hiện đủ lời chào không; mở Zalo PC trên máy tính có làm rớt nick không; điện thoại nick phụ có hiện cảnh báo gì của Zalo không.
+**Không** nhắn `hủy` từ nick chính (khách nhắn hủy thì không bật lại được) — để test hủy cuối cùng nếu muốn.
+
+### 14.9 (Buổi sau) Proxy
+Mua 1 proxy dân cư/4G Việt Nam IP cố định → `admin@zaloai.local` → **Proxy Zalo cá nhân** → Thêm proxy → gán cho nick phụ (nick đăng nhập lại qua IP mới; Zalo đòi xác minh thì quét QR lại).
+**Đúng khi:** IP ra trên trang đúng IP proxy; nhận/gửi tin bình thường; proxy hỏng → nick dừng, không tự đi thẳng mạng nhà.
+
+### 14.10 Quay về giả lập
+`REMI_MODE=fake` trong `.env`, chạy `dotnet user-secrets remove ZaloPersonal:Mode --project src/ZaloAi.Api`, ngắt nick thật nếu muốn, `.\stop` + `.\dev`.
+
+---
+
 ## Mẫu báo kết quả (chép, điền, gửi Claude)
 ```
 BUỔI …

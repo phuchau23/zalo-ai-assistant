@@ -7,6 +7,7 @@ namespace ZaloAi.Api.Connections;
 /// <summary>
 /// Zalo gọi vào đây cho mọi OA đã cấp quyền cho app (một URL cho cả app). Đọc nguyên body để kiểm chữ ký trên đúng chuỗi Zalo gửi.
 /// Sai chữ ký → 401; còn lại luôn 200 nhanh (Zalo chỉ chờ 2 giây, quá hạn nhiều lần sẽ tự hủy đăng ký webhook).
+/// Máy chưa cấu hình WebhookSecret → 200, không xử lý gì (Zalo chỉ cho lưu URL khi gọi thử nhận 200, khóa chỉ có sau đó).
 /// </summary>
 internal static class ZaloWebhookEndpoints
 {

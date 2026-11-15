@@ -42,6 +42,20 @@ public sealed partial class FakeChatProvider : IChatProvider
             var unanswerable = lower.Contains("thời tiết", StringComparison.Ordinal);
             text = JsonSerializer.Serialize(new { report, from = (string?)null, to = (string?)null, group_by = "day", focus = (string?)null, unanswerable, explanation = unanswerable ? "Không phải số liệu kinh doanh." : null });
         }
+        else if (request.JsonSchema.Contains("\"outreach_messages\"", StringComparison.Ordinal))
+        {
+            // Tin chủ động gửi người được dán SĐT: 1 đoạn ngắn (vừa lời mời kết bạn), có "trợ lý AI", không con số.
+            var thanks = request.System.Contains("ĐÃ NÓI CHUYỆN", StringComparison.Ordinal);
+            text = JsonSerializer.Serialize(new
+            {
+                outreach_messages = new[]
+                {
+                    thanks
+                        ? "Dạ em cảm ơn mình đã kết bạn ạ, bên em có các liệu trình chăm sóc tùy nhu cầu, cần gì mình cứ nhắn em nha."
+                        : "Dạ em chào mình, em là trợ lý AI của tiệm (giả lập). Mình có muốn em gửi thông tin phù hợp không ạ?",
+                },
+            });
+        }
         else if (request.JsonSchema.Contains("ask_human", StringComparison.Ordinal))
         {
             // Phân tích chăm sóc: khách nói "không cần" → none; có "phàn nàn"/"đau" → cần nhân viên; tới giờ hẹn → follow_up; còn lại → nhắn.

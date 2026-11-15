@@ -50,6 +50,7 @@ public static class DependencyInjection
         services.AddScoped<ICareAdvisor, CareAdvisor>();
         services.AddScoped<IAppointmentBriefWriter, Care.AppointmentBriefWriter>();
         services.AddScoped<IReportQuestionInterpreter, Reports.ReportQuestionInterpreter>();
+        services.AddScoped<IOutreachWriter, Outreach.OutreachWriter>();
 
         return services;
     }

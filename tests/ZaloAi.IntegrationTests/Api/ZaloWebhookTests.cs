@@ -12,6 +12,7 @@ using ZaloAi.Channels.Zalo;
 using ZaloAi.Core.Channels;
 using ZaloAi.Core.Entities;
 using ZaloAi.Core.Security;
+using ZaloAi.Infrastructure.Inbox;
 using ZaloAi.Infrastructure.Jobs;
 using ZaloAi.IntegrationTests.Infrastructure;
 
@@ -138,6 +139,37 @@ public sealed class ZaloWebhookTests(PostgresFixture db) : IAsyncLifetime, IDisp
         (await MessagesAsync(tenantId)).ShouldBeEmpty();
     }
 
+    /// <summary>Có AppId nhưng chưa có OA Secret Key (lúc đang khai báo webhook trên Zalo).</summary>
+    private sealed class NoWebhookSecretFactory(string connectionString, string redisConnectionString)
+        : ApiFactory(connectionString, redisConnectionString: redisConnectionString)
+    {
+        protected override Dictionary<string, string?> Settings
+        {
+            get
+            {
+                var settings = base.Settings;
+                settings["Zalo:AppId"] = ZaloApiFactory.AppId;
+                return settings;
+            }
+        }
+    }
+
+    [Fact]
+    public async Task Without_webhook_secret_answers_200_so_zalo_can_save_the_url_but_stores_nothing()
+    {
+        var (tenantId, oaId, _) = await ConnectedTenantAsync("Chưa có khóa webhook");
+        await using var unconfigured = new NoWebhookSecretFactory(db.ConnectionString, db.RedisConnectionString);
+        using var request = new HttpRequestMessage(HttpMethod.Post, new Uri("/webhooks/zalo", UriKind.Relative))
+        {
+            Content = new StringContent(UserText(oaId, NewId(), "msg-probe", "hi"), Encoding.UTF8, "application/json"),
+        };
+
+        using var response = await unconfigured.CreateClient().SendAsync(request);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        (await MessagesAsync(tenantId)).ShouldBeEmpty();
+    }
+
     [Fact]
     public async Task Duplicate_webhook_is_answered_once()
     {
@@ -228,6 +260,40 @@ public sealed class ZaloWebhookTests(PostgresFixture db) : IAsyncLifetime, IDisp
         var replies = (await MessagesAsync(tenantId)).Where(m => m.Sender == MessageSender.Bot).ToList();
         replies.Count.ShouldBe(1); // câu trả lời (kèm câu báo AI)
         replies.ShouldAllBe(m => m.DeliveryStatus == DeliveryStatus.Failed && m.DeliveryError == "zalo:-230");
+    }
+
+    [Fact]
+    public async Task Oa_without_package_flags_connection_hands_off_to_staff_and_clears_once_sending_works()
+    {
+        var (tenantId, oaId, _) = await ConnectedTenantAsync("OA chưa mua gói");
+        var success = _zalo.SendResponse;
+        _zalo.SendResponse = _ => """{"error":-224,"message":"OA has not purchased a package for this feature"}""";
+
+        // Lệnh "hủy" → bot trả lời câu cố định, không tự chuyển người → gửi bị -224 → hệ thống phải chuyển nhân viên.
+        (await PostAsync(UserText(oaId, NewId(), "msg-224", "hủy"))).StatusCode.ShouldBe(HttpStatusCode.OK);
+        await RunJobsAsync(tenantId);
+
+        await using (var context = db.CreateDbContext(tenantId))
+        {
+            var connection = await context.ChannelConnections.SingleAsync();
+            connection.Status.ShouldBe(ConnectionStatus.Active); // kết nối lại không chữa được → không bắt chủ DN kết nối lại
+            connection.LastError.ShouldBe("zalo:-224");
+            var conversation = await context.Conversations.SingleAsync();
+            conversation.Mode.ShouldBe(ConversationMode.Human);
+            conversation.HandoffReason.ShouldBe(MessageDeliveryService.ChannelBlockedReason);
+            conversation.NeedsAttentionSince.ShouldNotBeNull();
+        }
+
+        var outgoing = (await MessagesAsync(tenantId)).Where(m => m.Direction == MessageDirection.Out).ToList();
+        outgoing.ShouldNotBeEmpty();
+        outgoing.ShouldAllBe(m => m.DeliveryStatus == DeliveryStatus.Failed && m.DeliveryError == "zalo:-224");
+
+        // Chủ DN mua gói → tin sau gửi được → cảnh báo trên trang Kênh Zalo tự mất.
+        _zalo.SendResponse = success;
+        (await PostAsync(UserText(oaId, NewId(), "msg-ok", "xin chào"))).StatusCode.ShouldBe(HttpStatusCode.OK);
+        await RunJobsAsync(tenantId);
+        await using var after = db.CreateDbContext(tenantId);
+        (await after.ChannelConnections.SingleAsync()).LastError.ShouldBeNull();
     }
 
     [Fact]

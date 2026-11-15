@@ -8,8 +8,23 @@ public static class ZaloPkce
 {
     private const string Alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 
-    /// <summary>Chuỗi 43 ký tự gồm chữ hoa, chữ thường, số — mỗi lần kết nối một chuỗi mới, giữ bí mật phía server.</summary>
-    public static string NewVerifier() => RandomNumberGenerator.GetString(Alphabet, 43);
+    /// <summary>
+    /// Chuỗi 43 ký tự gồm chữ hoa, chữ thường, số — mỗi lần kết nối một chuỗi mới, giữ bí mật phía server.
+    /// Docs Zalo ghi challenge là "Base64", chuẩn PKCE (RFC 7636) là base64url; hai kiểu chỉ khác nhau ở '+' và '/'.
+    /// Chưa kiểm chứng Zalo dùng kiểu nào (kết nối thật 2026-11-11 báo -14013) → chỉ nhận verifier có challenge KHÔNG chứa
+    /// hai ký tự đó, để challenge đúng với cả hai cách hiểu. Trung bình ~4 lần thử, vẫn còn ~254 bit ngẫu nhiên.
+    /// </summary>
+    public static string NewVerifier()
+    {
+        while (true)
+        {
+            var verifier = RandomNumberGenerator.GetString(Alphabet, 43);
+            if (Challenge(verifier).AsSpan().IndexOfAny('+', '/') < 0)
+            {
+                return verifier;
+            }
+        }
+    }
 
     /// <summary>code_challenge = Base64(SHA-256(ASCII(code_verifier))) không padding (đúng câu chữ docs).</summary>
     public static string Challenge(string verifier)

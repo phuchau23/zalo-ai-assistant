@@ -238,6 +238,17 @@ public sealed class BotEngineTests
     }
 
     [Fact]
+    public async Task Max_messages_is_told_to_the_ai_only_when_set()
+    {
+        var chat = new ScriptedChat(_ => Json("ok", ["C1"]));
+        await Engine(chat, new StaticSearch(Massage)).ReplyAsync(Turn("Cho mình hỏi giá massage body 60 phút bao nhiêu vậy?") with { MaxMessages = 2 }, CancellationToken.None);
+        await Engine(chat, new StaticSearch(Massage)).ReplyAsync(Turn("Cho mình hỏi giá massage body 60 phút bao nhiêu vậy?"), CancellationToken.None);
+
+        chat.Requests[0].System.ShouldContain("Lượt này chỉ gửi TỐI ĐA 2 tin");
+        chat.Requests[1].System.ShouldNotContain("Lượt này chỉ gửi");
+    }
+
+    [Fact]
     public async Task Short_message_search_includes_previous_customer_turn()
     {
         var search = new StaticSearch(Massage);
@@ -246,9 +257,101 @@ public sealed class BotEngineTests
             Turn("còn 90p?", history: [new(MessageSender.Customer, "giá massage body"), new(MessageSender.Bot, "450k ạ")]),
             CancellationToken.None);
 
-        search.Queries.ShouldHaveSingleItem().ShouldBe("giá massage body\ncòn 90p?");
+        search.Queries[0].ShouldBe("giá massage body\n450k ạ\ncòn 90p?");
         var turns = chat.Requests[0].Turns;
         turns.Select(t => t.Role).ShouldBe([ChatRole.User, ChatRole.Assistant, ChatRole.User]);
+    }
+
+    private sealed class QuerySearch(Func<string, KnowledgeHit[]> hits) : IKnowledgeSearch
+    {
+        public List<string> Queries { get; } = [];
+
+        public Task<IReadOnlyList<KnowledgeHit>> SearchAsync(Guid tenantId, string query, int limit, CancellationToken cancellationToken)
+        {
+            Queries.Add(query);
+            return Task.FromResult<IReadOnlyList<KnowledgeHit>>(hits(query));
+        }
+    }
+
+    [Fact]
+    public async Task Short_yes_searches_what_the_bot_offered_and_adds_featured_services()
+    {
+        // Lỗi thật 2026-11-14: bot "em gửi thông tin các gói nha", khách "có" → tìm theo "còn gì không\ncó" ra toàn chính sách,
+        // bot không có gì cụ thể để gửi nên hỏi lại chung chung.
+        var policy = new KnowledgeHit(Guid.NewGuid(), "item", Guid.NewGuid(), "CS-1", "Đặt lịch", "Đặt lịch qua hotline.", 0.6, false);
+        var package = new KnowledgeHit(Guid.NewGuid(), "item", Guid.NewGuid(), "GOI-1", "Gói cổ vai gáy", "Gói cổ vai gáy 10 buổi: 3.500.000đ", 0.6, false);
+        var search = new QuerySearch(q => q.StartsWith("Dịch vụ, gói", StringComparison.Ordinal) ? [Massage, package, policy] : [policy]);
+        var chat = new ScriptedChat(_ => Json("Dạ bên em có massage body 60 phút 450.000đ ạ.", ["C2"]));
+        await Engine(chat, search).ReplyAsync(
+            Turn("có", history:
+            [
+                new(MessageSender.Customer, "còn gì không"),
+                new(MessageSender.Bot, "Dạ, em chỉ muốn gửi thông tin các gói chăm sóc sức khỏe để mình tham khảo thôi ạ"),
+            ]),
+            CancellationToken.None);
+
+        search.Queries[0].ShouldBe("còn gì không\nDạ, em chỉ muốn gửi thông tin các gói chăm sóc sức khỏe để mình tham khảo thôi ạ\ncó");
+        search.Queries.Count.ShouldBe(2);
+        var system = chat.Requests[0].System;
+        system.ShouldContain("Massage body 60 phút: 450.000đ");
+        system.ShouldContain("Gói cổ vai gáy 10 buổi");
+        system.Split("Đặt lịch qua hotline.").Length.ShouldBe(2); // không trùng đoạn
+        system.ShouldContain("làm luôn điều đó");
+    }
+
+    [Fact]
+    public async Task Long_question_does_one_plain_search()
+    {
+        var search = new StaticSearch(Massage);
+        await Engine(new ScriptedChat(_ => Json("ok", ["C1"])), search).ReplyAsync(
+            Turn("Cho mình hỏi massage body 60 phút giá bao nhiêu vậy?", history: [new(MessageSender.Bot, "Dạ em chào mình")]),
+            CancellationToken.None);
+
+        search.Queries.ShouldHaveSingleItem().ShouldBe("Cho mình hỏi massage body 60 phút giá bao nhiêu vậy?");
+    }
+
+    [Fact]
+    public async Task Business_first_message_reaches_ai_when_customer_replies_to_it()
+    {
+        // Zalo cá nhân: bot chủ động chào trước, khách đáp "Sao á e". Trước đây tin chào bị bỏ (lượt chat phải bắt đầu bằng khách).
+        var search = new StaticSearch(Massage);
+        var chat = new ScriptedChat(_ => Json("Dạ bên em là spa trị liệu, được người quen của chị giới thiệu ạ."));
+        await Engine(chat, search).ReplyAsync(
+            Turn("Sao á e", history: [new(MessageSender.Bot, "Dạ em chào Lan Anh! Bên em được người quen của Lan Anh giới thiệu ạ.")], name: "Lan Anh"),
+            CancellationToken.None);
+
+        var request = chat.Requests[0];
+        request.Turns.ShouldHaveSingleItem().Text.ShouldBe("Sao á e");
+        request.System.ShouldContain("BÊN MÌNH ĐÃ NHẮN KHÁCH TRƯỚC");
+        request.System.ShouldContain("Bên em được người quen của [NAME_1] giới thiệu ạ.");
+        request.System.ShouldNotContain("Lan Anh");
+        search.Queries[0].ShouldEndWith("\nSao á e");
+    }
+
+    [Fact]
+    public async Task Leading_bot_message_after_summary_is_context_not_conversation_start()
+    {
+        var chat = new ScriptedChat(_ => Json("Dạ vâng ạ."));
+        await Engine(chat, new StaticSearch()).ReplyAsync(
+            new BotTurnRequest(Guid.NewGuid(), Spa, "ok e", [new(MessageSender.Staff, "Mai 9h chị ghé được không ạ?")], "- Khách hỏi giá massage", false),
+            CancellationToken.None);
+
+        var system = chat.Requests[0].System;
+        system.ShouldContain("TIN BÊN MÌNH GỬI NGAY TRƯỚC TIN CỦA KHÁCH");
+        system.ShouldContain("(Nhân viên) Mai 9h chị ghé được không ạ?");
+        system.ShouldNotContain("BÊN MÌNH ĐÃ NHẮN KHÁCH TRƯỚC");
+    }
+
+    [Fact]
+    public async Task No_opening_section_when_customer_spoke_first()
+    {
+        var chat = new ScriptedChat(_ => Json("ok", ["C1"]));
+        await Engine(chat, new StaticSearch(Massage)).ReplyAsync(
+            Turn("còn 90p?", history: [new(MessageSender.Customer, "giá massage body"), new(MessageSender.Bot, "450k ạ")]),
+            CancellationToken.None);
+
+        chat.Requests[0].System.ShouldNotContain("TIN BÊN MÌNH");
+        chat.Requests[0].System.ShouldNotContain("NHẮN KHÁCH TRƯỚC");
     }
 
     [Fact]

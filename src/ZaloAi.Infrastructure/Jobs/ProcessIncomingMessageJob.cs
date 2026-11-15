@@ -9,6 +9,7 @@ using ZaloAi.Core.Channels;
 using ZaloAi.Core.Entities;
 using ZaloAi.Core.Errors;
 using ZaloAi.Core.Options;
+using ZaloAi.Core.Realtime;
 using ZaloAi.Core.Security;
 using ZaloAi.Infrastructure.Billing;
 using ZaloAi.Infrastructure.Customers;
@@ -38,6 +39,10 @@ public sealed partial class ProcessIncomingMessageJob(
     ContactPhoneLinker phoneLinker,
     Crm.BookingOrchestrator booking,
     IFieldEncryptor encryptor,
+    IInboxNotifier notifier,
+    ZaloPersonalRepository personal,
+    ZaloPersonal.PersonalSendLimiter limiter,
+    IOptions<ZaloPersonalOptions> personalOptions,
     IOptions<AiOptions> options,
     TimeProvider time,
     ILogger<ProcessIncomingMessageJob> logger)
@@ -70,9 +75,19 @@ public sealed partial class ProcessIncomingMessageJob(
         if (await conversations.FindReplyAsync(tenantId, messageId, cancellationToken) is not null)
         {
             // Đã soạn ở lần chạy trước: gửi nốt các tin ra còn pending (câu trả lời bot, câu chuyển tiếp) — không gọi AI lần 2.
+            // Khách đã nhắn tin mới hơn → đoạn trả lời cũ chưa gửi thì bỏ (job của tin mới trả lời), câu chuyển tiếp vẫn gửi.
+            var superseded = await conversations.LatestCustomerMessageIdAsync(tenantId, conversation.Id, cancellationToken) != messageId;
             foreach (var pending in await conversations.ListPendingOutgoingAsync(tenantId, conversation.Id, cancellationToken))
             {
-                await delivery.DeliverAsync(tenantId, conversation, contact, pending, cancellationToken);
+                if (superseded && pending is { Sender: MessageSender.Bot, Proactive: false })
+                {
+                    MessageDeliveryService.Skip([pending]);
+                    await conversations.SaveChangesAsync(cancellationToken);
+                    continue;
+                }
+
+                await delivery.DeliverAsync(tenantId, conversation, contact, pending, cancellationToken, message.ExternalMessageId);
+                superseded |= pending.DeliveryStatus == DeliveryStatus.Skipped;
             }
 
             return;
@@ -83,8 +98,14 @@ public sealed partial class ProcessIncomingMessageJob(
             return;
         }
 
-        // Kênh Zalo đã ngắt/mất quyền: không gọi AI (tốn tiền) cho tin không gửi được.
-        if (conversation.Channel == ChannelKind.Zalo
+        // Zalo cá nhân: chủ nick vừa nhắn tay trên điện thoại → bot tạm im tới hết giờ (không cần ai bấm trả lại cho bot).
+        if (conversation.BotPausedUntil is { } pausedUntil && pausedUntil > time.GetUtcNow())
+        {
+            return;
+        }
+
+        // Kênh Zalo (OA hoặc nick cá nhân) đã ngắt/mất quyền: không gọi AI (tốn tiền) cho tin không gửi được.
+        if (conversation.Channel is ChannelKind.Zalo or ChannelKind.ZaloPersonal
             && (conversation.ConnectionId is not { } connectionId
                 || await connectionRepository.GetAsync(tenantId, connectionId, cancellationToken) is not { Status: ConnectionStatus.Active }))
         {
@@ -146,8 +167,12 @@ public sealed partial class ProcessIncomingMessageJob(
         var unsummarized = await conversations.ListMessagesAsync(tenantId, conversation.Id, conversation.SummarizedUntil, cancellationToken);
         var history = unsummarized
             .TakeWhile(m => m.Id != message.Id)
+            .Where(m => !NeverReachedCustomer(m))
             .Select(m => new BotHistoryTurn(m.Sender, encryptor.Decrypt(m.ContentEnc)))
             .ToList();
+
+        // Nick Zalo cá nhân: mỗi tin trừ 1 lượt gửi của nick → gần hết lượt / ban đêm thì gửi ít tin hơn (null = tự nhiên 1–4 tin).
+        var maxParts = await ReplyPartsAsync(tenantId, conversation, cancellationToken);
 
         var result = await bot.ReplyAsync(
             new BotTurnRequest(
@@ -160,7 +185,8 @@ public sealed partial class ProcessIncomingMessageJob(
                 CustomerName: contact.DisplayName,
                 Salutation: contact.Salutation,
                 SalutationByStaff: contact.SalutationSource == CustomerSalutation.SourceStaff,
-                Booking: await booking.ContextAsync(tenantId, contact.Id, cancellationToken)),
+                Booking: await booking.ContextAsync(tenantId, contact.Id, cancellationToken),
+                MaxMessages: maxParts),
             cancellationToken);
 
         // Khách tự xưng (anh/chị/cô/chú/bác) → nhớ để lần sau gọi đúng; cách gọi nhân viên đã đặt thì giữ nguyên.
@@ -180,6 +206,12 @@ public sealed partial class ProcessIncomingMessageJob(
                 NeedsHuman = outcome.HandoffReason is not null,
                 HandoffReason = outcome.HandoffReason ?? result.HandoffReason,
             };
+        }
+
+        // Gộp cứng sau khi đã ghép câu xác nhận lịch hẹn (AI có thể viết thừa tin dù đã được dặn).
+        if (maxParts is { } max)
+        {
+            result = result with { Messages = MessageParts.Fit(result.Messages, max) };
         }
 
         var replies = AddReplies(tenantId, conversation, message.Id, result);
@@ -236,7 +268,23 @@ public sealed partial class ProcessIncomingMessageJob(
                 await Task.Delay(options.Value.BotMessageGapMs, cancellationToken); // nhịp gõ như người thật giữa các tin
             }
 
-            await delivery.DeliverAsync(tenantId, conversation, contact, replies[i], cancellationToken);
+            // Khách nhắn tiếp trong lúc bot đang soạn/gửi → bỏ các đoạn chưa gửi; job của tin mới trả lời (thấy cả tin này).
+            // Kiểm ở đây cho khoảng giữa các tin; Zalo cá nhân còn kiểm lại ngay trước khi gửi (sau "đang soạn") — xem replyTo.
+            if (await conversations.LatestCustomerMessageIdAsync(tenantId, conversation.Id, cancellationToken) != message.Id)
+            {
+                MessageDeliveryService.Skip(replies.Skip(i));
+                await conversations.SaveChangesAsync(cancellationToken);
+                await notifier.PublishAsync(tenantId, new InboxEvent("message", conversation.Id), cancellationToken);
+                break;
+            }
+
+            await delivery.DeliverAsync(tenantId, conversation, contact, replies[i], cancellationToken, message.ExternalMessageId);
+            if (replies[i].DeliveryStatus == DeliveryStatus.Skipped)
+            {
+                MessageDeliveryService.Skip(replies.Skip(i + 1));
+                await conversations.SaveChangesAsync(cancellationToken);
+                break;
+            }
         }
 
         if (notice is not null)
@@ -246,6 +294,29 @@ public sealed partial class ProcessIncomingMessageJob(
 
         await SummarizeIfLongAsync(tenantId, conversation, unsummarized, cancellationToken);
     }
+
+    /// <summary>
+    /// Số tin tối đa lượt này: chỉ nick Zalo cá nhân (mỗi tin trừ 1 lượt gửi của nick). Còn nhiều lượt và không phải ban đêm → null
+    /// (giọng văn tự quyết 1–4 tin); gần hết lượt → 2 rồi 1; ban đêm → 1.
+    /// </summary>
+    private async Task<int?> ReplyPartsAsync(Guid tenantId, Conversation conversation, CancellationToken cancellationToken)
+    {
+        if (conversation.Channel != ChannelKind.ZaloPersonal || conversation.ConnectionId is not { } connectionId
+            || await personal.GetAccountAsync(tenantId, connectionId, cancellationToken) is not { } account)
+        {
+            return null;
+        }
+
+        var parts = await limiter.ReplyPartsAsync(account, personalOptions.Value, cancellationToken);
+        return parts < ZaloPersonal.PersonalPacing.NaturalParts ? parts : null;
+    }
+
+    /// <summary>
+    /// Đoạn trả lời của bot không tới khách: đã bỏ (khách nhắn chen), hoặc còn chờ gửi khi đã có tin khách mới hơn (tin đang xử lý) —
+    /// đoạn đó sẽ bị bỏ ở job cũ. Không đưa vào lịch sử cho AI, kẻo AI tưởng khách đã đọc.
+    /// </summary>
+    private static bool NeverReachedCustomer(Message m) =>
+        m is { Sender: MessageSender.Bot, Proactive: false, DeliveryStatus: DeliveryStatus.Skipped or DeliveryStatus.Pending };
 
     /// <summary>
     /// Hết hạn mức: chế độ nhân viên + câu chuyển tiếp (gắn reply_to_message_id = tin khách → chạy lại không gửi trùng) + Telegram.

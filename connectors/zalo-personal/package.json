@@ -1,0 +1,26 @@
+{
+  "name": "zalo-personal-sidecar",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Remi sidecar: personal Zalo accounts via zca-js (internal, talks to the .NET API over signed HTTP).",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node src/main.ts",
+    "dev": "node --watch src/main.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "https-proxy-agent": "9.1.0",
+    "node-fetch": "3.3.2",
+    "zca-js": "2.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "typescript": "7.0.2",
+    "vitest": "5.1.0"
+  }
+}

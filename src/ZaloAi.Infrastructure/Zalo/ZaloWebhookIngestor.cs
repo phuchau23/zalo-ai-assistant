@@ -21,7 +21,10 @@ public enum WebhookOutcome
     /// <summary>Chữ ký sai / không đúng app → 401, không xử lý gì.</summary>
     Rejected,
 
-    /// <summary>Hợp lệ nhưng không cần làm gì (sự kiện khác, OA chưa kết nối, tin trùng, tin của chính bot dội về) → 200.</summary>
+    /// <summary>
+    /// Không cần làm gì → 200: sự kiện khác, OA chưa kết nối, tin trùng, tin của chính bot dội về; hoặc máy CHƯA cấu hình
+    /// Zalo:AppId/WebhookSecret (giai đoạn khai báo webhook, không xử lý gì cả).
+    /// </summary>
     Ignored,
 
     /// <summary>Đã lưu tin và xếp job → 200.</summary>
@@ -51,13 +54,20 @@ public sealed partial class ZaloWebhookIngestor(
     public async Task<WebhookOutcome> HandleAsync(string rawBody, string? signature, CancellationToken cancellationToken)
     {
         var zalo = options.Value;
+        var e = ZaloWebhookEvent.Parse(rawBody);
         if (string.IsNullOrEmpty(zalo.AppId) || string.IsNullOrEmpty(zalo.WebhookSecret))
         {
-            LogRejected(logger, "Zalo:AppId/WebhookSecret chưa cấu hình");
-            return WebhookOutcome.Rejected;
+            // Zalo gọi thử Webhook URL lúc khai báo và chỉ cho lưu khi nhận 200, nhưng OA Secret Key chỉ hiện SAU khi lưu URL
+            // (kiểm thật 2026-11-11). Chưa có khóa → không kiểm được chữ ký → trả 200 nhưng KHÔNG lưu, KHÔNG xếp job.
+            // Có khóa rồi thì sai chữ ký vẫn 401. Ghi định dạng request thử (không ghi nội dung) để biết Zalo có ký nó không.
+            LogNotConfigured(
+                logger,
+                e?.EventName ?? "(body không đọc được)",
+                e is not null && e.AppId == zalo.AppId,
+                ZaloWebhookSignature.DescribeFormat(signature));
+            return WebhookOutcome.Ignored;
         }
 
-        var e = ZaloWebhookEvent.Parse(rawBody);
         if (e is null || e.AppId != zalo.AppId
             || !ZaloWebhookSignature.IsValid(signature, zalo.AppId, rawBody, e.Timestamp, zalo.WebhookSecret))
         {
@@ -190,6 +200,9 @@ public sealed partial class ZaloWebhookIngestor(
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Webhook Zalo bị từ chối: {Reason}")]
     private static partial void LogRejected(ILogger logger, string reason);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Webhook Zalo: chưa cấu hình Zalo:AppId/WebhookSecret → trả 200, bỏ qua không xử lý (sự kiện {EventName}, app_id khớp {AppIdMatches}, header {SignatureFormat})")]
+    private static partial void LogNotConfigured(ILogger logger, string eventName, bool appIdMatches, string signatureFormat);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Webhook Zalo bỏ qua: {EventName}")]
     private static partial void LogIgnored(ILogger logger, string eventName);

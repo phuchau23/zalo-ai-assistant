@@ -1,0 +1,9 @@
+# Cloudflare Tunnel cho dev (README "Kết nối Zalo OA khi chạy local"). dev.cmd chạy:
+#   cloudflared tunnel --config scripts\tunnel-dev.yml run zaloai-dev
+# Chỉ mở ra internet các đường Zalo cần gọi vào; mọi đường khác (đăng nhập, API quản trị, Hangfire, OpenAPI) trả 404,
+# để API dev (tài khoản demo mật khẩu dễ đoán) không lộ ra ngoài. Khóa tunnel nằm ở %USERPROFILE%\.cloudflared, không ở đây.
+ingress:
+  - hostname: dev-api.haulp.io.vn
+    path: '^/(health|webhooks/zalo|connect/zalo/callback|zalo_verifier[A-Za-z0-9_-]+\.html)$'
+    service: http://localhost:4000
+  - service: http_status:404
