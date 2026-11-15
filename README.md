@@ -22,6 +22,19 @@ Backup database dev: `scriptsbackup-db.cmd`, khôi phục: `scriptsestore-db.cm
 
 Tài liệu dự án: `CLAUDE.md`, `docs/`.
 
+## Kênh Zalo cá nhân (sidecar zca-js)
+
+Kết nối nick Zalo **cá nhân** của doanh nghiệp bằng quét QR (thư viện không chính thức, nick có thể bị Zalo khóa — xem
+`docs/ZALO-PERSONAL-PLAN.md`). Sidecar Node ở `connectors/zalo-personal/` (README riêng, hợp đồng `CONTRACT.md`).
+
+1. Khóa chung (một lần): đặt cùng một chuỗi ≥ 32 ký tự vào `dotnet user-secrets set "ZaloPersonal:SharedSecret" "..." --project src/ZaloAi.Api`
+   và `REMI_SHARED_SECRET` trong `connectors/zalo-personal/.env` (copy từ `.env.example`).
+2. `dev` tự bật sidecar (cửa sổ "ZaloAi Personal :4100", lần đầu tự `npm ci`) khi có file `.env`. API nghe thêm cổng nội bộ
+   `127.0.0.1:4001` (launchSettings) cho sidecar gọi vào; cổng này không đi qua tunnel.
+3. Chưa có nick thật: để `ZaloPersonal:Mode=Fake` (mặc định ở `appsettings.Development.json`) và `REMI_MODE=fake` → trang Kênh hiện
+   bảng **Giả lập Zalo cá nhân** (quét QR giả, khách nhắn, chủ nick nhắn tay, mất kết nối...). Có nick thật: đổi cả hai sang `Real`/`real`,
+   **dùng nick phụ**, không mở Zalo Web của nick đó khi đang kết nối.
+
 ## Kết nối Zalo OA khi chạy local (M4)
 
 Zalo phải gọi được vào máy dev qua **https công khai** (callback OAuth + webhook). Dùng Cloudflare Tunnel với tên miền dự án
