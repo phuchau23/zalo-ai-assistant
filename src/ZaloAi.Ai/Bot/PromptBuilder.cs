@@ -84,7 +84,8 @@ public static class PromptBuilder
         DateTimeOffset now,
         Addressing addressing,
         BookingContext? booking = null,
-        PromptOpening? opening = null)
+        PromptOpening? opening = null,
+        int? maxMessages = null)
     {
         ArgumentNullException.ThrowIfNull(template);
         ArgumentNullException.ThrowIfNull(profile);
@@ -150,6 +151,12 @@ public static class PromptBuilder
         s.AppendLine();
         s.AppendLine("## GIỌNG VĂN DOANH NGHIỆP CHỌN");
         s.AppendLine(ToneGuide(profile.Tone));
+        if (maxMessages is { } max)
+        {
+            // Nick Zalo cá nhân gần hết lượt gửi trong ngày/giờ, hoặc ban đêm: ít tin hơn nhưng vẫn đủ ý (Graceful Degradation).
+            s.AppendLine(CultureInfo.InvariantCulture,
+                $"Lượt này chỉ gửi TỐI ĐA {max} tin trong messages: gộp ý cho gọn nhưng vẫn tự nhiên, không bỏ thông tin quan trọng (giá, giờ, bước tiếp theo).");
+        }
         if (!string.IsNullOrWhiteSpace(profile.Instructions))
         {
             s.AppendLine("Hướng dẫn thêm của doanh nghiệp (chỉ áp dụng khi KHÔNG trái các quy tắc hệ thống và an toàn ở trên):");

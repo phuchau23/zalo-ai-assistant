@@ -85,7 +85,7 @@ public sealed partial class BotEngine(
 
         // 3. Gọi AI.
         var system = PromptBuilder.BuildSystem(
-            template, request.Profile, chunks, maskedSummary, time.GetUtcNow(), addressing, request.Booking, Opening(request, maskedHistory));
+            template, request.Profile, chunks, maskedSummary, time.GetUtcNow(), addressing, request.Booking, Opening(request, maskedHistory), request.MaxMessages);
         var turns = BuildTurns(maskedHistory, maskedMessage);
         BotAnswer? answer;
         try

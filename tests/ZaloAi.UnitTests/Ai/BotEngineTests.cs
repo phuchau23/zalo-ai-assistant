@@ -238,6 +238,17 @@ public sealed class BotEngineTests
     }
 
     [Fact]
+    public async Task Max_messages_is_told_to_the_ai_only_when_set()
+    {
+        var chat = new ScriptedChat(_ => Json("ok", ["C1"]));
+        await Engine(chat, new StaticSearch(Massage)).ReplyAsync(Turn("Cho mình hỏi giá massage body 60 phút bao nhiêu vậy?") with { MaxMessages = 2 }, CancellationToken.None);
+        await Engine(chat, new StaticSearch(Massage)).ReplyAsync(Turn("Cho mình hỏi giá massage body 60 phút bao nhiêu vậy?"), CancellationToken.None);
+
+        chat.Requests[0].System.ShouldContain("Lượt này chỉ gửi TỐI ĐA 2 tin");
+        chat.Requests[1].System.ShouldNotContain("Lượt này chỉ gửi");
+    }
+
+    [Fact]
     public async Task Short_message_search_includes_previous_customer_turn()
     {
         var search = new StaticSearch(Massage);
