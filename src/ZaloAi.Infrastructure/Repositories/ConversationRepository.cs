@@ -203,8 +203,10 @@ public sealed class ConversationRepository(AppDbContext db, ITenantContext tenan
     public Task<bool> HasBotReplyAsync(Guid tenantId, Guid conversationId, CancellationToken cancellationToken)
     {
         EnsureTenant(tenantId);
+        // Đoạn bị bỏ (khách nhắn chen) không tới khách → không tính, để câu báo trợ lý AI ở lần trả lời đầu vẫn được gửi.
         return Db.Messages.AnyAsync(
-            m => m.TenantId == tenantId && m.ConversationId == conversationId && m.Sender == MessageSender.Bot,
+            m => m.TenantId == tenantId && m.ConversationId == conversationId && m.Sender == MessageSender.Bot
+                 && m.DeliveryStatus != DeliveryStatus.Skipped,
             cancellationToken);
     }
 

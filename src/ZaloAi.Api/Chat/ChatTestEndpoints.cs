@@ -242,8 +242,9 @@ internal static class ChatTestEndpoints
 
         // Chỉ hiện tin khách đã thấy: bot trả lời nhiều tin ngắn thì các tin được lưu cùng lúc rồi gửi lần lượt (cách nhau ~1 giây).
         // Còn tin chờ gửi → vẫn "đang trả lời" để giao diện hỏi lại và hiện từng tin như người thật đang gõ.
+        // Đoạn bị bỏ vì khách nhắn chen (Skipped) khách không thấy → không hiện.
         var pending = all.Any(m => m.Direction == MessageDirection.Out && m.DeliveryStatus == DeliveryStatus.Pending);
-        var messages = all.Where(m => !(m.Direction == MessageDirection.Out && m.DeliveryStatus == DeliveryStatus.Pending)).ToList();
+        var messages = all.Where(m => !(m.Direction == MessageDirection.Out && m.DeliveryStatus is DeliveryStatus.Pending or DeliveryStatus.Skipped)).ToList();
         var waiting = conversation.Mode == ConversationMode.Bot
             && (pending || (messages.Count > 0 && messages[^1].Sender == MessageSender.Customer));
         return new ChatTestConversationResponse(
