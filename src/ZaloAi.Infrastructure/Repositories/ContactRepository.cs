@@ -134,6 +134,28 @@ public sealed class ContactRepository(AppDbContext db, ITenantContext tenantCont
             .FirstOrDefaultAsync(cancellationToken);
     }
 
+    /// <summary>Thêm hồ sơ khách mới (vd người DN dán SĐT để chủ động liên hệ). Lưu cùng lượt SaveChanges của bên gọi.</summary>
+    public Contact AddContact(Guid tenantId, Contact contact)
+    {
+        EnsureTenant(tenantId);
+        ArgumentNullException.ThrowIfNull(contact);
+        contact.TenantId = tenantId;
+        if (contact.Id == Guid.Empty)
+        {
+            contact.Id = Guid.CreateVersion7();
+        }
+
+        Db.Contacts.Add(contact);
+        return contact;
+    }
+
+    /// <summary>Hồ sơ khách theo kênh + mã người dùng của kênh (được track). Không có → null.</summary>
+    public Task<Contact?> FindByExternalIdAsync(Guid tenantId, ChannelKind channel, string externalUserId, CancellationToken cancellationToken)
+    {
+        EnsureTenant(tenantId);
+        return Db.Contacts.FirstOrDefaultAsync(c => c.TenantId == tenantId && c.Channel == channel && c.ExternalUserId == externalUserId, cancellationToken);
+    }
+
     public ContactNote AddNote(Guid tenantId, ContactNote note)
     {
         EnsureTenant(tenantId);
