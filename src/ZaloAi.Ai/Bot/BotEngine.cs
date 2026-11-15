@@ -84,7 +84,8 @@ public sealed partial class BotEngine(
         var chunks = await SearchAsync(request.TenantId, maskedMessage, maskedHistory, trace, cancellationToken);
 
         // 3. Gọi AI.
-        var system = PromptBuilder.BuildSystem(template, request.Profile, chunks, maskedSummary, time.GetUtcNow(), addressing, request.Booking);
+        var system = PromptBuilder.BuildSystem(
+            template, request.Profile, chunks, maskedSummary, time.GetUtcNow(), addressing, request.Booking, Opening(request, maskedHistory));
         var turns = BuildTurns(maskedHistory, maskedMessage);
         BotAnswer? answer;
         try
@@ -405,7 +406,28 @@ public sealed partial class BotEngine(
             decision.Booking);
     }
 
-    /// <summary>Lịch sử (đã che) + tin mới → lượt chat cho AI: bắt đầu bằng khách, gộp các tin liên tiếp cùng phía.</summary>
+    /// <summary>
+    /// Tin bên mình đứng trước tin đầu tiên của khách (vd tin chào chủ động của Zalo cá nhân, tin nhân viên nhắn từ "Cần chăm sóc").
+    /// <see cref="BuildTurns"/> phải bỏ chúng (lượt chat bắt đầu bằng khách) nên đưa vào hướng dẫn hệ thống — trước đây bị bỏ mất,
+    /// khách hỏi "sao vậy" thì bot không biết mình vừa nhắn gì.
+    /// </summary>
+    private PromptOpening? Opening(BotTurnRequest request, IReadOnlyList<BotHistoryTurn> maskedHistory)
+    {
+        var lead = maskedHistory
+            .TakeWhile(t => t.Sender != MessageSender.Customer)
+            .Select(t => t.Sender == MessageSender.Staff ? $"(Nhân viên) {t.Text}" : t.Text)
+            .ToList();
+        if (lead.Count == 0)
+        {
+            return null;
+        }
+
+        // Không có tóm tắt và không bị cắt bớt → các tin này đúng là đầu cuộc trò chuyện.
+        var businessStarted = request.Summary is null && request.History.Count <= _options.BotHistoryTurns;
+        return new PromptOpening(lead, businessStarted);
+    }
+
+    /// <summary>Lịch sử (đã che) + tin mới → lượt chat cho AI: bắt đầu bằng khách (tin bên mình đứng trước đã vào <see cref="Opening"/>), gộp các tin liên tiếp cùng phía.</summary>
     private static List<ChatTurn> BuildTurns(IReadOnlyList<BotHistoryTurn> history, string message)
     {
         var turns = new List<ChatTurn>();

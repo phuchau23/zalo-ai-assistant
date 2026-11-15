@@ -300,6 +300,50 @@ public sealed class BotEngineTests
     }
 
     [Fact]
+    public async Task Business_first_message_reaches_ai_when_customer_replies_to_it()
+    {
+        // Zalo cá nhân: bot chủ động chào trước, khách đáp "Sao á e". Trước đây tin chào bị bỏ (lượt chat phải bắt đầu bằng khách).
+        var search = new StaticSearch(Massage);
+        var chat = new ScriptedChat(_ => Json("Dạ bên em là spa trị liệu, được người quen của chị giới thiệu ạ."));
+        await Engine(chat, search).ReplyAsync(
+            Turn("Sao á e", history: [new(MessageSender.Bot, "Dạ em chào Lan Anh! Bên em được người quen của Lan Anh giới thiệu ạ.")], name: "Lan Anh"),
+            CancellationToken.None);
+
+        var request = chat.Requests[0];
+        request.Turns.ShouldHaveSingleItem().Text.ShouldBe("Sao á e");
+        request.System.ShouldContain("BÊN MÌNH ĐÃ NHẮN KHÁCH TRƯỚC");
+        request.System.ShouldContain("Bên em được người quen của [NAME_1] giới thiệu ạ.");
+        request.System.ShouldNotContain("Lan Anh");
+        search.Queries[0].ShouldEndWith("\nSao á e");
+    }
+
+    [Fact]
+    public async Task Leading_bot_message_after_summary_is_context_not_conversation_start()
+    {
+        var chat = new ScriptedChat(_ => Json("Dạ vâng ạ."));
+        await Engine(chat, new StaticSearch()).ReplyAsync(
+            new BotTurnRequest(Guid.NewGuid(), Spa, "ok e", [new(MessageSender.Staff, "Mai 9h chị ghé được không ạ?")], "- Khách hỏi giá massage", false),
+            CancellationToken.None);
+
+        var system = chat.Requests[0].System;
+        system.ShouldContain("TIN BÊN MÌNH GỬI NGAY TRƯỚC TIN CỦA KHÁCH");
+        system.ShouldContain("(Nhân viên) Mai 9h chị ghé được không ạ?");
+        system.ShouldNotContain("BÊN MÌNH ĐÃ NHẮN KHÁCH TRƯỚC");
+    }
+
+    [Fact]
+    public async Task No_opening_section_when_customer_spoke_first()
+    {
+        var chat = new ScriptedChat(_ => Json("ok", ["C1"]));
+        await Engine(chat, new StaticSearch(Massage)).ReplyAsync(
+            Turn("còn 90p?", history: [new(MessageSender.Customer, "giá massage body"), new(MessageSender.Bot, "450k ạ")]),
+            CancellationToken.None);
+
+        chat.Requests[0].System.ShouldNotContain("TIN BÊN MÌNH");
+        chat.Requests[0].System.ShouldNotContain("NHẮN KHÁCH TRƯỚC");
+    }
+
+    [Fact]
     public async Task Negative_sentiment_hands_off_even_when_ai_answers()
     {
         var chat = new ScriptedChat(_ => Json("Dạ em xin lỗi chị vì trải nghiệm chưa tốt ạ.", sentiment: "negative"));

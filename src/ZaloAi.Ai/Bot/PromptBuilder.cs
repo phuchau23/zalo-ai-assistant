@@ -9,6 +9,15 @@ namespace ZaloAi.Ai.Bot;
 /// <summary>Một đoạn kiến thức đưa vào prompt, đánh số C1, C2... (AI trả lại id đã dùng).</summary>
 public sealed record PromptChunk(string Id, KnowledgeHit Hit);
 
+/// <summary>
+/// Tin bên mình (bot/nhân viên) nằm TRƯỚC tin đầu tiên của khách trong phần lịch sử đưa cho AI. Lượt chat gửi AI phải bắt đầu bằng
+/// khách nên các tin này không đặt vào lượt chat được → đưa vào hướng dẫn hệ thống, để AI hiểu khách đang trả lời tin nào.
+/// </summary>
+/// <param name="Messages">Nội dung đã che PII, theo thứ tự gửi.</param>
+/// <param name="BusinessStarted">true = cuộc trò chuyện do bên mình nhắn trước (chăm sóc chủ động, tin chào); false = phần trước đã
+/// tóm tắt / cắt bớt, đây chỉ là tin gần nhất của bên mình.</param>
+public sealed record PromptOpening(IReadOnlyList<string> Messages, bool BusinessStarted);
+
 /// <summary>Cách bot gọi khách trong lượt này (<see cref="CustomerSalutation"/>).</summary>
 /// <param name="Salutation">anh | chị | cô | chú | bác, hoặc "mình" khi chưa biết.</param>
 /// <param name="ByStaff">Nhân viên đã đặt → giữ nguyên, không theo cách khách tự xưng.</param>
@@ -74,7 +83,8 @@ public static class PromptBuilder
         string? maskedSummary,
         DateTimeOffset now,
         Addressing addressing,
-        BookingContext? booking = null)
+        BookingContext? booking = null,
+        PromptOpening? opening = null)
     {
         ArgumentNullException.ThrowIfNull(template);
         ArgumentNullException.ThrowIfNull(profile);
@@ -180,7 +190,37 @@ public static class PromptBuilder
             s.AppendLine(maskedSummary.Trim());
         }
 
+        if (opening is { Messages.Count: > 0 })
+        {
+            AppendOpening(s, opening);
+        }
+
         return s.ToString();
+    }
+
+    private static void AppendOpening(StringBuilder s, PromptOpening opening)
+    {
+        s.AppendLine();
+        if (opening.BusinessStarted)
+        {
+            s.AppendLine("## BÊN MÌNH ĐÃ NHẮN KHÁCH TRƯỚC");
+            s.AppendLine("Cuộc trò chuyện này do bên mình chủ động nhắn khách trước, khách chưa nhắn gì trước đó. Tin bên mình đã gửi:");
+        }
+        else
+        {
+            s.AppendLine("## TIN BÊN MÌNH GỬI NGAY TRƯỚC TIN CỦA KHÁCH");
+        }
+
+        foreach (var message in opening.Messages)
+        {
+            s.AppendLine(CultureInfo.InvariantCulture, $"- \"{message.Trim()}\"");
+        }
+
+        s.AppendLine("Tin mới của khách là đang đáp lại (các) tin trên: hiểu theo ngữ cảnh đó, không chào lại như khách mới, không trả lời chung chung kiểu \"em có thể hỗ trợ gì\".");
+        if (opening.BusinessStarted)
+        {
+            s.AppendLine("Khách hỏi lại vì sao được nhắn / ai nhắn / có chuyện gì (\"sao vậy\", \"sao á\", \"ai đó\", \"sao có số tôi\"): nhắc ngắn ĐÚNG lý do đã nêu ở tin trên (không bịa thêm lý do, tên người giới thiệu hay ưu đãi), giới thiệu ngắn doanh nghiệp làm gì theo dữ liệu tham khảo, rồi hỏi nhẹ một câu về nhu cầu của khách. Lý do nhắn chỉ nhắc MỘT lần; khách hỏi tiếp thì đưa thông tin cụ thể (dịch vụ, giá theo dữ liệu), không nhắc lại lý do. Khách nói rõ không cần → cảm ơn, chào lịch sự, không mời thêm.");
+        }
     }
 
     /// <summary>
