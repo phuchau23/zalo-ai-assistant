@@ -28,6 +28,16 @@ public sealed partial class BotEngine(
     ILogger<BotEngine> logger) : IBotEngine
 {
     private const int MaxOutputTokens = 4096;
+
+    /// <summary>Tin khách ngắn hơn chừng này ký tự → tìm kiến thức kèm ngữ cảnh trước đó + vài dịch vụ tiêu biểu.</summary>
+    private const int ShortMessageChars = 30;
+
+    /// <summary>Số đoạn "dịch vụ tiêu biểu" thêm vào cho tin ngắn.</summary>
+    private const int OverviewExtra = 3;
+
+    /// <summary>Câu tìm các dịch vụ/gói có giá — dùng khi khách muốn nghe thêm mà không nói cụ thể dịch vụ nào.</summary>
+    private const string OverviewQuery = "Dịch vụ, gói liệu trình tiêu biểu: tên, thời lượng, giá";
+
     private readonly AiOptions _options = options.Value;
 
     public async Task<BotTurnResult> ReplyAsync(BotTurnRequest request, CancellationToken cancellationToken)
@@ -151,19 +161,22 @@ public sealed partial class BotEngine(
     private async Task<IReadOnlyList<PromptChunk>> SearchAsync(
         Guid tenantId,
         string maskedMessage,
-        IReadOnlyList<BotHistoryTurn> maskedHistory,
+        List<BotHistoryTurn> maskedHistory,
         TurnTrace trace,
         CancellationToken cancellationToken)
     {
-        // Tin quá ngắn ("còn gói 90 phút thì sao?") → ghép tin khách trước để tìm đúng ngữ cảnh.
+        // Tin quá ngắn ("còn 90p?", "có", "còn gì không") tự nó không tìm ra gì → ghép ngữ cảnh: tin khách trước đó + các tin bên mình vừa
+        // nhắn mà khách đang đáp lại ("có" sau "em gửi thông tin các gói nha" phải tìm ra các gói — lỗi thật 2026-11-14).
         var query = maskedMessage;
-        if (query.Length < 30)
+        var vague = query.Length < ShortMessageChars;
+        if (vague)
         {
-            var previous = maskedHistory.LastOrDefault(t => t.Sender == MessageSender.Customer);
-            if (previous is not null)
-            {
-                query = $"{previous.Text}\n{query}";
-            }
+            var lastCustomer = maskedHistory.FindLastIndex(t => t.Sender == MessageSender.Customer);
+            var ours = string.Join("\n", maskedHistory.Skip(lastCustomer + 1).Select(t => t.Text));
+            query = string.Join(
+                "\n",
+                new[] { lastCustomer >= 0 ? maskedHistory[lastCustomer].Text : null, Tail(ours, 400), maskedMessage }
+                    .Where(s => !string.IsNullOrWhiteSpace(s)));
         }
 
         if (string.IsNullOrWhiteSpace(query))
@@ -173,7 +186,17 @@ public sealed partial class BotEngine(
 
         try
         {
-            var hits = await search.SearchAsync(tenantId, query, _options.BotSearchLimit, cancellationToken);
+            var hits = (await search.SearchAsync(tenantId, query, _options.BotSearchLimit, cancellationToken)).ToList();
+
+            // Tin ngắn kiểu "có", "còn gì không", "gửi đi": khách muốn nghe thêm mà câu hỏi không nói dịch vụ nào → thêm vài dịch vụ/gói
+            // tiêu biểu để bot đưa được thông tin cụ thể (tên, giá) thay vì hỏi lại chung chung.
+            if (vague)
+            {
+                var overview = await search.SearchAsync(tenantId, OverviewQuery, OverviewExtra + _options.BotSearchLimit, cancellationToken);
+                var seen = hits.Select(h => h.ChunkId).ToHashSet();
+                hits.AddRange(overview.Where(h => seen.Add(h.ChunkId)).Take(OverviewExtra));
+            }
+
             trace.BelowThreshold = hits.Count(h => h.Score < _options.BotMinScore);
             var chunks = hits
                 .Where(h => h.Score >= _options.BotMinScore)
@@ -190,6 +213,9 @@ public sealed partial class BotEngine(
             return [];
         }
     }
+
+    /// <summary>Phần cuối của chuỗi (tin gần nhất quan trọng hơn) — giữ câu tìm kiếm ngắn.</summary>
+    private static string Tail(string text, int max) => text.Length <= max ? text : text[^max..];
 
     /// <summary>Gọi AI, JSON sai định dạng → thử lại 1 lần (nhiệt độ 0). Vẫn sai → null.</summary>
     private async Task<BotAnswer?> AskAsync(

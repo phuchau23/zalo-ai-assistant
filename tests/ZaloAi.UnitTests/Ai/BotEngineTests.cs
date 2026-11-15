@@ -246,9 +246,57 @@ public sealed class BotEngineTests
             Turn("còn 90p?", history: [new(MessageSender.Customer, "giá massage body"), new(MessageSender.Bot, "450k ạ")]),
             CancellationToken.None);
 
-        search.Queries.ShouldHaveSingleItem().ShouldBe("giá massage body\ncòn 90p?");
+        search.Queries[0].ShouldBe("giá massage body\n450k ạ\ncòn 90p?");
         var turns = chat.Requests[0].Turns;
         turns.Select(t => t.Role).ShouldBe([ChatRole.User, ChatRole.Assistant, ChatRole.User]);
+    }
+
+    private sealed class QuerySearch(Func<string, KnowledgeHit[]> hits) : IKnowledgeSearch
+    {
+        public List<string> Queries { get; } = [];
+
+        public Task<IReadOnlyList<KnowledgeHit>> SearchAsync(Guid tenantId, string query, int limit, CancellationToken cancellationToken)
+        {
+            Queries.Add(query);
+            return Task.FromResult<IReadOnlyList<KnowledgeHit>>(hits(query));
+        }
+    }
+
+    [Fact]
+    public async Task Short_yes_searches_what_the_bot_offered_and_adds_featured_services()
+    {
+        // Lỗi thật 2026-11-14: bot "em gửi thông tin các gói nha", khách "có" → tìm theo "còn gì không\ncó" ra toàn chính sách,
+        // bot không có gì cụ thể để gửi nên hỏi lại chung chung.
+        var policy = new KnowledgeHit(Guid.NewGuid(), "item", Guid.NewGuid(), "CS-1", "Đặt lịch", "Đặt lịch qua hotline.", 0.6, false);
+        var package = new KnowledgeHit(Guid.NewGuid(), "item", Guid.NewGuid(), "GOI-1", "Gói cổ vai gáy", "Gói cổ vai gáy 10 buổi: 3.500.000đ", 0.6, false);
+        var search = new QuerySearch(q => q.StartsWith("Dịch vụ, gói", StringComparison.Ordinal) ? [Massage, package, policy] : [policy]);
+        var chat = new ScriptedChat(_ => Json("Dạ bên em có massage body 60 phút 450.000đ ạ.", ["C2"]));
+        await Engine(chat, search).ReplyAsync(
+            Turn("có", history:
+            [
+                new(MessageSender.Customer, "còn gì không"),
+                new(MessageSender.Bot, "Dạ, em chỉ muốn gửi thông tin các gói chăm sóc sức khỏe để mình tham khảo thôi ạ"),
+            ]),
+            CancellationToken.None);
+
+        search.Queries[0].ShouldBe("còn gì không\nDạ, em chỉ muốn gửi thông tin các gói chăm sóc sức khỏe để mình tham khảo thôi ạ\ncó");
+        search.Queries.Count.ShouldBe(2);
+        var system = chat.Requests[0].System;
+        system.ShouldContain("Massage body 60 phút: 450.000đ");
+        system.ShouldContain("Gói cổ vai gáy 10 buổi");
+        system.Split("Đặt lịch qua hotline.").Length.ShouldBe(2); // không trùng đoạn
+        system.ShouldContain("làm luôn điều đó");
+    }
+
+    [Fact]
+    public async Task Long_question_does_one_plain_search()
+    {
+        var search = new StaticSearch(Massage);
+        await Engine(new ScriptedChat(_ => Json("ok", ["C1"])), search).ReplyAsync(
+            Turn("Cho mình hỏi massage body 60 phút giá bao nhiêu vậy?", history: [new(MessageSender.Bot, "Dạ em chào mình")]),
+            CancellationToken.None);
+
+        search.Queries.ShouldHaveSingleItem().ShouldBe("Cho mình hỏi massage body 60 phút giá bao nhiêu vậy?");
     }
 
     [Fact]
