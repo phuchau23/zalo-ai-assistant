@@ -144,6 +144,7 @@ internal static class ApiSetup
         app.MapZaloPersonalInternalEndpoints();
         app.MapAdminZaloPersonalEndpoints();
         app.MapOutreachEndpoints();
+        app.MapQuickReplyEndpoints();
         app.MapInboxEndpoints();
         app.MapHandoffSettingsEndpoints();
         app.MapCustomerEndpoints();
