@@ -308,6 +308,39 @@ public sealed class ConversationRepository(AppDbContext db, ITenantContext tenan
 
         Db.Conversations.Remove(conversation);
     }
+
+    /// <summary>
+    /// Thẻ nick trên trang Kênh: mỗi ngày (giờ Việt Nam) có bao nhiêu khách (hội thoại) có tin qua lại trên một kênh, <paramref name="days"/>
+    /// ngày gần nhất, cũ → mới (phần tử cuối = hôm nay). Chỉ đếm, không đọc nội dung tin.
+    /// </summary>
+    public async Task<int[]> DailyActiveConversationsAsync(Guid tenantId, Guid connectionId, DateTimeOffset now, int days, CancellationToken cancellationToken)
+    {
+        EnsureTenant(tenantId);
+        var today = VietnamDay(now);
+        var since = new DateTimeOffset(today.AddDays(1 - days).ToDateTime(TimeOnly.MinValue), VietnamOffset).ToUniversalTime();
+        var rows = await (
+                from m in Db.Messages
+                join c in Db.Conversations on m.ConversationId equals c.Id
+                where m.TenantId == tenantId && c.TenantId == tenantId && c.ConnectionId == connectionId && m.CreatedAt >= since
+                select new { m.ConversationId, m.CreatedAt })
+            .ToListAsync(cancellationToken);
+
+        var counts = new int[days];
+        foreach (var day in rows.GroupBy(r => VietnamDay(r.CreatedAt)))
+        {
+            var index = day.Key.DayNumber - today.DayNumber + days - 1;
+            if (index >= 0 && index < days)
+            {
+                counts[index] = day.Select(r => r.ConversationId).Distinct().Count();
+            }
+        }
+
+        return counts;
+    }
+
+    private static readonly TimeSpan VietnamOffset = TimeSpan.FromHours(7);
+
+    private static DateOnly VietnamDay(DateTimeOffset at) => DateOnly.FromDateTime(at.ToOffset(VietnamOffset).DateTime);
 }
 
 /// <summary>Một dòng hộp thư: hội thoại + khách + tin cuối (có thể chưa có tin).</summary>
