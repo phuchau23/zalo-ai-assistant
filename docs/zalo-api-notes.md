@@ -116,6 +116,30 @@ Hoàn thành file này là việc **đầu tiên của M4**, trước khi viết
 
 ---
 
+## 10. Zalo cá nhân qua zca-js (KHÔNG chính thức) — đọc mã nguồn zca-js 2.2.0, 2026-11-12
+
+Không phải API của Zalo: zca-js giả lập Zalo Web. README: *"Using this API could get your account locked or banned."* Mọi điểm dưới đây
+đọc từ mã nguồn/khai báo của gói npm `zca-js@2.2.0` (MIT, Node ≥ 18, cập nhật 2026-09-09) và lúc dựng sidecar, **chưa chạy với nick thật**.
+
+- Khởi tạo: `new Zalo({ selfListen, checkUpdate, logging, agent, polyfill })`. Mặc định `selfListen:false`, `checkUpdate:true`,
+  `logging:true` → sidecar đặt `selfListen:true` (thấy tin chủ nick tự gửi), tắt hai cái còn lại.
+- Đăng nhập QR: `loginQR({ userAgent }, callback)`; sự kiện `QRCodeGenerated` (ảnh PNG base64, không tiền tố), `QRCodeExpired`
+  (sau ~100 giây, chờ gọi lại/hủy), `QRCodeScanned`, `QRCodeDeclined` (sau đó lệnh đăng nhập không tự kết thúc → sidecar tự hủy),
+  `GotLoginInfo { cookie, imei, userAgent }` (không có uid → lấy `getOwnId()` sau khi đăng nhập xong). `imei` tính từ userAgent →
+  một nick giữ một userAgent mãi. Đăng nhập lại: `login({ cookie, imei, userAgent })`. Đọc cookie hiện tại:
+  `api.getContext().cookie.toJSON().cookies`.
+- Bộ nghe: `listener.start({ retryOnClose })`, sự kiện `connected`, `disconnected(code)`, `closed(code)`, `error`, `message`,
+  `undo`, `reaction`, `group_event`, `friend_event`. Mã đóng: 1000 chủ động, 1006 rớt, **3000 DuplicateConnection** (mở Zalo Web nơi
+  khác), **3003 KickConnection**. Chỉ 1 listener/nick.
+- Proxy: WebSocket dùng `options.agent`; mọi HTTP qua `options.polyfill(url, { agent })` → trên Node phải truyền `polyfill: node-fetch`
+  (fetch sẵn có bỏ qua agent). Không thấy lệnh gọi mạng đi vòng. Truyền `polyfill: undefined` làm mất fetch mặc định → chỉ đặt khi có proxy.
+- Gửi: `sendMessage(text|MessageContent, threadId, ThreadType.User)` → `{ message: { msgId } }`; `sendTypingEvent(threadId, User, DestType.User)`.
+- Lỗi: tên `ZcaApiError`, có `code` số khi Zalo từ chối; lỗi đầu vào không có code.
+- Bạn bè: `getAllFriends()`, `findUser(phone)` (giới hạn/ngày: chưa rõ), `sendFriendRequest(msg, userId)`, `undoFriendRequest`,
+  `getSentFriendRequest`, `getFriendRequestStatus`; sự kiện `friend_event` có ADD, REMOVE, REQUEST, REJECT_REQUEST, BLOCK, UNBLOCK...
+- Chưa biết (đo khi có nick phụ): phiên sống bao lâu, uid của một người có giống nhau khi nhìn từ hai nick khác nhau, Zalo PC có làm
+  rớt listener không, giới hạn `findUser` / lời mời kết bạn mỗi ngày, độ dài tối đa lời chào trong lời mời.
+
 ## Nhật ký kiểm tra
 
 | Ngày | Mục | Người kiểm tra | Ghi chú |

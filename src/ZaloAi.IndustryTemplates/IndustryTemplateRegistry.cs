@@ -17,6 +17,8 @@ public sealed record LeadField(string Key, string Label, bool Pii);
 /// <param name="Expect">answer (trả lời từ dữ liệu) | handoff (chuyển người) | urgent (chuyển khẩn cấp)</param>
 /// <param name="MustContain">Mỗi phần tử: danh sách phương án, câu trả lời phải chứa ít nhất một (bỏ dấu, chữ thường).</param>
 /// <param name="MustNotContain">Câu trả lời không được chứa (bỏ dấu, chữ thường).</param>
+/// <param name="BotBefore">Tin bot đã gửi trước câu hỏi (bot nhắn trước, vd tin chào chủ động); không có = khách mở đầu.</param>
+/// <param name="History">Các lượt sau <paramref name="BotBefore"/>, trước câu hỏi (hội thoại nhiều lượt).</param>
 public sealed record EvalCase(
     string Id,
     string Category,
@@ -24,7 +26,12 @@ public sealed record EvalCase(
     string Expect,
     IReadOnlyList<IReadOnlyList<string>> MustContain,
     IReadOnlyList<string> MustNotContain,
-    string? Note);
+    string? Note,
+    IReadOnlyList<string>? BotBefore = null,
+    IReadOnlyList<EvalTurn>? History = null);
+
+/// <param name="From">customer | bot</param>
+public sealed record EvalTurn(string From, string Text);
 
 /// <summary>Mẫu ngành đã nạp (docs/INDUSTRIES.md mục 1). Không đổi được lúc chạy.</summary>
 public sealed record IndustryTemplate(

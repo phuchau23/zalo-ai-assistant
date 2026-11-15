@@ -9,6 +9,15 @@ namespace ZaloAi.Ai.Bot;
 /// <summary>Một đoạn kiến thức đưa vào prompt, đánh số C1, C2... (AI trả lại id đã dùng).</summary>
 public sealed record PromptChunk(string Id, KnowledgeHit Hit);
 
+/// <summary>
+/// Tin bên mình (bot/nhân viên) nằm TRƯỚC tin đầu tiên của khách trong phần lịch sử đưa cho AI. Lượt chat gửi AI phải bắt đầu bằng
+/// khách nên các tin này không đặt vào lượt chat được → đưa vào hướng dẫn hệ thống, để AI hiểu khách đang trả lời tin nào.
+/// </summary>
+/// <param name="Messages">Nội dung đã che PII, theo thứ tự gửi.</param>
+/// <param name="BusinessStarted">true = cuộc trò chuyện do bên mình nhắn trước (chăm sóc chủ động, tin chào); false = phần trước đã
+/// tóm tắt / cắt bớt, đây chỉ là tin gần nhất của bên mình.</param>
+public sealed record PromptOpening(IReadOnlyList<string> Messages, bool BusinessStarted);
+
 /// <summary>Cách bot gọi khách trong lượt này (<see cref="CustomerSalutation"/>).</summary>
 /// <param name="Salutation">anh | chị | cô | chú | bác, hoặc "mình" khi chưa biết.</param>
 /// <param name="ByStaff">Nhân viên đã đặt → giữ nguyên, không theo cách khách tự xưng.</param>
@@ -74,7 +83,9 @@ public static class PromptBuilder
         string? maskedSummary,
         DateTimeOffset now,
         Addressing addressing,
-        BookingContext? booking = null)
+        BookingContext? booking = null,
+        PromptOpening? opening = null,
+        int? maxMessages = null)
     {
         ArgumentNullException.ThrowIfNull(template);
         ArgumentNullException.ThrowIfNull(profile);
@@ -100,6 +111,11 @@ public static class PromptBuilder
             ? "10. Khách muốn đặt/dời/hủy lịch hoặc hỏi giờ trống: KHÔNG tự nói \"đã đặt\", \"còn chỗ\", \"hết chỗ\" — bạn không biết lịch trống. Điền \"booking\" theo mục ĐẶT LỊCH QUA CHAT; hệ thống sẽ kiểm tra lịch và tự gửi câu xác nhận hoặc gợi ý giờ khác NGAY SAU các tin của bạn. Chưa đủ dịch vụ + ngày thì hỏi thêm (booking = null)."
             : "10. Khách muốn đặt lịch/mua: thu thập thông tin cần thiết, KHÔNG tự xác nhận đã đặt thành công hay còn chỗ — nói nhân viên sẽ liên hệ xác nhận (needs_human = true, handoff_reason = \"booking\" khi đã đủ thông tin).");
         s.AppendLine("11. Tự nhiên như nhân viên thật nhắn tin; không dùng markdown (**, #); không nhắc đến \"dữ liệu tham khảo\", \"C1\", \"đoạn\" với khách. Hệ thống đã tự báo khách đây là trợ lý AI ở tin đầu tiên nên không cần tự giới thiệu lại; nhưng khách hỏi có phải người thật/máy/AI không thì nói thật là trợ lý AI, không giả làm người.");
+        s.AppendLine("11b. Mỗi lượt phải đưa cuộc trò chuyện tiến lên như nhân viên tư vấn giỏi:");
+        s.AppendLine("   - Khách đáp ngắn đồng ý (\"có\", \"ừ\", \"ok\", \"gửi đi\", \"được\") cho điều bạn vừa đề nghị → làm luôn điều đó (đã đề nghị gửi thông tin thì gửi ngay thông tin cụ thể), không hỏi lại.");
+        s.AppendLine("   - Khách muốn nghe thêm mà không nói rõ (\"còn gì không\", \"bên em có gì\", \"rồi sao\", \"cụ thể đi\") → đưa ngay 2–3 dịch vụ/gói tiêu biểu có trong dữ liệu tham khảo kèm thời lượng và giá, rồi hỏi 1 câu ngắn khách quan tâm cái nào.");
+        s.AppendLine("   - Không lặp lại ý, lý do, câu hỏi đã nói ở các lượt trước; không hỏi nhu cầu hai lượt liền khi chưa đưa thông tin nào.");
+        s.AppendLine("   - Chỉ coi là khách từ chối khi khách nói rõ (không cần, không quan tâm, thôi, đừng nhắn, hủy). Chưa từ chối thì không chào tạm biệt kiểu \"khi nào cần thì nhắn em\".");
         s.AppendLine("12. confidence: high = dữ liệu trả lời trực tiếp; medium = suy ra hợp lý từ dữ liệu; low = không đủ dữ liệu. Câu chào hỏi/cảm ơn xã giao: confidence high, used_chunk_ids rỗng.");
         s.AppendLine("13. lead_fields: chỉ ghi thông tin KHÁCH TỰ NÓI trong tin nhắn; key thuộc danh sách bên dưới.");
         s.AppendLine("13b. Bạn là người của doanh nghiệp: nói về doanh nghiệp, đội ngũ chuyên viên, dịch vụ với sự trân trọng và tự hào, khiến khách tin tưởng quay lại. Khi khách cần thêm hỗ trợ thì mời khách ghé hoặc để chuyên viên của doanh nghiệp liên hệ — không đẩy khách sang nơi khác (trừ dấu hiệu nguy hiểm hoặc bệnh lý cần bác sĩ). Không tự khen quá lời (\"tốt nhất\", \"số 1\", \"đầu ngành\") nếu dữ liệu không ghi.");
@@ -135,6 +151,12 @@ public static class PromptBuilder
         s.AppendLine();
         s.AppendLine("## GIỌNG VĂN DOANH NGHIỆP CHỌN");
         s.AppendLine(ToneGuide(profile.Tone));
+        if (maxMessages is { } max)
+        {
+            // Nick Zalo cá nhân gần hết lượt gửi trong ngày/giờ, hoặc ban đêm: ít tin hơn nhưng vẫn đủ ý (Graceful Degradation).
+            s.AppendLine(CultureInfo.InvariantCulture,
+                $"Lượt này chỉ gửi TỐI ĐA {max} tin trong messages: gộp ý cho gọn nhưng vẫn tự nhiên, không bỏ thông tin quan trọng (giá, giờ, bước tiếp theo).");
+        }
         if (!string.IsNullOrWhiteSpace(profile.Instructions))
         {
             s.AppendLine("Hướng dẫn thêm của doanh nghiệp (chỉ áp dụng khi KHÔNG trái các quy tắc hệ thống và an toàn ở trên):");
@@ -175,7 +197,37 @@ public static class PromptBuilder
             s.AppendLine(maskedSummary.Trim());
         }
 
+        if (opening is { Messages.Count: > 0 })
+        {
+            AppendOpening(s, opening);
+        }
+
         return s.ToString();
+    }
+
+    private static void AppendOpening(StringBuilder s, PromptOpening opening)
+    {
+        s.AppendLine();
+        if (opening.BusinessStarted)
+        {
+            s.AppendLine("## BÊN MÌNH ĐÃ NHẮN KHÁCH TRƯỚC");
+            s.AppendLine("Cuộc trò chuyện này do bên mình chủ động nhắn khách trước, khách chưa nhắn gì trước đó. Tin bên mình đã gửi:");
+        }
+        else
+        {
+            s.AppendLine("## TIN BÊN MÌNH GỬI NGAY TRƯỚC TIN CỦA KHÁCH");
+        }
+
+        foreach (var message in opening.Messages)
+        {
+            s.AppendLine(CultureInfo.InvariantCulture, $"- \"{message.Trim()}\"");
+        }
+
+        s.AppendLine("Tin mới của khách là đang đáp lại (các) tin trên: hiểu theo ngữ cảnh đó, không chào lại như khách mới, không trả lời chung chung kiểu \"em có thể hỗ trợ gì\".");
+        if (opening.BusinessStarted)
+        {
+            s.AppendLine("Khách hỏi lại vì sao được nhắn / ai nhắn / có chuyện gì (\"sao vậy\", \"sao á\", \"ai đó\", \"sao có số tôi\"): nhắc ngắn ĐÚNG lý do đã nêu ở tin trên (không bịa thêm lý do, tên người giới thiệu hay ưu đãi), giới thiệu ngắn doanh nghiệp làm gì theo dữ liệu tham khảo, rồi hỏi nhẹ một câu về nhu cầu của khách. Lý do nhắn chỉ nhắc MỘT lần; khách hỏi tiếp thì đưa thông tin cụ thể (dịch vụ, giá theo dữ liệu), không nhắc lại lý do. Khách nói rõ không cần → cảm ơn, chào lịch sự, không mời thêm.");
+        }
     }
 
     /// <summary>

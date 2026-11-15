@@ -5,13 +5,20 @@ public enum ConnectionStatus
     /// <summary>Đang hoạt động: nhận và trả lời tin.</summary>
     Active,
 
-    /// <summary>Token hỏng / OA thu hồi quyền: chủ DN phải bấm kết nối lại. Bot dừng trả lời.</summary>
+    /// <summary>Token hỏng / OA thu hồi quyền (Zalo cá nhân: phiên đăng nhập hết hạn → quét QR lại). Bot dừng trả lời.</summary>
     NeedsReauth,
+
+    /// <summary>
+    /// Zalo cá nhân: mất kết nối cần chủ DN xử lý (mở Zalo Web nơi khác, proxy hỏng). Phiên vẫn giữ, bấm "Kết nối lại" là chạy tiếp.
+    /// Bot dừng trả lời.
+    /// </summary>
+    Disconnected,
 }
 
 /// <summary>
-/// Kênh của DN đã kết nối (GĐ1: Zalo OA). Một OA chỉ thuộc một DN tại một thời điểm (unique channel + external_id toàn hệ thống),
-/// để webhook tìm đúng DN từ OA ID. Token mã hóa bằng IFieldEncryptor, không bao giờ trả ra API hay ghi log.
+/// Kênh của DN đã kết nối: Zalo OA, Zalo cá nhân. Một OA / một nick chỉ thuộc một DN tại một thời điểm (unique channel + external_id
+/// toàn hệ thống), để sự kiện vào tìm đúng DN. Token mã hóa bằng IFieldEncryptor, không bao giờ trả ra API hay ghi log.
+/// Zalo cá nhân: 4 cột token OA để rỗng / bằng lúc tạo (không dùng); phiên đăng nhập nằm ở <see cref="ZaloPersonalAccount"/>.
 /// Ngắt kết nối = xóa dòng này (hội thoại cũ giữ lại, connection_id về null).
 /// </summary>
 public sealed class ChannelConnection : ITenantOwned
@@ -22,7 +29,7 @@ public sealed class ChannelConnection : ITenantOwned
 
     public ChannelKind Channel { get; set; }
 
-    /// <summary>Zalo: OA ID.</summary>
+    /// <summary>Zalo: OA ID. Zalo cá nhân: uid của nick.</summary>
     public required string ExternalId { get; set; }
 
     /// <summary>Tên hiển thị (tên OA) — để trống thì giao diện hiện ExternalId.</summary>

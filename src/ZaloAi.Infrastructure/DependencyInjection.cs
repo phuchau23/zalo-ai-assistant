@@ -83,6 +83,40 @@ public static class DependencyInjection
         services.AddScoped<ZaloTokenSweepJob>();
         services.AddScoped<ZaloTokenRefreshJob>();
 
+        // Zalo cá nhân qua sidecar zca-js (docs/ZALO-PERSONAL-PLAN.md)
+        services.AddValidatedOptions<ZaloPersonalOptions>(configuration, ZaloPersonalOptions.SectionName);
+        services.AddSingleton<IValidateOptions<ZaloPersonalOptions>, ZaloPersonal.ZaloPersonalOptionsValidator>();
+        services.AddHttpClient<ZaloPersonal.SidecarClient>(http => http.Timeout = Timeout.InfiniteTimeSpan)
+            .AddStandardResilienceHandler()
+            .Configure((HttpStandardResilienceOptions resilience, IServiceProvider sp) =>
+            {
+                var seconds = sp.GetRequiredService<IOptions<ZaloPersonalOptions>>().Value.RequestTimeoutSeconds;
+                resilience.AttemptTimeout.Timeout = TimeSpan.FromSeconds(seconds);
+                resilience.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(seconds * 2);
+                resilience.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(seconds * 2);
+                resilience.Retry.DisableForUnsafeHttpMethods(); // gửi tin: job tự thử lại, sidecar chống trùng theo messageId
+            });
+        services.AddScoped<ZaloPersonalRepository>();
+        services.AddScoped<ZaloPersonalLookup>();
+        services.AddScoped<ZaloPersonal.ZaloPersonalLoginService>();
+        services.AddScoped<ZaloPersonal.ZaloPersonalSyncService>();
+        services.AddScoped<ZaloPersonal.ZaloPersonalIngestor>();
+        services.AddScoped<ZaloPersonal.ZaloPersonalConnectionService>();
+        services.AddScoped<IChannelAdapter, ZaloPersonal.ZaloPersonalAdapter>();
+        services.AddScoped<ZaloPersonalAlertJob>();
+        services.AddScoped<ZaloPersonalHealthJob>();
+        services.AddScoped<ZaloPersonal.PersonalSendLimiter>();
+        services.AddScoped<ZaloPersonal.ProxyPoolService>();
+        services.AddScoped<ProxyHealthJob>();
+        services.AddScoped<OutreachRepository>();
+        services.AddScoped<QuickReplyRepository>();
+        services.AddScoped<OutreachLookup>();
+        services.AddScoped<ZaloPersonal.OutreachService>();
+        services.AddScoped<OutreachSweepJob>();
+        services.AddScoped<OutreachTenantJob>();
+        services.AddScoped<OutreachMaintenanceSweepJob>();
+        services.AddScoped<OutreachMaintenanceJob>();
+
         // Hộp thư (M5)
         services.AddSingleton<IInboxNotifier, RedisInboxNotifier>();
         services.AddScoped<HandoffSettingsRepository>();

@@ -8,6 +8,11 @@ public enum ChannelKind
 
     /// <summary>Khách doanh nghiệp nhập từ danh sách (chỉ có SĐT), chưa nhắn qua kênh nào. ExternalUserId = dấu vân tay SĐT.</summary>
     Phone = 2,
+
+    /// <summary>
+    /// Nick Zalo cá nhân của DN, kết nối qua sidecar zca-js (không chính thức, docs/ZALO-PERSONAL-PLAN.md). ExternalUserId = uid Zalo.
+    /// </summary>
+    ZaloPersonal = 3,
 }
 
 /// <summary>Khách cuối nhắn tin cho doanh nghiệp qua một kênh. Không trùng (tenant, kênh, mã người dùng của kênh).</summary>
@@ -72,6 +77,15 @@ public sealed class Contact : ITenantOwned
 
     /// <summary>Bot đã chủ động nhắn và khách CHƯA trả lời → không nhắn tin chủ động thứ hai.</summary>
     public bool ProactiveAwaitingReply { get; set; }
+
+    /// <summary>
+    /// Nguồn khi DN dán/nhập SĐT để chủ động liên hệ (docs/ZALO-PERSONAL-PLAN.md mục 6.9): "referral" (khách giới thiệu), "inquiry" (đã hỏi /
+    /// để lại thông tin), "customer" (khách cũ). null = khách tự nhắn tới. Chỉ người có nguồn hoặc tự nhắn tới mới được chủ động liên hệ.
+    /// </summary>
+    public string? Origin { get; set; }
+
+    /// <summary>Khách đã giới thiệu người này (cùng tenant) — để C7 thưởng người giới thiệu.</summary>
+    public Guid? ReferredByContactId { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }
 
@@ -164,6 +178,12 @@ public sealed class Conversation : ITenantOwned
     /// <summary>Lần AI phân tích "Cần chăm sóc" gần nhất — chỉ phân tích lại khi khách có tin mới sau mốc này.</summary>
     public DateTimeOffset? CareAnalyzedAt { get; set; }
 
+    /// <summary>
+    /// Bot tạm im tới mốc này (Zalo cá nhân: chủ nick vừa nhắn tay trên điện thoại). Khác chế độ nhân viên: hết giờ là bot tự trả lời
+    /// lại, không ai phải bấm "trả lại cho bot". null = không tạm dừng.
+    /// </summary>
+    public DateTimeOffset? BotPausedUntil { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
 
     public DateTimeOffset UpdatedAt { get; set; }
@@ -185,6 +205,11 @@ public enum DeliveryStatus
 
     /// <summary>Lỗi vĩnh viễn (khách không còn nhận được, token hỏng...) — không gửi lại.</summary>
     Failed = 3,
+
+    /// <summary>
+    /// Đoạn trả lời của bot chưa kịp gửi thì khách nhắn tin mới → bỏ, không gửi (câu trả lời cho tin mới thay thế). Không đưa vào lịch sử AI.
+    /// </summary>
+    Skipped = 4,
 }
 
 public enum MessageSender

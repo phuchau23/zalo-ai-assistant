@@ -42,6 +42,19 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
 
     public DbSet<ChannelConnection> ChannelConnections => Set<ChannelConnection>();
 
+    public DbSet<ZaloPersonalAccount> ZaloPersonalAccounts => Set<ZaloPersonalAccount>();
+
+    public DbSet<ZaloPeer> ZaloPeers => Set<ZaloPeer>();
+
+    /// <summary>Bảng hệ thống (không tenant) — chỉ super admin.</summary>
+    public DbSet<Proxy> Proxies => Set<Proxy>();
+
+    public DbSet<OutreachBatch> OutreachBatches => Set<OutreachBatch>();
+
+    public DbSet<OutreachTarget> OutreachTargets => Set<OutreachTarget>();
+
+    public DbSet<QuickReply> QuickReplies => Set<QuickReply>();
+
     public DbSet<HandoffSettings> HandoffSettings => Set<HandoffSettings>();
 
     public DbSet<Message> Messages => Set<Message>();

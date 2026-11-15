@@ -22,6 +22,8 @@ namespace ZaloAi.Api.Inbox;
 /// <param name="NeedsAttentionSince">Khách chờ người từ lúc nào (null = không ai cần làm gì).</param>
 /// <param name="LastSender">customer | bot | staff | system</param>
 /// <param name="LeadStatus">new | interested | hot | won | lost</param>
+/// <param name="ConnectionName">Tên kênh đã kết nối (tên OA / tên nick Zalo cá nhân), null nếu không có.</param>
+/// <param name="BotPausedUntil">Zalo cá nhân: bot đang tạm im tới mốc này vì chủ nick vừa nhắn tay.</param>
 public sealed record InboxConversationItem(
     Guid Id,
     string Channel,
@@ -36,10 +38,12 @@ public sealed record InboxConversationItem(
     string LeadStatus,
     DateTimeOffset? LastMessageAt,
     string? LastMessagePreview,
-    string? LastSender);
+    string? LastSender,
+    DateTimeOffset? BotPausedUntil = null,
+    string? ConnectionName = null);
 
 /// <param name="Sender">customer | bot | staff | system</param>
-/// <param name="DeliveryStatus">none | pending | sent | failed</param>
+/// <param name="DeliveryStatus">none | pending | sent | failed | skipped (đoạn trả lời bị bỏ vì khách nhắn tin mới trước khi gửi)</param>
 /// <param name="Proactive">Tin bot chủ động nhắn (chăm sóc), không phải trả lời khách.</param>
 public sealed record InboxMessage(
     Guid Id,
@@ -116,13 +120,25 @@ internal static class InboxEndpoints
         bool? includeTest,
         ITenantContext tenant,
         ConversationRepository conversations,
+        ChannelConnectionRepository connections,
         IFieldEncryptor encryptor,
         CancellationToken cancellationToken)
     {
-        var rows = await conversations.ListInboxAsync(
-            tenant.RequireTenantId(), filter ?? "all", tenant.UserId, includeTest ?? true, limit: 100, cancellationToken);
-        return TypedResults.Ok(rows.Select(r => ToItem(r.Conversation, r.Contact, r.LastMessage, encryptor)).ToList());
+        var tenantId = tenant.RequireTenantId();
+        var rows = await conversations.ListInboxAsync(tenantId, filter ?? "all", tenant.UserId, includeTest ?? true, limit: 100, cancellationToken);
+        var names = await ConnectionNamesAsync(tenantId, connections, cancellationToken);
+        return TypedResults.Ok(rows
+            .Select(r => ToItem(r.Conversation, r.Contact, r.LastMessage, encryptor) with { ConnectionName = NameOf(names, r.Conversation) })
+            .ToList());
     }
+
+    /// <summary>Tên kênh (tên OA / tên nick Zalo cá nhân) để hộp thư hiện hội thoại đến từ nick nào.</summary>
+    private static async Task<Dictionary<Guid, string>> ConnectionNamesAsync(
+        Guid tenantId, ChannelConnectionRepository connections, CancellationToken cancellationToken) =>
+        (await connections.ListAsync(tenantId, cancellationToken)).ToDictionary(c => c.Id, c => c.Name ?? c.ExternalId);
+
+    private static string? NameOf(Dictionary<Guid, string> names, Conversation c) =>
+        c.ConnectionId is { } id && names.TryGetValue(id, out var name) ? name : null;
 
     private static async Task<Ok<InboxConversationDetail>> GetAsync(
         Guid conversationId,
@@ -131,10 +147,12 @@ internal static class InboxEndpoints
         AuditLogRepository audit,
         IDistributedStore store,
         IFieldEncryptor encryptor,
+        ChannelConnectionRepository connections,
         CancellationToken cancellationToken)
     {
         var tenantId = tenant.RequireTenantId();
         var conversation = await conversations.GetConversationAsync(tenantId, conversationId, cancellationToken) ?? throw new NotFoundException();
+        var names = await ConnectionNamesAsync(tenantId, connections, cancellationToken);
         var contact = await conversations.GetContactAsync(tenantId, conversation.ContactId, cancellationToken) ?? throw new NotFoundException();
         var messages = await conversations.ListMessagesAsync(tenantId, conversationId, after: null, cancellationToken);
 
@@ -148,7 +166,7 @@ internal static class InboxEndpoints
             ? new Dictionary<string, string>()
             : JsonSerializer.Deserialize<Dictionary<string, string>>(encryptor.Decrypt(contact.LeadFieldsEnc)) ?? [];
         return TypedResults.Ok(new InboxConversationDetail(
-            ToItem(conversation, contact, messages.Count > 0 ? messages[^1] : null, encryptor),
+            ToItem(conversation, contact, messages.Count > 0 ? messages[^1] : null, encryptor) with { ConnectionName = NameOf(names, conversation) },
             leads,
             messages.Select(m => new InboxMessage(
                 m.Id,
@@ -297,7 +315,8 @@ internal static class InboxEndpoints
             contact.LeadStatus.ToString().ToLowerInvariant(),
             c.LastMessageAt ?? last?.CreatedAt,
             preview,
-            last is null ? null : Lower(last.Sender));
+            last is null ? null : Lower(last.Sender),
+            c.BotPausedUntil);
     }
 
     private static string Lower<T>(T value)

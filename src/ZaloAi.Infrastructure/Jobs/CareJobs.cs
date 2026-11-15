@@ -10,6 +10,7 @@ using ZaloAi.Infrastructure.Inbox;
 using ZaloAi.Infrastructure.Persistence;
 using ZaloAi.Infrastructure.Repositories;
 using ZaloAi.Infrastructure.Tenancy;
+using ZaloAi.Infrastructure.ZaloPersonal;
 
 namespace ZaloAi.Infrastructure.Jobs;
 
@@ -207,11 +208,24 @@ public sealed class ProactiveSendJob(
     IFieldEncryptor encryptor,
     IInboxNotifier notifier,
     IBackgroundJobClient jobs,
+    ZaloPersonalRepository personal,
+    PersonalSendLimiter limiter,
+    Microsoft.Extensions.Options.IOptions<ZaloAi.Core.Options.ZaloPersonalOptions> personalOptions,
+    IDistributedStore store,
     TimeProvider time)
 {
     public async Task RunAsync(Guid tenantId, Guid suggestionId, CancellationToken cancellationToken)
     {
         tenantContext.Set(tenantId, userId: null, role: null, isSuperAdmin: false);
+
+        // Job hẹn giờ và lượt quét "gửi trễ" có thể chạy CÙNG LÚC cho một gợi ý → cả hai thấy Open và tạo 2 tin (gặp thật 2026-11-14:
+        // 2 tin chủ động cùng mili-giây, 1 tin kẹt pending). Một gợi ý chỉ một job xử lý tại một thời điểm; job kia bỏ qua.
+        await using var running = await store.TryAcquireLockAsync($"care:send:{suggestionId:N}", TimeSpan.FromMinutes(3), cancellationToken);
+        if (running is null)
+        {
+            return;
+        }
+
         var suggestion = await contacts.GetSuggestionAsync(tenantId, suggestionId, cancellationToken);
         if (suggestion is null)
         {
@@ -268,9 +282,13 @@ public sealed class ProactiveSendJob(
         {
             escalate = "outside_window";
         }
-        else if (!CareDecision.InSendWindow(settings, now))
+        else if (!CareDecision.InSendWindow(settings, now)
+                 || await PersonalPacingBlocksAsync(tenantId, conversation, now, cancellationToken) is true)
         {
-            var next = CareDecision.NextSendTime(settings, now);
+            // Ngoài khung giờ, hoặc nick Zalo cá nhân đang bị phanh "dừng nhắn trước" / hết lượt tin hôm nay → dời.
+            var next = CareDecision.InSendWindow(settings, now)
+                ? CareDecision.NextSendTime(settings, new DateTimeOffset(now.ToOffset(TimeSpan.FromHours(7)).Date.AddDays(1), TimeSpan.FromHours(7)))
+                : CareDecision.NextSendTime(settings, now);
             suggestion.ScheduledSendAt = next;
             await contacts.SaveChangesAsync(cancellationToken);
             jobs.Schedule<ProactiveSendJob>(job => job.RunAsync(tenantId, suggestionId, CancellationToken.None), next);
@@ -306,6 +324,23 @@ public sealed class ProactiveSendJob(
         }
 
         await notifier.PublishAsync(tenantId, new InboxEvent("care", conversation.Id), cancellationToken);
+    }
+
+    /// <summary>
+    /// Zalo cá nhân (docs/ZALO-PERSONAL-PLAN.md mục 7): tin chủ động không gửi khi phanh đang "dừng nhắn trước" hoặc nick đã hết lượt tin
+    /// hôm nay. Kênh khác: không chặn.
+    /// </summary>
+    private async Task<bool> PersonalPacingBlocksAsync(Guid tenantId, Conversation conversation, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        if (conversation.Channel != ChannelKind.ZaloPersonal || conversation.ConnectionId is not { } connectionId
+            || await personal.GetAccountAsync(tenantId, connectionId, cancellationToken) is not { } account)
+        {
+            return false;
+        }
+
+        var limits = PersonalPacing.Effective(account, personalOptions.Value, now);
+        var braked = (account.PacingMode == PacingMode.Safe || account.AutoBrake) && account.OutreachLevel == OutreachLevel.Paused;
+        return braked || !await limiter.HasRoomAsync(connectionId, PacingCounter.Messages, limits.MessagesPerDay, cancellationToken);
     }
 }
 

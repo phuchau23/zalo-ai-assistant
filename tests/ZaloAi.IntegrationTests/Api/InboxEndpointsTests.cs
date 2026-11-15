@@ -113,9 +113,19 @@ public sealed class InboxEndpointsTests(PostgresFixture db)
         detail.Conversation.AssignedUserId.ShouldNotBeNull();
         var staff = detail.Messages[^1];
         staff.Sender.ShouldBe("staff");
-        staff.Text.ShouldEndWith(", CSKH");
+        staff.Text.ShouldBe("Dạ em hỗ trợ chị ạ"); // mặc định không chữ ký, không câu tự giới thiệu (2026-11-14)
         staff.DeliveryStatus.ShouldBe("sent");
-        detail.Messages.ShouldContain(m => m.Sender == "system" && m.Text.Contains("sẽ hỗ trợ", StringComparison.Ordinal)); // câu tiếp quản
+        detail.Messages.ShouldNotContain(m => m.Sender == "system" && m.Text.Contains("sẽ hỗ trợ", StringComparison.Ordinal));
+
+        // DN tự bật chữ ký → tin nhân viên có "— tên, CSKH".
+        var s = (await owner.GetFromJsonAsync<HandoffSettingsResponse>(new Uri("/tenant/handoff-settings", UriKind.Relative)))!;
+        (await owner.PutAsJsonAsync(new Uri("/tenant/handoff-settings", UriKind.Relative), new UpdateHandoffSettingsRequest(
+            s.HandoffMessage, s.AfterHoursMessage, s.TakeoverMessageEnabled, s.TakeoverMessage, s.ReturnToBotMessageEnabled, s.ReturnToBotMessage,
+            StaffSignatureEnabled: true, s.ResponseTime, s.OpenTime, s.CloseTime, s.WorkingDays, s.ReminderMinutes, s.TelegramChatId,
+            s.CareEnabled, s.CareColdHours, s.CareAutoSend, s.CareSendStart, s.CareSendEnd))).StatusCode.ShouldBe(HttpStatusCode.OK);
+        (await owner.PostAsJsonAsync(Inbox($"/{conversationId}/messages"), new { text = "Dạ em gửi chị" })).StatusCode.ShouldBe(HttpStatusCode.Accepted);
+        await RunPendingJobsAsync(tenantId);
+        (await owner.GetFromJsonAsync<InboxConversationDetail>(Inbox($"/{conversationId}")))!.Messages[^1].Text.ShouldEndWith(", CSKH");
 
         // Khách (chat thử) thấy tin nhân viên.
         var chat = (await owner.GetFromJsonAsync<ChatTestConversationResponse>(new Uri($"/chat-test/conversations/{conversationId}", UriKind.Relative)))!;

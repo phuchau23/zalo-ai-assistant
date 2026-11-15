@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Diagnostics;
 using ZaloAi.Channels.Zalo;
+using ZaloAi.Core.Channels;
 using ZaloAi.Core.Errors;
 
 namespace ZaloAi.Api.Common;
@@ -25,6 +26,8 @@ internal sealed partial class AppExceptionHandler(IProblemDetailsService problem
             ZaloNotConfiguredException => (StatusCodes.Status503ServiceUnavailable, "zalo_not_configured",
                 "Hệ thống chưa được cấu hình kết nối Zalo. Liên hệ quản trị viên."),
             ZaloTransientException => (StatusCodes.Status503ServiceUnavailable, "zalo_unavailable", "Không kết nối được Zalo, vui lòng thử lại sau."),
+            ChannelUnavailableException => (StatusCodes.Status503ServiceUnavailable, "zalo_personal_unavailable",
+                "Máy chủ kết nối Zalo cá nhân chưa sẵn sàng, vui lòng thử lại sau."),
             _ => (StatusCodes.Status500InternalServerError, "internal_error", "Có lỗi xảy ra, vui lòng thử lại."),
         };
 
