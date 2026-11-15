@@ -26,6 +26,23 @@ public sealed partial class MessageDeliveryService(
     /// <summary>Lý do chuyển người khi kênh chặn gửi (FE + Telegram có nhãn riêng).</summary>
     public const string ChannelBlockedReason = "channel_blocked";
 
+    /// <summary>Nick Zalo cá nhân đã gửi đủ số tin cho phép trong giờ/ngày → khách nhắn tới được chuyển nhân viên.</summary>
+    public const string SendLimitReason = "send_limit";
+
+    /// <summary>Mã ghi trên đoạn trả lời bị bỏ vì khách nhắn tin mới hơn (FE: "Không gửi — khách đã nhắn tiếp").</summary>
+    public const string SupersededError = "superseded";
+
+    /// <summary>Đánh dấu các đoạn trả lời chưa gửi là bỏ (khách đã nhắn tin mới hơn). Chưa lưu.</summary>
+    public static void Skip(IEnumerable<Message> messages)
+    {
+        ArgumentNullException.ThrowIfNull(messages);
+        foreach (var m in messages.Where(m => m.DeliveryStatus == DeliveryStatus.Pending))
+        {
+            m.DeliveryStatus = DeliveryStatus.Skipped;
+            m.DeliveryError = SupersededError;
+        }
+    }
+
     /// <summary>Thêm tin ra (chưa lưu, chưa gửi). Cập nhật thời điểm tin cuối của hội thoại.</summary>
     public Message AddOutgoing(
         Guid tenantId,
@@ -52,7 +69,11 @@ public sealed partial class MessageDeliveryService(
     }
 
     /// <summary>Gửi một tin đã lưu (pending) rồi ghi trạng thái và báo hộp thư.</summary>
-    public async Task DeliverAsync(Guid tenantId, Conversation conversation, Contact contact, Message message, CancellationToken cancellationToken)
+    /// <param name="answersExternalMessageId">
+    /// Tin bot trả lời tin khách có id kênh này: khách nhắn tin mới hơn trong lúc bot "đang soạn" → kênh bỏ tin, đánh dấu Skipped.
+    /// </param>
+    public async Task DeliverAsync(
+        Guid tenantId, Conversation conversation, Contact contact, Message message, CancellationToken cancellationToken, string? answersExternalMessageId = null)
     {
         ArgumentNullException.ThrowIfNull(conversation);
         ArgumentNullException.ThrowIfNull(contact);
@@ -68,11 +89,25 @@ public sealed partial class MessageDeliveryService(
         try
         {
             var sent = await channel.SendAsync(
-                new OutgoingMessage(tenantId, conversation.Id, message.Id, contact.ExternalUserId, encryptor.Decrypt(message.ContentEnc), conversation.ConnectionId),
+                new OutgoingMessage(
+                    tenantId,
+                    conversation.Id,
+                    message.Id,
+                    contact.ExternalUserId,
+                    encryptor.Decrypt(message.ContentEnc),
+                    conversation.ConnectionId,
+                    message.Sender,
+                    message.Proactive,
+                    answersExternalMessageId),
                 cancellationToken);
             message.DeliveryStatus = DeliveryStatus.Sent;
             message.ExternalMessageId ??= sent.ExternalMessageId;
             message.DeliveryError = null;
+        }
+        catch (MessageSupersededException)
+        {
+            message.DeliveryStatus = DeliveryStatus.Skipped;
+            message.DeliveryError = SupersededError;
         }
         catch (ChannelPermanentException ex)
         {
@@ -85,7 +120,7 @@ public sealed partial class MessageDeliveryService(
             if (ex.ChannelBlocked && conversation.Mode == ConversationMode.Bot)
             {
                 conversation.Mode = ConversationMode.Human;
-                conversation.HandoffReason = ChannelBlockedReason;
+                conversation.HandoffReason = ex.Code == "zp:send_limit" ? SendLimitReason : ChannelBlockedReason;
                 conversation.NeedsAttentionSince ??= time.GetUtcNow();
                 handedOff = true;
             }

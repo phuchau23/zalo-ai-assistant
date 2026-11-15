@@ -90,6 +90,8 @@ public sealed class AttentionNotifyJob(
         "quota_exceeded" => "đã hết hạn mức hội thoại tháng này, khách mới cần nhân viên trả lời",
         MessageDeliveryService.ChannelBlockedReason =>
             "Zalo chưa cho OA gửi tin qua hệ thống (xem trang Kênh Zalo) — nhân viên trả lời khách trong ứng dụng Zalo OA",
+        MessageDeliveryService.SendLimitReason =>
+            "nick Zalo cá nhân đã gửi đủ số tin cho phép trong giờ/hôm nay (nhịp gửi an toàn) — nhân viên trả lời khách giúp",
         _ => "bot cần người hỗ trợ",
     };
 }
