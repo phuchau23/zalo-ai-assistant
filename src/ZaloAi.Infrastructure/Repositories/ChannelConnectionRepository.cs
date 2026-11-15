@@ -101,7 +101,7 @@ public sealed class ChannelConnectionLookup(AppDbContext db)
     {
         var rows = await db.ChannelConnections.IgnoreQueryFilters()
             .AsNoTracking()
-            .Where(c => c.Status == ConnectionStatus.Active && c.AccessTokenExpiresAt < before)
+            .Where(c => c.Channel == ChannelKind.Zalo && c.Status == ConnectionStatus.Active && c.AccessTokenExpiresAt < before)
             .Select(c => new { c.Id, c.TenantId })
             .ToListAsync(cancellationToken);
         return rows.Select(r => (r.Id, r.TenantId)).ToList();
