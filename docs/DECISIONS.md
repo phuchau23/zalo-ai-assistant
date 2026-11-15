@@ -462,3 +462,112 @@ Chủ dự án: key Gemini miễn phí chỉ ~20 lượt/ngày/model, hết là 
 **Lý do:** thử thật OA test (2026-11-11): webhook + AI chạy, nhưng gửi bị -224 và trước đây hệ thống chỉ đánh dấu tin "failed" rồi im lặng → khách bị bỏ rơi, chủ DN không biết.
 
 **Hệ quả:** mọi DN thuê phải có gói OA đủ quyền gửi tin qua API (gói nào: chưa kiểm chứng) → đưa vào hướng dẫn đăng ký và cân nhắc khi chốt giá.
+
+## 2026-11-12 — Kênh Zalo cá nhân qua sidecar zca-js (đổi nguyên tắc 2)
+
+**Quyết định:** Chủ dự án yêu cầu bot chăm sóc khách qua **nick Zalo cá nhân** của DN, kể cả tự nhắn trước, kết bạn và chào mời; đã hỏi luật sư. Claude nêu rủi ro trước (README zca-js tự cảnh báo nick có thể bị khóa; server giữ cookie = toàn quyền nick; nick lẫn chuyện riêng; Zalo đổi giao thức là hỏng cùng lúc; mâu thuẫn hồ sơ gọi vốn), chủ dự án vẫn chọn làm. Thiết kế đầy đủ: `docs/ZALO-PERSONAL-PLAN.md`; hợp đồng: `connectors/zalo-personal/CONTRACT.md`.
+- **Sidecar Node** (`connectors/zalo-personal`): zca-js chỉ có JavaScript. Mỗi nick một tiến trình con (supervisor). Không chạm DB, không có khóa mã hóa; .NET giữ toàn bộ dữ liệu, luật tenant, AI.
+- **Giao tiếp**: HTTP nội bộ hai chiều, ký HMAC (`X-Remi-Signature`, lệch ≤ 5 phút). Endpoint `/internal/zalo-personal/*` của API chỉ nghe ở **cổng riêng 4001** (`RequireHost`), không qua tunnel/reverse proxy công khai — hai lớp chặn vì endpoint `/sync` trả phiên đăng nhập đã giải mã.
+- **Lease**: chỉ một bản sidecar được giao nick (Redis 90 giây) vì zca-js chỉ cho 1 listener/nick.
+- **Dữ liệu**: bảng `zalo_personal_accounts` (1–1 `channel_connections`, phiên zca-js mã hóa AES-GCM), `zalo_peers` (lọc chuyện riêng), cột `conversations.bot_paused_until`. 4 cột token OA trong `channel_connections` để rỗng cho kênh cá nhân (không đổi NOT NULL để không đụng code OA); job làm mới token lọc `channel = zalo`.
+- **Lọc chuyện riêng**: nhóm bị bỏ ngay ở sidecar; bạn bè chỉ lưu tên + giờ, không lưu nội dung, không gửi AI, tới khi chủ đánh dấu "khách".
+- **Chủ nick nhắn tay** trên điện thoại → bot tạm im 30 phút ở hội thoại đó (không chuyển hẳn sang chế độ nhân viên như OA).
+- **Mất kết nối** mã 3000/3003 (mở Zalo Web nơi khác) → không tự giành lại; chủ DN bấm "Kết nối lại".
+- **Giữ trong code** (giờ để giữ nick không bị báo xấu): "hủy" là dừng, khung 07:00–21:00, 1 tin chờ trả lời, cách 24 giờ; bộ an toàn y tế; câu báo trợ lý AI ở tin đầu. Tin quảng cáo cho khách chưa đồng ý vẫn qua nhân viên duyệt.
+- **Không làm**: nhắn/kết bạn người không có quan hệ với DN, quét thành viên nhóm, gợi ý kết bạn của Zalo, dò dải số, danh sách mua; không dò hay chạy sát ngưỡng khóa của Zalo (chỉ giảm tốc khi khách phản hồi xấu).
+
+**Hệ quả:** thêm runtime Node vào dự án (CLAUDE.md mục 4); production cần service sidecar riêng (1 bản) + `ASPNETCORE_URLS` có cổng nội bộ; hồ sơ gọi vốn phải sửa câu "không dùng Zalo cá nhân". Chưa chạy với nick thật: còn đo thời gian sống phiên, uid giữa hai nick, Zalo PC có làm rớt listener không.
+
+## 2026-11-13 — Zalo cá nhân Z2–Z4: proxy, nhịp gửi, ô dán SĐT, tin chào mẫu cố định, tin nhắn mẫu
+
+**Quyết định:** (chi tiết `docs/ZALO-PERSONAL-PLAN.md` mục 7, 8, 6.9, 15)
+- **Proxy** là bảng hệ thống `proxies` (không tenant, chỉ super admin; mật khẩu mã hóa, chống trùng bằng HMAC dấu vân tay); 1 proxy ↔ 1
+  nick; giữ chỗ lúc hiện QR; quét lại QR giữ đúng userAgent + proxy cũ; thả ra nghỉ 7 ngày; kiểm 5 phút/lần, hỏng 2 lần → nick dừng
+  (fail-closed), khỏe lại → nick tự chạy. Sửa nick của DN khác (super admin, job hệ thống) bằng `ExecuteUpdate`, không qua change tracker
+  có kiểm tenant.
+- **Nhịp gửi** An toàn / Tùy chỉnh theo nick; trần hệ thống 20 lời mời / 40 người mới / 300 tin mỗi ngày (config); nick mới 3 → 5 lời mời;
+  câu trả lời của bot vượt giới hạn giờ/ngày → chuyển nhân viên (`send_limit`); tin chủ động hết lượt → dời sang hôm sau.
+- **Phanh tự động** chỉ giảm tốc (15% từ chối → chậm, 30% → dừng nhắn trước 72 giờ, chấp nhận kết bạn < 20% → chậm; cần ≥ 20 mẫu).
+  Không dò ngưỡng khóa của Zalo.
+- **Ô dán SĐT** bắt buộc chọn nguồn + xác nhận (lưu ai, lúc nào); chỉ nhắn người đã có quan hệ với DN. **Tin chào đầu dùng mẫu cố định**
+  (không AI): báo trợ lý AI, lý do liên hệ, chỉ hỏi xin phép, không giá.
+- **Tin nhắn mẫu** (`quick_replies`): chủ DN quản lý, nhân viên chèn bằng "/phím-tắt"; nội dung chung của DN, không mã hóa.
+
+**Hệ quả:** 4 migration (`ZaloPersonalChannel`, `ZaloPersonalProxiesPacing`, `ZaloPersonalOutreach`, `QuickReplies`), đã áp DB dev (backup
+`backups\zaloai-20261113-092002.dump`). Production: đặt `ZaloPersonal:RequireProxy=true`, nhập proxy trước khi DN kết nối nick.
+
+## 2026-11-13 — Tin bên mình nhắn trước được đưa cho AI làm bối cảnh
+
+**Bối cảnh:** thử nick Zalo cá nhân thật: bot chào chủ động, khách đáp "Sao á e", bot trả lời chung chung "em có thể hỗ trợ gì".
+Nguyên nhân: lượt chat gửi AI phải bắt đầu bằng khách, nên `BuildTurns` bỏ các tin bot/nhân viên đứng đầu lịch sử → AI không biết
+mình vừa nhắn gì. Lỗi cũng xảy ra với tin nhân viên nhắn trước (trang "Cần chăm sóc") và tin bot ngay sau mốc tóm tắt.
+
+**Quyết định:** các tin đó vào hướng dẫn hệ thống (`PromptOpening`, sau phần tóm tắt). Không có tóm tắt + không bị cắt bớt →
+"Bên mình đã nhắn khách trước" kèm hướng dẫn: khách hỏi lại vì sao được nhắn thì nhắc đúng lý do trong tin (không bịa thêm),
+giới thiệu ngắn DN theo dữ liệu, hỏi nhẹ nhu cầu. Còn lại → "Tin bên mình gửi ngay trước tin của khách". Tin khách ngắn mà
+khách chưa nhắn gì trước → tìm kiến thức kèm tin gần nhất của bên mình. Eval mới hỗ trợ `botBefore` (case N25).
+
+## 2026-11-13 — Sidecar lưu phiên Zalo ngay khi nick chạy; thẻ mực cho nick trên trang Kênh
+
+**Phiên:** cookie zca-js trả ở bước quét QR là bản trước khi đăng nhập xong; Zalo đổi cookie ngay lúc đăng nhập. Trước đây sidecar
+chỉ gửi bản mới về API 6 giờ/lần → khởi động lại trong 6 giờ đầu bị Zalo từ chối (nick thật "Remi Hau" báo Cần quét lại mã QR).
+Nay worker gửi lại phiên (nếu khác) ngay khi chạy, mỗi lần listener nối lại và mỗi 10 phút; vẫn kiểm 6 giờ/lần kèm tải lại bạn bè.
+Chưa đọc được log sidecar lúc lỗi nên đây là nguyên nhân khả dĩ nhất, kiểm lại bằng: quét QR → đợi 1 phút → `stop`/`dev` → nick tự chạy.
+
+**Thẻ nick:** chủ dự án đưa mẫu thẻ tối có tai (notch). Thêm vào hệ thống thiết kế FE (`design.md` § Thẻ mực): token `--ink`,
+`--ink-raised`, `--ink-foreground`, `--ink-muted` (luôn tối ở cả hai chế độ), tiện ích `notch-corner`, nút `variant="lime"`.
+API `/channels` thêm `personal.customersDaily` (7 số, cũ → mới): số khách có tin qua lại trên nick mỗi ngày giờ Việt Nam, chỉ đếm,
+không đọc nội dung, lọc tenant + kênh.
+
+## 2026-11-14 — Nick Zalo cá nhân thật, lần 2: khách nhắn chen, bot bớt hỏi lại, mời kết bạn sau khi trả lời
+
+**Bối cảnh:** chủ dự án test nick thật (đoạn chat "Lan Anh"). Bot trả lời 2 đoạn; khách nhắn "có" giữa 2 đoạn nên đoạn 2 ("nếu mình chưa
+cần lúc này thì cứ thong thả") trông như trả lời cho "có". Bot liên tục hỏi lại nhu cầu, nhắc lại lý do nhắn, không đưa thông tin cụ thể
+(tin "có" / "còn gì không" chỉ tìm ra các đoạn chính sách). Nhân viên tiếp quản thì có câu "em là X, chuyên viên…" và chữ ký "— X, CSKH"
+trên chính nick đó, thấy lạ. Lần test này cũng không có lời mời kết bạn.
+
+**Quyết định:**
+- **Đoạn trả lời cũ không gửi chen sau tin mới của khách.** Trước mỗi đoạn, job kiểm tra còn là tin khách mới nhất không; Zalo cá nhân
+  gửi kèm `replyTo` (msgId tin khách đang trả lời), sidecar nhớ tin khách mới nhất của từng thread và kiểm lại trước + sau lúc "đang soạn"
+  → `409 superseded`. Đoạn không gửi: `delivery_status = skipped` (enum lưu chữ, không cần migration), không đưa vào lịch sử AI, không tính
+  là "bot đã trả lời" (câu báo trợ lý AI ở lần trả lời đầu vẫn được gửi). Câu chuyển nhân viên vẫn gửi.
+- **Tin ngắn tìm theo ngữ cảnh + dịch vụ tiêu biểu.** Tin < 30 ký tự: câu tìm = tin khách trước + các tin bên mình vừa nhắn + tin mới;
+  tìm thêm 1 lần "dịch vụ, gói tiêu biểu: tên, thời lượng, giá" và thêm tối đa 3 đoạn (bỏ trùng). Quy tắc prompt 11b: khách đồng ý →
+  làm luôn điều vừa đề nghị; khách muốn nghe thêm → 2–3 dịch vụ có giá rồi hỏi 1 câu; không lặp lý do/câu hỏi; chỉ coi là từ chối khi
+  khách nói rõ. Eval N26, N27; eval hỗ trợ `history` nhiều lượt.
+- **Câu tiếp quản + chữ ký nhân viên mặc định TẮT ở mọi kênh** (chủ dự án chọn "bỏ ở mọi kênh"). DN muốn thì bật ở Cài đặt → Chuyển
+  tiếp. Không làm migration (chỉ đổi giá trị mặc định); DB dev đã tắt tay cho các DN thử.
+- **Mời kết bạn SAU khi khách trả lời** (chủ dự án chọn, thay cho "chỉ mời khi khách chặn người lạ"): khách trả lời tin chào mà chưa là
+  bạn → 3 phút sau gửi 1 lời mời kèm lời chào ngắn (vẫn báo trợ lý AI), trong khung giờ + giới hạn lời mời/ngày + cách nhau ≥ 10 phút;
+  trạng thái giữ "Đang tư vấn". Không mời cùng tin chào: tốn lượt mời cho người không bao giờ trả lời, lời mời bị bỏ qua nhiều dễ bị hạn
+  chế nick. Zalo từ chối lời mời (422) → không thử lại (trước đây lỗi này bị coi là tạm và thử lại mỗi 15 phút).
+- **Một gợi ý chăm sóc chỉ một job gửi tại một thời điểm** (khóa Redis `care:send:{id}`): job hẹn giờ và lượt quét "gửi trễ" chạy cùng
+  lúc từng tạo 2 tin cho cùng gợi ý.
+
+**Còn mở:** lời mời gửi sau khi khách trả lời chưa tự rút sau 14 ngày.
+
+## 2026-11-15 — Zalo cá nhân: kết bạn linh hoạt, lời chào AI viết, ban đêm chậm lại, thu gọn tin theo lượt gửi
+
+**Bối cảnh:** chủ dự án muốn bot tự kết bạn trước theo giới hạn từng nick, lời chào bớt "công nghiệp", và hỏi tin trả lời có bị coi
+là spam không, chia nhiều tin có tốn tiền hơn không.
+
+**Quyết định (chủ dự án chốt từng điểm):**
+- **Kết bạn linh hoạt:** người mới tới lượt → còn lượt mời cho người mới thì kết bạn trước, hết lượt (hoặc đã là bạn) thì nhắn trước;
+  nhắn trước mà khách trả lời → 3 phút sau mời kết bạn (2026-11-14). Giữ ~1/3 lượt mời/ngày (ít nhất 1) cho người đã trả lời; hàng
+  đợi ưu tiên người đã trả lời / đã kết bạn. Mỗi người chỉ được chủ động chạm một lần (mời không chấp nhận thì không nhắn thêm).
+- **Sau khi chấp nhận:** chưa chat → tin đầu cảm ơn + báo trợ lý AI + nói sơ bên mình giúp được gì (theo nhóm dịch vụ trong Danh mục)
+  + hỏi xin phép. Đã chat rồi mới chấp nhận → đúng một câu cảm ơn + giới thiệu sơ, chỉ khi hội thoại yên ≥ 2 phút và bot đang tự lo.
+- **Lời chào AI viết riêng** (`IOutreachWriter` ở Core, `OutreachWriter` ở Ai — Infrastructure không tham chiếu Ai): AI viết, hệ thống
+  kiểm luật (Generator + Guardrail + Fallback), sai 2 lần → mẫu `OutreachGreeting` (nhiều biến thể). Lợi thêm: mỗi người một câu, tránh
+  việc Zalo gắn cờ một câu y hệt gửi nhiều người. Chi phí ghi `usage_records` theo tenant.
+- **Ban đêm 22:00–07:00** (`ZaloPersonal:NightStart/NightEnd`, cấu hình hệ thống): bot vẫn trả lời khách nhắn tới nhưng gom tin 90 giây,
+  "đang soạn" ×2 (sidecar kẹp 15 giây), 1 tin mỗi lượt. Tin chủ động vẫn theo khung giờ chăm sóc.
+- **Thu gọn tin theo lượt gửi của nick (Graceful Degradation):** mỗi tin trừ 1 lượt (200/ngày, 60/giờ chế độ An toàn). Nick dùng < 70%
+  → tự nhiên 1–4 tin; 70–90% → tối đa 2; > 90% → 1; chạm trần → chuyển nhân viên như cũ. Báo AI số tin tối đa trong prompt và gộp cứng
+  (`MessageParts.Fit`) sau khi ghép câu xác nhận lịch hẹn.
+
+**Số liệu chi phí (dev, 14 ngày, 180 lượt Gemini):** đầu vào ~3.000–4.400 token, đầu ra ~170–250 token, ~0,0012 USD/lượt. Tách nhiều tin
+gần như không tốn thêm (một lần gọi AI trả cả danh sách tin); chi phí nằm ở đầu vào (~95%). Muốn giảm: cache phần quy tắc cố định,
+bớt dữ liệu đưa vào, model rẻ cho câu đơn giản — việc riêng, chưa làm.
+
+**Không đổi schema.** Còn chờ: mẫu chat "vibe người thật" từ chủ dự án để tinh chỉnh giọng (few-shot).

@@ -25,7 +25,7 @@ Trợ lý AI chăm sóc khách hàng trên **Zalo Official Account (OA)**, cho d
 ## 2. Nguyên tắc sản phẩm (không được vi phạm)
 
 1. **Doanh nghiệp giữ OA của họ.** Chỉ kết nối qua OAuth cấp quyền cho Zalo App của mình. Không bao giờ yêu cầu mật khẩu Zalo.
-2. **Chỉ dùng Zalo OA + API chính thức.** Không tự động hóa Zalo cá nhân, không scrape, không thư viện không chính thức.
+2. **Zalo OA qua API chính thức là kênh chính.** Kênh **Zalo cá nhân** (thư viện không chính thức `zca-js`, chủ dự án chốt 2026-11-12, `docs/ZALO-PERSONAL-PLAN.md`) là kênh phụ: DN tự bật và tự xác nhận rủi ro nick có thể bị Zalo khóa. Không bao giờ hỏi mật khẩu Zalo (chỉ đăng nhập bằng QR). Chỉ kết bạn / nhắn chào với người **đã có quan hệ với DN** (đã liên hệ, đã dùng dịch vụ, được khách giới thiệu — DN xác nhận nguồn khi nhập), có giới hạn mỗi ngày; không tìm hay nhắn người lạ ngoài danh sách khách; không trả lời trong nhóm; không đọc/lưu chuyện riêng của chủ nick. Không scrape.
 3. **Bot chỉ trả lời theo dữ liệu được nạp.** Không chắc → nói thật và chuyển nhân viên. Không bịa giá, không bịa chính sách. Ngành liên quan sức khỏe: không chẩn đoán, không kê thuốc, không hứa kết quả, dấu hiệu nguy hiểm → chuyển khẩn cấp (`docs/INDUSTRIES.md` mục 3).
 4. **Tách dữ liệu tuyệt đối giữa các khách thuê.** Lộ dữ liệu khách A sang khách B là lỗi nghiêm trọng nhất có thể xảy ra.
 5. **Tuân thủ pháp luật Việt Nam bằng thiết kế** (mục 7): báo là trợ lý AI, che thông tin cá nhân trước khi gửi AI, đồng ý nhận tin, khung giờ gửi, xóa/xuất dữ liệu.
@@ -87,6 +87,7 @@ Kết nối OA:
 | AI chat | `IChatProvider`: Gemini, **Groq dự phòng** khi Gemini hết lượt/lỗi (chốt 2026-11-03, trước đó chỉ Gemini), gọi REST qua HttpClient | Model + thứ tự đặt trong config, không hardcode. Dev có thể dùng gói free; **production bắt buộc Gemini gói trả phí** (gói free cho Google dùng dữ liệu); Groq bật Zero Data Retention |
 | Embedding | Qua `IEmbeddingProvider` (Gemini embedding) | Số chiều vector đặt trong config. Đổi model = tạo lại toàn bộ vector |
 | Parse file | PdfPig (pdf), DocumentFormat.OpenXml (docx), ClosedXML (xlsx) | Chạy trong worker |
+| Kênh Zalo cá nhân | Sidecar **Node 24** + `zca-js` 2.2.0 (không chính thức) + `node-fetch`, `https-proxy-agent`; dev: TypeScript (chạy thẳng bằng type stripping của Node), vitest | `connectors/zalo-personal/`, giao tiếp API qua HTTP nội bộ có chữ ký HMAC theo `connectors/zalo-personal/CONTRACT.md`. Chỉ 1 bản chạy (lease). Chốt 2026-11-12 |
 | Logging | Serilog (JSON) | Không log token, không log PII; có destructuring policy để redact |
 | Lỗi | Sentry (`Sentry.AspNetCore`) | |
 | Test | xUnit + Testcontainers for .NET (Postgres, Redis) | Assert bằng xUnit/Shouldly (không dùng FluentAssertions v8: license thương mại) |
@@ -133,6 +134,7 @@ C:\Zalo_Tool\
 │   ├── CRM-FEATURES.md        # danh sách tính năng CRM (đầy đủ, theo nhóm)
 │   ├── CRM-PLAN.md            # đợt C1–C8 của CRM, schema từng đợt
 │   ├── TEST-PLAN.md / TEST-FLOW.md  # checklist + kịch bản test tay
+│   ├── ONBOARDING-FLOW.md     # dựng 1 DN từ đầu (super admin → nạp dữ liệu → lịch → test chat → Zalo cá nhân)
 │   └── zalo-api-notes.md      # ghi chú API Zalo đã kiểm chứng từ docs chính thức
 ├── .claude/skills/            # skills (mục 10) tách ra từ file này ở M1
 ├── ZaloAi.sln
@@ -146,6 +148,8 @@ C:\Zalo_Tool\
 │   ├── ZaloAi.Ai/             # IAiProvider, prompt builder, PII masking, RAG search, evals/
 │   ├── ZaloAi.Channels/       # IChannelAdapter + Zalo adapter + webchat adapter
 │   └── ZaloAi.IndustryTemplates/ # mẫu ngành (file nhúng): prompt, câu cấm, câu hỏi thu thập, flow mẫu
+├── connectors/
+│   └── zalo-personal/         # sidecar Node + zca-js cho nick Zalo cá nhân (CONTRACT.md = hợp đồng với API)
 ├── tests/
 │   ├── ZaloAi.UnitTests/
 │   └── ZaloAi.IntegrationTests/  # Testcontainers: test cô lập tenant, API, job
@@ -188,7 +192,14 @@ Zalo__OAuthRedirectUrl=
 
 Sentry__Dsn=
 Telegram__BotToken=                          # kênh thông báo nhân viên giai đoạn đầu
+
+ZaloPersonal__SidecarUrl=http://127.0.0.1:4100   # sidecar Zalo cá nhân (mạng nội bộ, không ra internet)
+ZaloPersonal__SharedSecret=                  # ≥ 32 ký tự, giống REMI_SHARED_SECRET của sidecar
+ZaloPersonal__Mode=Real                      # Real | Fake (Fake chỉ chạy ở Development)
+ZaloPersonal__InternalPort=4001              # API nghe thêm cổng này cho /internal/zalo-personal/* (ASPNETCORE_URLS phải có)
 ```
+
+Sidecar (`connectors/zalo-personal/.env`): `REMI_PORT`, `REMI_API_URL`, `REMI_SHARED_SECRET`, `REMI_MODE` (real|fake) — xem `.env.example` trong thư mục đó.
 
 FE (`zalo-ai-portal/.env.local`): `API_INTERNAL_URL=http://localhost:4000` (đích rewrite `/api/*`). Không có secret nào ở FE.
 
@@ -198,7 +209,7 @@ Không commit `.env`. Mọi config đọc qua Options pattern (`IOptions<T>` tro
 
 ## 7. Pháp lý và tuân thủ bằng thiết kế
 
-Căn cứ (chủ dự án cần luật sư xác nhận, kiểm tra văn bản hiện hành): Nghị định 13/2023 và Luật Bảo vệ dữ liệu cá nhân (hiệu lực 2026), chống tin nhắn rác (Nghị định 91/2020 và sửa đổi), Luật Quảng cáo, Luật Bảo vệ quyền lợi người tiêu dùng 2023, quy định về AI, chính sách Zalo.
+Căn cứ (chủ dự án đã hỏi luật sư, 2026-11-12): Nghị định 13/2023 và Luật Bảo vệ dữ liệu cá nhân (hiệu lực 2026), chống tin nhắn rác (Nghị định 91/2020 và sửa đổi), Luật Quảng cáo, Luật Bảo vệ quyền lợi người tiêu dùng 2023, quy định về AI, chính sách Zalo.
 
 Tính năng bắt buộc trong code:
 
@@ -281,7 +292,10 @@ scripts\seed-demo.cmd                         # DN demo đầy số liệu ảo 
 scripts\clear-demo.cmd                        # xóa hẳn DN demo + 2 tài khoản demo (hỏi xác nhận; /y bỏ qua)
 dotnet format | dotnet build | dotnet test
 dev                 # (Windows) bật Postgres/Redis + API + Worker + FE, mỗi cái một cửa sổ
-stop                # tắt API, Worker, FE; "stop all" tắt thêm Postgres/Redis
+stop                # tắt API, Worker, FE, sidecar; "stop all" tắt thêm Postgres/Redis
+
+# sidecar Zalo cá nhân (connectors/zalo-personal, dev tự bật nếu có .env)
+npm run dev | npm test | npm run typecheck
 scripts/backup-db.cmd                        # backup DB dev; khôi phục: scripts/restore-db.cmd <file>
 
 # repo FE (zalo-ai-portal)
@@ -457,6 +471,11 @@ Thứ tự bắt buộc C1 → C8, chi tiết và schema ở `docs/CRM-PLAN.md`.
 - [x] C4 Kho hàng: tồn kho theo chi nhánh, nhập/xuất/kiểm kê/chuyển, định mức vật tư, cảnh báo. (2026-10-15)
 - [x] C5 Nhân viên nâng cao: hoa hồng, hiệu suất, chấm công. (2026-10-15)
 - [x] C6 Báo cáo: hôm nay, doanh thu đủ chiều, hiệu quả AI, lấp đầy, giữ chân, công nợ, báo cáo tuần, hỏi số liệu tiếng Việt. (2026-10-15)
+- [ ] **Z1–Z4 Kênh Zalo cá nhân** (chốt 2026-11-12, làm TRƯỚC C7, nhánh `feat/zalo-personal`, chi tiết `docs/ZALO-PERSONAL-PLAN.md`):
+  - [x] Z1 Kết nối QR, nhận/gửi tin, lọc chuyện riêng, chế độ giả lập. (2026-11-12, thử bằng giả lập)
+  - [x] Z2 Chống khóa nick: proxy riêng từng nick, nhịp gửi An toàn/Tùy chỉnh, phanh tự động, gom tin, "đang soạn". (2026-11-13)
+  - [x] Z3 Bot tự nhắn chăm sóc, ô dán SĐT hàng loạt, kết bạn + lời chào, hành trình tới lịch hẹn. (2026-11-13, thử bằng giả lập)
+  - [ ] Z4 Tin nhắn mẫu, hoàn thiện, chạy checklist với nick thật. — Tin nhắn mẫu + hoàn thiện xong 2026-11-13; còn chạy checklist với nick thật + proxy.
 - [ ] C7 AI dùng CRM: chăm sóc sau buổi theo hóa đơn, khảo sát, gói sắp hết, kéo khách, sinh nhật, giới thiệu, báo giá chủ động.
 - [ ] C8 Trải nghiệm: PWA + push, đặt lịch online, hạng thành viên, ảnh trước/sau, phiếu cam kết.
 Các tính năng GĐ2/GĐ3 trùng với CRM (đặt lịch, nhắc lịch, sinh nhật, kéo khách, nhiều nhân viên) được làm trong CRM.
