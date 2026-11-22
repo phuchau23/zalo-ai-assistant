@@ -231,8 +231,10 @@ public sealed partial class BotEngine(
             var result = await chat.ChatAsync(
                 new ChatRequest(system, turns, PromptBuilder.ReplySchema, attempt == 0 ? 0.3 : 0.0, MaxOutputTokens),
                 cancellationToken);
-            usage.Add(new BotUsage(UsageKind.Chat, result.Provider, result.Model, result.InputTokens, result.OutputTokens, result.CostUsd));
+            usage.Add(new BotUsage(UsageKind.Chat, result.Provider, result.Model, result.InputTokens, result.OutputTokens, result.CostUsd, result.CachedInputTokens));
             trace.Calls++;
+            trace.InputTokens += result.InputTokens;
+            trace.CachedTokens += result.CachedInputTokens;
             trace.Model = result.Model;
             trace.LatencyMs += result.LatencyMs;
 
@@ -489,6 +491,10 @@ public sealed partial class BotEngine(
 
         public int Calls { get; set; }
 
+        public int InputTokens { get; set; }
+
+        public int CachedTokens { get; set; }
+
         public string? Model { get; set; }
 
         public long LatencyMs { get; set; }
@@ -518,6 +524,8 @@ public sealed partial class BotEngine(
             ["template"] = $"{template.Slug}@{template.Version}",
             ["model"] = Model,
             ["calls"] = Calls,
+            ["inputTokens"] = InputTokens,
+            ["cachedTokens"] = CachedTokens,
             ["latencyMs"] = LatencyMs,
             ["dangerSignal"] = DangerSignal,
             ["guards"] = new JsonArray(Guards.Select(g => (JsonNode?)g).ToArray()),

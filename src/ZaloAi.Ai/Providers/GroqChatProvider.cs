@@ -112,9 +112,9 @@ public sealed class GroqChatProvider(HttpClient http, IOptions<AiOptions> option
             throw new AiInvalidOutputException(finishReason ?? "không rõ");
         }
 
-        var (input, output) = Usage(root);
+        var (input, output, cached) = Usage(root);
         var usedModel = root.TryGetProperty("model", out var version) ? version.GetString() ?? model : model;
-        return new ChatResult(text, ProviderName, usedModel, input, output, _options.Cost(model, input, output), stopwatch.ElapsedMilliseconds);
+        return new ChatResult(text, ProviderName, usedModel, input, output, _options.Cost(model, input, output, cached), stopwatch.ElapsedMilliseconds, cached);
     }
 
     /// <summary>Groq trả 400 + error.code "json_validate_failed" khi model sinh JSON không đúng: lỗi của model, không phải của request.</summary>
@@ -168,14 +168,17 @@ public sealed class GroqChatProvider(HttpClient http, IOptions<AiOptions> option
         return node;
     }
 
-    private static (int Input, int Output) Usage(JsonElement root)
+    private static (int Input, int Output, int Cached) Usage(JsonElement root)
     {
         if (!root.TryGetProperty("usage", out var usage))
         {
-            return (0, 0);
+            return (0, 0, 0);
         }
 
-        int Read(string name) => usage.TryGetProperty(name, out var v) && v.TryGetInt32(out var n) ? n : 0;
-        return (Read("prompt_tokens"), Read("completion_tokens"));
+        int Read(JsonElement parent, string name) => parent.TryGetProperty(name, out var v) && v.TryGetInt32(out var n) ? n : 0;
+        var cached = usage.TryGetProperty("prompt_tokens_details", out var details) && details.ValueKind == JsonValueKind.Object
+            ? Read(details, "cached_tokens")
+            : 0;
+        return (Read(usage, "prompt_tokens"), Read(usage, "completion_tokens"), cached);
     }
 }

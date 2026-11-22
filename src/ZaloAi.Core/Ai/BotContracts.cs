@@ -89,7 +89,8 @@ public sealed record BookingIntent(
     int PartySize,
     Guid? AppointmentId);
 
-public sealed record BotUsage(UsageKind Kind, string Provider, string Model, int InputTokens, int OutputTokens, decimal CostUsd);
+/// <param name="CachedInputTokens">Phần của InputTokens được nhà cung cấp cache (tính giá rẻ); chỉ để đo, không lưu bảng usage.</param>
+public sealed record BotUsage(UsageKind Kind, string Provider, string Model, int InputTokens, int OutputTokens, decimal CostUsd, int CachedInputTokens = 0);
 
 /// <summary>
 /// Kết quả một lượt trả lời. <see cref="Reply"/> đã qua mọi kiểm tra (câu cấm, khẩn cấp...) và sẵn sàng gửi khách.
