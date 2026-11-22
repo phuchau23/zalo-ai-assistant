@@ -55,6 +55,7 @@ public sealed partial class OutreachTenantJob(
     IOutreachWriter writer,
     IDistributedStore store,
     IFieldEncryptor encryptor,
+    OutreachQueueWatcher queueWatcher,
     IOptions<ZaloPersonalOptions> options,
     TimeProvider time,
     ILogger<OutreachTenantJob> logger)
@@ -110,6 +111,8 @@ public sealed partial class OutreachTenantJob(
 
             await outreach.SaveChangesAsync(cancellationToken);
         }
+
+        await queueWatcher.CheckAsync(tenantId, cancellationToken); // vừa nhắn người cuối → báo "hết danh sách" ngay
     }
 
     private async Task ProcessAsync(Tenant tenant, OutreachTarget target, DateTimeOffset tomorrow, CancellationToken cancellationToken)
@@ -636,6 +639,7 @@ public sealed partial class OutreachMaintenanceJob(
     ChannelConnectionRepository connections,
     SidecarClient sidecar,
     IBackgroundJobClient jobs,
+    OutreachQueueWatcher queueWatcher,
     TimeProvider time,
     ILogger<OutreachMaintenanceJob> logger)
 {
@@ -694,6 +698,8 @@ public sealed partial class OutreachMaintenanceJob(
         {
             await BrakeAsync(tenantId, account.ConnectionId, now, cancellationToken);
         }
+
+        await queueWatcher.CheckAsync(tenantId, cancellationToken); // danh sách SĐT sắp hết / đã hết → Telegram
     }
 
     /// <summary>Tính mức phanh cho một nick từ số liệu 7 ngày.</summary>
@@ -735,10 +741,19 @@ public sealed partial class OutreachMaintenanceJob(
         account.OutreachPausedUntil = level == OutreachLevel.Paused ? now + PauseFor : null;
         await personal.SaveChangesAsync(cancellationToken);
         LogLevelChanged(logger, connectionId, tenantId, level.ToString());
-        if (worse && await connections.GetAsync(tenantId, connectionId, cancellationToken) is not null)
+        if (await connections.GetAsync(tenantId, connectionId, cancellationToken) is not null)
         {
-            var code = level == OutreachLevel.Paused ? "zp:outreach_paused" : "zp:outreach_slow";
-            jobs.Enqueue<ZaloPersonalAlertJob>(job => job.RunAsync(tenantId, connectionId, code, CancellationToken.None));
+            // Xấu đi: chậm lại / tạm dừng. Đỡ hơn: hết tạm dừng nhưng còn chậm, hoặc chạy lại bình thường (2026-11-17).
+            var code = level switch
+            {
+                OutreachLevel.Paused => "zp:outreach_paused",
+                OutreachLevel.Slow => "zp:outreach_slow",
+                _ => worse ? null : "zp:outreach_normal",
+            };
+            if (code is not null)
+            {
+                jobs.Enqueue<ZaloPersonalAlertJob>(job => job.RunAsync(tenantId, connectionId, code, CancellationToken.None));
+            }
         }
     }
 

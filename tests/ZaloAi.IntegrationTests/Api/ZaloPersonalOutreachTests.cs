@@ -560,6 +560,66 @@ public sealed class ZaloPersonalOutreachTests(PostgresFixture db) : IAsyncLifeti
         summary.Single(s => s.ConnectionId == nickA).StateCounts.ShouldBeEmpty();
     }
 
+    /// <summary>Kiểm tra hàng chờ của DN (như cuối job hàng đợi) → các tin Telegram vừa xếp hàng gửi.</summary>
+    private async Task<List<string>> WatchAsync(Guid tenantId)
+    {
+        using var scope = _api.Services.CreateScope();
+        scope.ServiceProvider.GetRequiredService<ZaloAi.Infrastructure.Tenancy.TenantContext>().Set(tenantId, userId: null, role: null, isSuperAdmin: false);
+        var sent = await scope.ServiceProvider.GetRequiredService<ZaloAi.Infrastructure.ZaloPersonal.OutreachQueueWatcher>().CheckAsync(tenantId, CancellationToken.None);
+        return sent.Select(a => a.Reason).ToList();
+    }
+
+    /// <summary>Đánh dấu <paramref name="count"/> người đang chờ là đã được nhắn (giả như job đã chạy).</summary>
+    private async Task ContactAsync(Guid tenantId, int count)
+    {
+        await using var context = db.CreateDbContext(tenantId);
+        foreach (var t in await context.OutreachTargets.Where(t => t.State == OutreachState.Queued).OrderBy(t => t.Id).Take(count).ToListAsync())
+        {
+            t.State = OutreachState.Messaged;
+            t.NextActionAt = null;
+        }
+
+        await context.SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task Telegram_alerts_once_when_a_nicks_list_runs_low_and_once_when_it_runs_out()
+    {
+        var (tenantId, owner, nick) = await ConnectedTenantAsync("Báo hết danh sách");
+        await InvitesPerDayAsync(owner, nick, invites: 1, newContacts: 2); // nhận 2 người mới/ngày
+        (await WatchAsync(tenantId)).ShouldBeEmpty(); // nick chưa từng được giao số
+
+        await PasteAsync(owner, string.Join("\n", Enumerable.Range(0, 4).Select(_ => Phone())));
+        (await WatchAsync(tenantId)).ShouldBeEmpty(); // 4 người chờ > 2/ngày
+
+        await ContactAsync(tenantId, 2);
+        (await WatchAsync(tenantId)).ShouldBe(["zp:queue_low"]); // còn 2 = khoảng 1 ngày
+        (await WatchAsync(tenantId)).ShouldBeEmpty(); // chỉ báo một lần
+
+        await ContactAsync(tenantId, 2);
+        (await WatchAsync(tenantId)).ShouldBe(["zp:queue_empty"]);
+        (await WatchAsync(tenantId)).ShouldBeEmpty();
+
+        // Dán thêm → lần hết sau báo lại.
+        await PasteAsync(owner, string.Join("\n", Enumerable.Range(0, 3).Select(_ => Phone())));
+        (await WatchAsync(tenantId)).ShouldBeEmpty();
+        await ContactAsync(tenantId, 3);
+        (await WatchAsync(tenantId)).ShouldBe(["zp:queue_empty"]);
+    }
+
+    [Fact]
+    public async Task A_short_list_is_not_reported_as_running_low_right_after_pasting()
+    {
+        var (tenantId, owner, nick) = await ConnectedTenantAsync("Danh sách ngắn");
+        await InvitesPerDayAsync(owner, nick, invites: 1, newContacts: 5);
+
+        await PasteAsync(owner, $"{Phone()}\n{Phone()}");
+        (await WatchAsync(tenantId)).ShouldBeEmpty(); // 2 người ≤ 5/ngày nhưng hàng chờ chưa từng dài → không báo "sắp hết"
+
+        await ContactAsync(tenantId, 2);
+        (await WatchAsync(tenantId)).ShouldBe(["zp:queue_empty"]);
+    }
+
     [Fact]
     public async Task Silence_for_a_week_moves_to_the_call_list_and_opt_out_declines()
     {

@@ -105,6 +105,7 @@ public static class DependencyInjection
         services.AddScoped<ZaloPersonal.ZaloPersonalConnectionService>();
         services.AddScoped<IChannelAdapter, ZaloPersonal.ZaloPersonalAdapter>();
         services.AddScoped<ZaloPersonalAlertJob>();
+        services.AddScoped<ZaloPersonal.OutreachQueueWatcher>();
         services.AddScoped<ZaloPersonalHealthJob>();
         services.AddScoped<ZaloPersonal.PersonalSendLimiter>();
         services.AddScoped<ZaloPersonal.ProxyPoolService>();
