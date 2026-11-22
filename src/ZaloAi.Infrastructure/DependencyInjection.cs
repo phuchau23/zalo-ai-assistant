@@ -44,6 +44,7 @@ public static class DependencyInjection
         services.AddValidatedOptions<ZaloOptions>(configuration, ZaloOptions.SectionName);
         services.AddValidatedOptions<TelegramOptions>(configuration, TelegramOptions.SectionName);
         services.AddValidatedOptions<BillingOptions>(configuration, BillingOptions.SectionName);
+        services.AddValidatedOptions<CostOptions>(configuration, CostOptions.SectionName);
 
         services.AddSingleton<IFieldEncryptor, AesGcmFieldEncryptor>();
         services.AddSingleton<IPhoneHasher, HmacPhoneHasher>();
@@ -141,6 +142,20 @@ public static class DependencyInjection
         services.AddScoped<ZaloAi.Infrastructure.Admin.TenantAdminService>();
         services.AddScoped<TenantExpiryJob>();
         services.AddScoped<ZaloAi.Infrastructure.Billing.ConversationQuotaService>();
+
+        // Chi phí AI theo nick, quy ra VND theo tỷ giá Vietcombank từng ngày (2026-11-15).
+        services.AddHttpClient<ZaloAi.Infrastructure.Billing.VietcombankRateClient>((sp, http) =>
+            {
+                http.BaseAddress = new Uri(sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<CostOptions>>().Value.VietcombankBaseUrl);
+                http.Timeout = Timeout.InfiniteTimeSpan;
+            })
+            .AddStandardResilienceHandler(resilience =>
+            {
+                resilience.AttemptTimeout.Timeout = TimeSpan.FromSeconds(8);
+                resilience.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(20);
+            });
+        services.AddScoped<ZaloAi.Infrastructure.Billing.ExchangeRateService>();
+        services.AddScoped<ExchangeRateSyncJob>();
         services.AddScoped<QuotaNotifyJob>();
         services.AddScoped<ZaloAi.Infrastructure.Team.TeamService>();
         services.AddScoped<ZaloAi.Infrastructure.Customers.ContactImportService>();

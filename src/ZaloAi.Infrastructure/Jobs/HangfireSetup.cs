@@ -113,6 +113,10 @@ public static class HangfireSetup
             OutreachMaintenanceSweepJob.RecurringId,
             job => job.RunAsync(CancellationToken.None),
             "20 * * * *");
+        recurring.AddOrUpdate<ExchangeRateSyncJob>(
+            ExchangeRateSyncJob.RecurringId,
+            job => job.RunAsync(CancellationToken.None),
+            "30 16 * * *"); // 23:30 giờ Việt Nam
     }
 
     /// <summary>Tạo/nâng cấp bảng Hangfire (dùng cho lệnh seed và test, để Api dùng được hàng đợi khi Worker chưa chạy lần nào).</summary>
