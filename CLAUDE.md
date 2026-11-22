@@ -134,6 +134,7 @@ C:\Zalo_Tool\
 │   ├── CRM-FEATURES.md        # danh sách tính năng CRM (đầy đủ, theo nhóm)
 │   ├── CRM-PLAN.md            # đợt C1–C8 của CRM, schema từng đợt
 │   ├── TEST-PLAN.md / TEST-FLOW.md  # checklist + kịch bản test tay
+│   ├── test-guide/            # sổ tay test theo hành trình người dùng: guide.json → `node docs/test-guide/build.js` → remi-test-guide.html (bản online: artifact "Kịch bản test Remi")
 │   ├── ONBOARDING-FLOW.md     # dựng 1 DN từ đầu (super admin → nạp dữ liệu → lịch → test chat → Zalo cá nhân)
 │   └── zalo-api-notes.md      # ghi chú API Zalo đã kiểm chứng từ docs chính thức
 ├── .claude/skills/            # skills (mục 10) tách ra từ file này ở M1
