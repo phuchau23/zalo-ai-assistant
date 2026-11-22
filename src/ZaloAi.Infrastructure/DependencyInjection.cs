@@ -156,6 +156,8 @@ public static class DependencyInjection
             });
         services.AddScoped<ZaloAi.Infrastructure.Billing.ExchangeRateService>();
         services.AddScoped<ZaloAi.Infrastructure.Billing.UsdVndConverter>();
+        services.AddScoped<UsageCostRepository>();
+        services.AddScoped<ZaloAi.Infrastructure.Billing.NickCostService>();
         services.AddScoped<ExchangeRateSyncJob>();
         services.AddScoped<QuotaNotifyJob>();
         services.AddScoped<ZaloAi.Infrastructure.Team.TeamService>();
