@@ -91,7 +91,9 @@ public sealed class BotEngineTests
         var trace = JsonDocument.Parse(result.TraceJson).RootElement;
         trace.GetProperty("chunks")[0].GetProperty("used").GetBoolean().ShouldBeTrue();
         trace.GetProperty("belowThreshold").GetInt32().ShouldBe(1);
-        result.Usage.ShouldHaveSingleItem().CostUsd.ShouldBe(0.001m);
+        result.Usage.Single(u => u.Kind == UsageKind.Chat).CostUsd.ShouldBe(0.001m);
+        result.Usage.Where(u => u.Kind == UsageKind.Embed).ShouldAllBe(u => u.InputTokens > 0); // tạo vector câu tìm kiếm cũng được ghi chi phí
+        result.Usage.Count(u => u.Kind == UsageKind.Embed).ShouldBe(2); // tin ngắn: câu hỏi + nhóm dịch vụ tiêu biểu
     }
 
     [Fact]
@@ -179,7 +181,7 @@ public sealed class BotEngineTests
         result.NeedsHuman.ShouldBeTrue();
         result.HandoffReason.ShouldBe("ai_error");
         result.Reply.ShouldNotContain("chuyển"); // câu chuyển tiếp do DN cài, hệ thống gửi sau (InboxService)
-        result.Usage.Count.ShouldBe(2);
+        result.Usage.Count(u => u.Kind == UsageKind.Chat).ShouldBe(2);
     }
 
     [Fact]

@@ -272,14 +272,14 @@ public sealed class ConversationRepository(AppDbContext db, ITenantContext tenan
             .ToList();
     }
 
-    /// <summary>Tổng chi phí AI (USD) và số lần gọi của một hội thoại.</summary>
+    /// <summary>Tổng chi phí AI (USD, gồm cả tạo vector) và số lần gọi model chat của một hội thoại.</summary>
     public async Task<(decimal CostUsd, int Calls)> UsageForConversationAsync(Guid tenantId, Guid conversationId, CancellationToken cancellationToken)
     {
         EnsureTenant(tenantId);
         var rows = await Db.UsageRecords
             .Where(u => u.TenantId == tenantId && u.ConversationId == conversationId)
             .GroupBy(_ => 1)
-            .Select(g => new { Cost = g.Sum(u => u.CostUsd), Calls = g.Count() })
+            .Select(g => new { Cost = g.Sum(u => u.CostUsd), Calls = g.Count(u => u.Kind == UsageKind.Chat) })
             .FirstOrDefaultAsync(cancellationToken);
         return rows is null ? (0m, 0) : (rows.Cost, rows.Calls);
     }
