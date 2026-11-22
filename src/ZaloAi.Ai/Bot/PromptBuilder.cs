@@ -81,6 +81,7 @@ public static class PromptBuilder
         }
         """;
 
+    /// <param name="smallTalk">Tin xã giao (cảm ơn, chào tạm biệt): không tìm dữ liệu, nhắc AI trả lời ngắn mà không chuyển người.</param>
     public static string BuildSystem(
         IndustryTemplate template,
         BotProfile profile,
@@ -90,7 +91,8 @@ public static class PromptBuilder
         Addressing addressing,
         BookingContext? booking = null,
         PromptOpening? opening = null,
-        int? maxMessages = null)
+        int? maxMessages = null,
+        bool smallTalk = false)
     {
         ArgumentNullException.ThrowIfNull(template);
         ArgumentNullException.ThrowIfNull(profile);
@@ -161,7 +163,11 @@ public static class PromptBuilder
         // 5. Dữ liệu tìm theo câu hỏi, tóm tắt, tin bên mình vừa gửi.
         s.AppendLine();
         s.AppendLine("## DỮ LIỆU THAM KHẢO (của doanh nghiệp, tìm theo câu hỏi mới nhất)");
-        if (chunks.Count == 0)
+        if (smallTalk)
+        {
+            s.AppendLine("(Tin xã giao — không cần dữ liệu: đáp lại ngắn, ấm áp theo ngữ cảnh; confidence high, needs_human false.)");
+        }
+        else if (chunks.Count == 0)
         {
             s.AppendLine("(Không tìm thấy dữ liệu liên quan.)");
         }

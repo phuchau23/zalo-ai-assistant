@@ -80,12 +80,21 @@ public sealed partial class BotEngine(
             return Finish(request, texts, trace, vault, usage, new Decision([texts.Sticker], false, null, Urgency.None, "high", null, []));
         }
 
-        // 2. Tìm kiến thức (câu đã che — không gửi dữ liệu cá nhân cho dịch vụ tạo vector).
-        var chunks = await SearchAsync(request.TenantId, maskedMessage, maskedHistory, trace, cancellationToken);
+        // 2. Tìm kiến thức (câu đã che — không gửi dữ liệu cá nhân cho dịch vụ tạo vector). Tin cảm ơn/tạm biệt: không cần dữ liệu.
+        var smallTalk = SmallTalk.IsClosing(request.CustomerMessage);
+        IReadOnlyList<PromptChunk> chunks = [];
+        if (smallTalk)
+        {
+            trace.Guards.Add("small_talk_no_search");
+        }
+        else
+        {
+            chunks = await SearchAsync(request.TenantId, maskedMessage, maskedHistory, trace, cancellationToken);
+        }
 
         // 3. Gọi AI.
         var system = PromptBuilder.BuildSystem(
-            template, request.Profile, chunks, maskedSummary, time.GetUtcNow(), addressing, request.Booking, Opening(request, maskedHistory), request.MaxMessages);
+            template, request.Profile, chunks, maskedSummary, time.GetUtcNow(), addressing, request.Booking, Opening(request, maskedHistory), request.MaxMessages, smallTalk);
         var turns = BuildTurns(maskedHistory, maskedMessage);
         BotAnswer? answer;
         try
