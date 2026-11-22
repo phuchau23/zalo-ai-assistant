@@ -220,6 +220,80 @@ public sealed class OutreachRepository(AppDbContext db, ITenantContext tenantCon
             cancellationToken);
     }
 
+    /// <summary>
+    /// Nick gần nhất từng nhắn/mời mỗi hồ sơ (đợt chăm sóc trước hoặc hội thoại Zalo cá nhân) — để khi chia danh sách, khách quen nick nào
+    /// thì giữ nick đó.
+    /// </summary>
+    public async Task<Dictionary<Guid, Guid>> LastConnectionByContactAsync(Guid tenantId, IReadOnlyCollection<Guid> contactIds, CancellationToken cancellationToken)
+    {
+        EnsureTenant(tenantId);
+        if (contactIds.Count == 0)
+        {
+            return [];
+        }
+
+        var fromTargets = await Db.OutreachTargets.AsNoTracking()
+            .Where(t => t.TenantId == tenantId && contactIds.Contains(t.ContactId) && t.ConnectionId != null && t.State != OutreachState.Queued)
+            .Select(t => new { t.ContactId, ConnectionId = t.ConnectionId!.Value, At = t.UpdatedAt })
+            .ToListAsync(cancellationToken);
+        var fromConversations = await Db.Conversations.AsNoTracking()
+            .Where(c => c.TenantId == tenantId && contactIds.Contains(c.ContactId) && c.Channel == ChannelKind.ZaloPersonal && c.ConnectionId != null)
+            .Select(c => new { c.ContactId, ConnectionId = c.ConnectionId!.Value, At = c.CreatedAt })
+            .ToListAsync(cancellationToken);
+        return fromTargets.Concat(fromConversations)
+            .GroupBy(r => r.ContactId)
+            .ToDictionary(g => g.Key, g => g.MaxBy(r => r.At)!.ConnectionId);
+    }
+
+    /// <summary>Số người theo trạng thái của từng nick (cả các trạng thái đã kết thúc).</summary>
+    public async Task<IReadOnlyList<(Guid ConnectionId, OutreachState State, int Count)>> StateCountsAsync(Guid tenantId, CancellationToken cancellationToken)
+    {
+        EnsureTenant(tenantId);
+        var rows = await Db.OutreachTargets.AsNoTracking()
+            .Where(t => t.TenantId == tenantId && t.ConnectionId != null)
+            .GroupBy(t => new { ConnectionId = t.ConnectionId!.Value, t.State })
+            .Select(g => new { g.Key.ConnectionId, g.Key.State, Count = g.Count() })
+            .ToListAsync(cancellationToken);
+        return rows.Select(r => (r.ConnectionId, r.State, r.Count)).ToList();
+    }
+
+    /// <summary>Số người nick đã liên hệ được mà đang có lịch hẹn sắp tới (thành quả dễ thấy nhất của việc chăm sóc).</summary>
+    public async Task<Dictionary<Guid, int>> BookedCountsAsync(Guid tenantId, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        EnsureTenant(tenantId);
+        OutreachState[] reached = [OutreachState.Invited, OutreachState.Friend, OutreachState.Messaged, OutreachState.Replied, OutreachState.NoReply];
+        return await Db.OutreachTargets.AsNoTracking()
+            .Where(t => t.TenantId == tenantId && t.ConnectionId != null && reached.Contains(t.State)
+                        && Db.Appointments.Any(a => a.TenantId == tenantId && a.ContactId == t.ContactId && a.StartAt >= now
+                                                    && a.Status != AppointmentStatus.Cancelled))
+            .GroupBy(t => t.ConnectionId!.Value)
+            .Select(g => new { g.Key, Count = g.Count() })
+            .ToDictionaryAsync(r => r.Key, r => r.Count, cancellationToken);
+    }
+
+    /// <summary>Việc gần nhất của một nick (người vừa được nhắn, mời, trả lời...) — người còn chờ lượt không tính.</summary>
+    public async Task<IReadOnlyList<(OutreachTarget Target, Contact Contact)>> RecentAsync(
+        Guid tenantId, Guid connectionId, int take, CancellationToken cancellationToken)
+    {
+        EnsureTenant(tenantId);
+        var rows = await (from t in Db.OutreachTargets.AsNoTracking()
+                          join c in Db.Contacts.AsNoTracking() on t.ContactId equals c.Id
+                          where t.TenantId == tenantId && c.TenantId == tenantId && t.ConnectionId == connectionId && t.State != OutreachState.Queued
+                          orderby t.UpdatedAt descending
+                          select new { t, c })
+            .Take(take)
+            .ToListAsync(cancellationToken);
+        return rows.Select(r => (r.t, r.c)).ToList();
+    }
+
+    /// <summary>Hồ sơ nick Zalo cá nhân đang được chăm sóc tới (đang chờ lượt) theo nick — để chuyển hàng chờ sang nick khác.</summary>
+    public async Task<IReadOnlyList<OutreachTarget>> QueuedOfConnectionAsync(Guid tenantId, Guid connectionId, CancellationToken cancellationToken)
+    {
+        EnsureTenant(tenantId);
+        return await Db.OutreachTargets.Where(t => t.TenantId == tenantId && t.ConnectionId == connectionId && t.State == OutreachState.Queued)
+            .ToListAsync(cancellationToken);
+    }
+
     /// <summary>Màn hình "Đang chăm sóc": mới nhất trước, tối đa 500 dòng.</summary>
     public async Task<IReadOnlyList<OutreachRow>> ListBoardAsync(
         Guid tenantId, OutreachState? state, Guid? connectionId, Guid? assignedUserId, Guid? batchId, CancellationToken cancellationToken)

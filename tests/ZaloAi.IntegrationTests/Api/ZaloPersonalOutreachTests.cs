@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Shouldly;
 using ZaloAi.Api.Connections;
+using ZaloAi.Api.Inbox;
 using ZaloAi.Core.Entities;
 using ZaloAi.Core.Security;
 using ZaloAi.Infrastructure.Customers;
@@ -56,6 +57,12 @@ public sealed class ZaloPersonalOutreachTests(PostgresFixture db) : IAsyncLifeti
     {
         var (tenantId, _) = await db.CreateTenantAsync(name);
         var owner = await _api.CreateLoggedInClientAsync(PostgresFixture.OwnerEmail(tenantId));
+        return (tenantId, owner, await LoginNickAsync(owner));
+    }
+
+    /// <summary>Đăng nhập thêm một nick (QR giả) cho DN của <paramref name="owner"/>; trả id kết nối.</summary>
+    private async Task<Guid> LoginNickAsync(HttpClient owner, string displayName = "Nick shop")
+    {
         using var start = await owner.PostAsync(new Uri("/channels/zalo-personal/login", UriKind.Relative), null);
         var loginId = (await start.Content.ReadFromJsonAsync<PersonalLoginStartResponse>())!.LoginId;
         var uid = Random.Shared.NextInt64(1_000_000_000, long.MaxValue).ToString(System.Globalization.CultureInfo.InvariantCulture);
@@ -63,11 +70,11 @@ public sealed class ZaloPersonalOutreachTests(PostgresFixture db) : IAsyncLifeti
         {
             loginId,
             uid,
-            displayName = "Nick shop",
+            displayName,
             session = new { cookie = new[] { new { key = "k", value = "v" } }, imei = "i", userAgent = "u" },
         });
         result.StatusCode.ShouldBe(HttpStatusCode.OK);
-        return (tenantId, owner, (await result.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("connectionId").GetGuid());
+        return (await result.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("connectionId").GetGuid();
     }
 
     private static async Task<OutreachBatchResponse> PasteAsync(HttpClient client, string phones, string origin = "referral", string? referrer = "chị Lan", string? note = null)
@@ -418,6 +425,139 @@ public sealed class ZaloPersonalOutreachTests(PostgresFixture db) : IAsyncLifeti
         var targets = await TargetsAsync(owner);
         targets.Count(t => t.State is "messaged" or "invited").ShouldBe(1); // lời mời đầu tiên cũng là "người mới"
         targets.Where(t => t.State == "queued").ShouldAllBe(t => t.NextActionAt > DateTimeOffset.UtcNow.AddHours(1)); // dời sang ngày sau
+    }
+
+    [Fact]
+    public async Task Summary_tells_when_the_queue_starts_again_outside_send_hours()
+    {
+        var (_, owner, connectionId) = await ConnectedTenantAsync("Ngoài khung giờ");
+        await PasteAsync(owner, Phone());
+
+        // Chọn khung giờ KHÔNG chứa lúc chạy test (luôn trong 07:00–21:00 hệ thống cho phép).
+        var hour = DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(7)).Hour;
+        var (start, end) = hour is >= 7 and < 14 ? ("20:00", "21:00") : ("07:00", "07:30");
+        var s = (await owner.GetFromJsonAsync<HandoffSettingsResponse>(new Uri("/tenant/handoff-settings", UriKind.Relative)))!;
+        using (var put = await owner.PutAsJsonAsync(new Uri("/tenant/handoff-settings", UriKind.Relative), new UpdateHandoffSettingsRequest(
+                   s.HandoffMessage, s.AfterHoursMessage, s.TakeoverMessageEnabled, s.TakeoverMessage, s.ReturnToBotMessageEnabled, s.ReturnToBotMessage,
+                   s.StaffSignatureEnabled, s.ResponseTime, s.OpenTime, s.CloseTime, s.WorkingDays, s.ReminderMinutes, s.TelegramChatId,
+                   s.CareEnabled, s.CareColdHours, s.CareAutoSend, start, end)))
+        {
+            put.StatusCode.ShouldBe(HttpStatusCode.OK);
+        }
+
+        var summary = (await owner.GetFromJsonAsync<List<OutreachSummaryResponse>>(new Uri("/zalo-outreach/summary", UriKind.Relative), Web))!
+            .Single(x => x.ConnectionId == connectionId);
+
+        summary.Queued.ShouldBe(1);
+        var next = summary.NextSendAt.ShouldNotBeNull().ToOffset(TimeSpan.FromHours(7));
+        next.ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture).ShouldBe(start);
+        next.ShouldBeGreaterThan(DateTimeOffset.UtcNow);
+        next.ShouldBeLessThan(DateTimeOffset.UtcNow.AddDays(1));
+    }
+
+    private static async Task<OutreachBatchResponse> DistributeAsync(HttpClient client, string phones, bool dryRun, List<Guid>? connectionIds = null)
+    {
+        using var response = await client.PostAsJsonAsync(
+            new Uri("/zalo-outreach/batches", UriKind.Relative),
+            new { phones, origin = "customer", attested = !dryRun, distribute = true, connectionIds, dryRun });
+        response.StatusCode.ShouldBe(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
+        return (await response.Content.ReadFromJsonAsync<OutreachBatchResponse>())!;
+    }
+
+    [Fact]
+    public async Task Distribute_splits_by_nick_capacity_and_preview_saves_nothing()
+    {
+        var (_, owner, nickA) = await ConnectedTenantAsync("Chia nhiều nick");
+        var nickB = await LoginNickAsync(owner, "Nick hai");
+        await InvitesPerDayAsync(owner, nickA, invites: 3, newContacts: 20);
+        await InvitesPerDayAsync(owner, nickB, invites: 3, newContacts: 10);
+        var phones = string.Join("\n", Enumerable.Range(0, 6).Select(_ => Phone()));
+
+        var preview = await DistributeAsync(owner, phones, dryRun: true);
+        preview.DryRun.ShouldBeTrue();
+        preview.BatchId.ShouldBeNull();
+        preview.Accepted.ShouldBe(6);
+        preview.Allocations.Single(a => a.ConnectionId == nickA).Assigned.ShouldBe(4); // 20/ngày nhận gấp đôi 10/ngày
+        preview.Allocations.Single(a => a.ConnectionId == nickB).Assigned.ShouldBe(2);
+        (await TargetsAsync(owner)).ShouldBeEmpty(); // xem trước: không lưu gì
+
+        var created = await DistributeAsync(owner, phones, dryRun: false);
+        created.BatchId.ShouldNotBeNull();
+        var targets = await TargetsAsync(owner);
+        targets.Count(t => t.ConnectionId == nickA).ShouldBe(4);
+        targets.Count(t => t.ConnectionId == nickB).ShouldBe(2);
+
+        // Chỉ chia cho nick B.
+        var onlyB = await DistributeAsync(owner, Phone(), dryRun: true, [nickB]);
+        onlyB.Allocations.ShouldHaveSingleItem().ConnectionId.ShouldBe(nickB);
+    }
+
+    [Fact]
+    public async Task Distribute_without_a_running_nick_is_a_conflict()
+    {
+        var (tenantId, owner, nickA) = await ConnectedTenantAsync("Không nick chạy");
+        await using (var context = db.CreateDbContext(tenantId))
+        {
+            var account = await context.ZaloPersonalAccounts.SingleAsync(a => a.ConnectionId == nickA);
+            account.OutreachLevel = OutreachLevel.Paused; // phanh tạm dừng → không nhận người mới
+            await context.SaveChangesAsync();
+        }
+
+        using var response = await owner.PostAsJsonAsync(
+            new Uri("/zalo-outreach/batches", UriKind.Relative), new { phones = Phone(), origin = "customer", attested = true, distribute = true });
+        response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+    }
+
+    [Fact]
+    public async Task Move_only_waiting_people_and_never_to_another_tenants_nick()
+    {
+        var (tenantId, owner, nickA) = await ConnectedTenantAsync("Chuyển nick");
+        var nickB = await LoginNickAsync(owner, "Nick hai");
+        await PasteAsync(owner, $"{Phone()}\n{Phone()}");
+        var targets = await TargetsAsync(owner);
+        targets.ShouldAllBe(t => t.ConnectionId == nickA);
+        await using (var context = db.CreateDbContext(tenantId))
+        {
+            var contacted = await context.OutreachTargets.SingleAsync(t => t.Id == targets[0].Id);
+            contacted.State = OutreachState.Messaged; // nick A đã nhắn người này
+            await context.SaveChangesAsync();
+        }
+
+        using (var move = await owner.PutAsJsonAsync(
+                   new Uri("/zalo-outreach/targets", UriKind.Relative), new { ids = targets.Select(t => t.Id).ToList(), stop = false, moveToConnectionId = nickB }))
+        {
+            move.StatusCode.ShouldBe(HttpStatusCode.OK);
+            (await move.Content.ReadFromJsonAsync<int>()).ShouldBe(1);
+        }
+
+        var after = await TargetsAsync(owner);
+        after.Single(t => t.Id == targets[0].Id).ConnectionId.ShouldBe(nickA); // đã được liên hệ → giữ nick cũ
+        after.Single(t => t.Id == targets[1].Id).ConnectionId.ShouldBe(nickB);
+
+        // Cô lập tenant: không chuyển được sang nick của DN khác.
+        var (_, _, otherNick) = await ConnectedTenantAsync("DN khác");
+        using var foreign = await owner.PutAsJsonAsync(
+            new Uri("/zalo-outreach/targets", UriKind.Relative), new { ids = new[] { targets[1].Id }, stop = false, moveToConnectionId = otherNick });
+        foreign.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await TargetsAsync(owner)).Single(t => t.Id == targets[1].Id).ConnectionId.ShouldBe(nickB);
+    }
+
+    [Fact]
+    public async Task Redistribute_moves_a_nicks_waiting_people_to_other_running_nicks()
+    {
+        var (_, owner, nickA) = await ConnectedTenantAsync("Chia lại hàng chờ");
+        var nickB = await LoginNickAsync(owner, "Nick hai");
+        await PasteAsync(owner, $"{Phone()}\n{Phone()}\n{Phone()}");
+
+        using var response = await owner.PostAsync(new Uri($"/zalo-outreach/nicks/{nickA}/redistribute", UriKind.Relative), null);
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var result = (await response.Content.ReadFromJsonAsync<List<OutreachAllocationResponse>>())!;
+        result.ShouldHaveSingleItem().Assigned.ShouldBe(3);
+        (await TargetsAsync(owner)).ShouldAllBe(t => t.ConnectionId == nickB);
+
+        var summary = (await owner.GetFromJsonAsync<List<OutreachSummaryResponse>>(new Uri("/zalo-outreach/summary", UriKind.Relative), Web))!;
+        summary.Single(s => s.ConnectionId == nickB).StateCounts["queued"].ShouldBe(3);
+        summary.Single(s => s.ConnectionId == nickA).StateCounts.ShouldBeEmpty();
     }
 
     [Fact]
