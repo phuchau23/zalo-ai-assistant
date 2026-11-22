@@ -192,6 +192,7 @@ Zalo__OAuthRedirectUrl=
 
 Sentry__Dsn=
 Telegram__BotToken=                          # kênh thông báo nhân viên giai đoạn đầu
+Cost__CardFeePercent=0                       # phí thẻ (%) cộng vào chi phí AI quy ra VND (tỷ giá bán USD Vietcombank theo ngày)
 
 ZaloPersonal__SidecarUrl=http://127.0.0.1:4100   # sidecar Zalo cá nhân (mạng nội bộ, không ra internet)
 ZaloPersonal__SharedSecret=                  # ≥ 32 ký tự, giống REMI_SHARED_SECRET của sidecar
