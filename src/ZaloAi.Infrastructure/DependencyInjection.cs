@@ -155,6 +155,7 @@ public static class DependencyInjection
                 resilience.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(20);
             });
         services.AddScoped<ZaloAi.Infrastructure.Billing.ExchangeRateService>();
+        services.AddScoped<ZaloAi.Infrastructure.Billing.UsdVndConverter>();
         services.AddScoped<ExchangeRateSyncJob>();
         services.AddScoped<QuotaNotifyJob>();
         services.AddScoped<ZaloAi.Infrastructure.Team.TeamService>();
