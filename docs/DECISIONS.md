@@ -571,3 +571,84 @@ gần như không tốn thêm (một lần gọi AI trả cả danh sách tin); 
 bớt dữ liệu đưa vào, model rẻ cho câu đơn giản — việc riêng, chưa làm.
 
 **Không đổi schema.** Còn chờ: mẫu chat "vibe người thật" từ chủ dự án để tinh chỉnh giọng (few-shot).
+
+## 2026-11-15 — Trang "Zalo cá nhân" riêng, chia danh sách SĐT cho nhiều nick
+
+**Bối cảnh:** chủ dự án muốn tách giao diện Zalo cá nhân khỏi Zalo OA, nhìn vào là thấy từng nick đang chạy / đang chăm sóc bao
+nhiêu người, giao số cho một nick cụ thể, và dán một danh sách để hệ thống tự chia đều cho các nick.
+
+**Quyết định (chủ dự án đồng ý cả 3 khuyến nghị):**
+- **Tách trang:** thanh bên có nhóm "Kênh Zalo" gồm "Zalo OA" (`/channels`, chỉ còn OA) và "Zalo cá nhân" (`/zalo-personal`, gộp trang
+  "Chăm sóc Zalo cá nhân" cũ; `/zalo-care` chuyển hướng sang). Trang chi tiết từng nick `/zalo-personal/[id]` chứa cài đặt nick (nhịp
+  gửi, IP riêng, bạn bè) chuyển từ trang Kênh sang.
+- **Chia theo sức gửi (Weighted Least-Loaded, `OutreachAllocator`, hàm thuần):** mỗi người giao cho nick có (hàng chờ + 1) ÷ (người
+  mới/ngày) nhỏ nhất → các nick đi hết hàng chờ gần cùng lúc, nick khỏe nhận nhiều hơn. Người đã quen một nick (từng được nick đó
+  nhắn/mời, hoặc có hội thoại Zalo cá nhân với nick đó) giữ nick đó (Sticky). Chỉ chia cho nick đang kết nối, không bị phanh "tạm
+  dừng", hôm nay còn nhận người mới (Health check); không có nick nào → 409 `zalo_personal_no_running_nick`.
+- **Xem trước (Dry-run):** `POST /zalo-outreach/batches` có `dryRun` — cùng đường code, không ghi gì, không cần xác nhận nguồn; giao
+  diện gọi khi DN gõ/dán để hiện "Nick A 60 · Nick B 30 · xong khoảng 3 ngày".
+- **Chuyển nick chỉ cho người chưa được liên hệ** (đang chờ lượt): người đã được nick A nhắn/mời giữ nick A, để khách không thấy hai
+  nick lạ cùng nhắn. `PUT /zalo-outreach/targets` có `moveToConnectionId` (nick đích phải là nick của đúng DN — có test cô lập
+  tenant); `POST /zalo-outreach/nicks/{id}/redistribute` chia lại hàng chờ của một nick (mất kết nối, bị phanh) cho các nick khác.
+  Ghi audit log `outreach.moved` / `outreach.redistributed`.
+- **Tóm tắt nick** (`GET /zalo-outreach/summary`) thêm `stateCounts`, `booked` (người đã liên hệ được đang có lịch hẹn), `recent`
+  (5 việc gần nhất) cho thẻ nick trực quan.
+
+**Không đổi schema** (`outreach_batches.connection_id` và `outreach_targets.connection_id` vốn nullable; đợt chia nhiều nick để
+`connection_id` của đợt = null). Mỗi nick vẫn giữ giới hạn riêng; quy tắc xác nhận nguồn, khung giờ, "hủy" không đổi.
+
+## 2026-11-15 — Chi phí AI theo từng nick, quy ra VND theo tỷ giá Vietcombank từng ngày
+
+**Bối cảnh:** chủ dự án cần biết mỗi tài khoản Zalo cá nhân đã tốn bao nhiêu tiền, quy ra tiền Việt "thật và chuẩn".
+
+**Quyết định (chủ dự án chốt):** chỉ tính chi phí AI; tỷ giá Vietcombank tự động theo ngày; super admin và chủ DN đều xem được.
+- **Ghi nick ngay lúc gọi AI:** `usage_records.connection_id` (nullable, không khóa ngoại để giữ lịch sử khi nick bị xóa; index
+  `(tenant_id, connection_id, created_at)`). Bản ghi cũ: khi đọc lấy nick theo `conversations.connection_id` — không sửa tay
+  migration. Phần không thuộc nick nào (Chat thử, nạp kho kiến thức, hỏi số liệu) hiện riêng, không chia bừa.
+- **Không bỏ sót:** tin chào gửi kèm lời mời kết bạn (chưa có hội thoại) nay ghi nick; tạo vector cho câu tìm kiếm của bot nay
+  được ghi (`UsageKind.Embed`). API embedding của Gemini không trả số token → ước tính (độ dài + 30) ÷ 3,5 ký tự/token; mỗi tin chỉ
+  cỡ 0,0000x USD nên sai số không đáng kể.
+- **Quy ra VND:** USD gốc mỗi lần gọi = token nhà cung cấp báo × bảng giá chính thức (đã trừ phần cache), lưu 8 số lẻ. Cộng USD theo
+  NGÀY (giờ VN) rồi nhân giá BÁN USD Vietcombank đúng ngày đó (`exchange_rates`, bảng hệ thống), × (1 + `Cost:CardFeePercent`).
+  Không làm tròn giữa chừng; giao diện mới làm tròn tới đồng. Nguồn kiểm chứng 2026-11-15:
+  `GET https://www.vietcombank.com.vn/api/exchangerates?date=yyyy-MM-dd` (có cả ngày cũ, cả cuối tuần; trang ghi "chỉ mang tính
+  chất tham khảo"). Job `exchange-rate-sync` 23:30 mỗi đêm lấy lại giá hôm nay + hôm qua và bù 93 ngày; Vietcombank lỗi → dùng giá
+  ngày gần nhất và đánh dấu "ước tính" (`approximatedDays`).
+- **API:** chủ DN `GET /channels/costs?from&to`; super admin `GET /admin/tenants/{id}/costs?from&to` (scope riêng, tenant context =
+  DN đó). Tối đa 93 ngày/lần. Kèm số người đã nhắn/trò chuyện, khách trả lời, lịch hẹn tạo trong kỳ để tính đ/người.
+
+**Giới hạn cần biết (để "chuẩn"):** số VND này khớp công thức tính tiền của nhà cung cấp, nhưng tiền thật trên sao kê còn phụ thuộc
+ngày ngân hàng trừ tiền (tỷ giá ngày đó), phí thẻ, thuế trên hóa đơn, và việc bảng giá trong cấu hình được cập nhật đúng hạn
+(vd Gemini 3.8 Flash tăng gấp đôi từ 2027-01-01). Dùng key gói miễn phí thì tiền thật là 0 dù báo cáo vẫn tính theo giá niêm yết.
+Việc sau (nếu cần): đối chiếu hóa đơn thật hằng tháng và phân bổ theo tỷ lệ dùng.
+
+## 2026-11-17 — Groq gpt-oss-120b làm model chat chính; mọi chi phí AI hiện bằng VND theo tỷ giá từng ngày
+
+**Quyết định (chủ dự án chốt):**
+- **Model chat:** `Ai:ChatProviders=groq,gemini`, `Ai:GroqModels=openai/gpt-oss-120b` (bỏ gpt-oss-20b khỏi chuỗi: chưa đo chất
+  lượng; Groq 120b lỗi/hết lượt → sang thẳng Gemini 3.5 Flash-Lite đã đo 34/34). Lý do: eval spa 58 câu Groq 120b đạt 32/34 câu
+  thường, 24/24 an toàn, 0 bịa giá, ~0,0006 USD/lượt (Gemini 3.5 Flash-Lite ~0,0016). Chạy lại nhóm hội thoại nhiều lượt
+  N25–N28 ba lần: 12/12. Groq cache phần đầu prompt trùng (giảm 50%, giữ 2 giờ, không cần độ dài tối thiểu) — nhờ prompt
+  "cố định trước" (2026-11-15). Không thêm "giảm đau" vào câu cấm spa (chủ dự án quyết).
+- **Việc phải làm trước production:** Groq gói trả phí (gói free bị 429 thường xuyên — chuỗi tự chuyển sang Gemini nhưng tốn hơn),
+  bật Zero Data Retention; Gemini vẫn gói trả phí (embedding + dự phòng); cập nhật hồ sơ chuyển dữ liệu ra nước ngoài (Groq là bên
+  nhận chính).
+- **VND ở mọi màn hình chi phí AI:** bỏ tỷ giá cố định 26.000 đ/USD ở FE. BE trả thêm trường VND tính bằng `UsdVndConverter`
+  (giá bán USD Vietcombank đúng ngày phát sinh × (1 + phí thẻ)): super admin (`aiCostThisMonthVnd`, `aiCostLastMonthVnd`,
+  `monthlyCosts[].costVnd`), dashboard (`aiCostVndMonth`), báo cáo hiệu quả AI (`aiCostVnd`), Chat thử (`costVnd`). null = chưa có
+  tỷ giá → giao diện hiện USD. Job `exchange-rate-sync` bù 400 ngày (đủ biểu đồ 12 tháng). Test dùng Vietcombank giả
+  (`FakeVietcombankHandler`, 25.000 đ) — không gọi mạng.
+
+## 2026-11-17 — Telegram: danh sách SĐT sắp hết / đã hết, phanh chạy lại bình thường
+
+**Quyết định (chủ dự án chọn cả 3):**
+- **Hết danh sách** (`zp:queue_empty`): hàng chờ (chờ lượt + đã kết bạn chờ tin đầu) của một nick đã từng được giao số về 0 → báo
+  một lần, kèm số đã liên hệ / trả lời / có lịch hẹn / không có Zalo và link "Thêm số". Dán thêm → lần hết sau báo lại.
+- **Sắp hết** (`zp:queue_low`): còn ≤ số người mới nick nhận được trong 1 ngày → báo một lần; chỉ khi trước đó hàng chờ từng dài
+  hơn mức này (vừa dán vài số thì không báo "sắp hết" ngay).
+- **Phanh tự động:** trước đã báo khi chậm lại / tạm dừng; nay báo thêm khi hết tạm dừng (còn chậm) và khi chạy lại bình thường
+  (`zp:outreach_normal`).
+- `OutreachQueueWatcher` giữ cờ trong Redis (180 ngày), chạy cuối job hàng đợi (mỗi phút khi có việc) và job dọn dẹp (mỗi giờ);
+  nick mất kết nối thì bỏ qua (đã có tin báo riêng). Nội dung tin ở `ZaloPersonalAlertText` (hàm thuần): chỉ tên nick + con số,
+  không tên/SĐT khách. Link trong mọi tin báo nick đổi từ `/channels` sang `/zalo-personal/{id}` (trang Kênh chỉ còn OA).
+- Cần DN đã kết nối Telegram (Thiết lập trợ lý → chat id); chưa kết nối thì không gửi.
