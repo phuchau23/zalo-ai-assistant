@@ -119,6 +119,7 @@ public sealed class CareAnalysisJob(
                 OutputTokens = u.OutputTokens,
                 CostUsd = u.CostUsd,
                 ConversationId = conversation.Id,
+                ConnectionId = conversation.ConnectionId,
             });
         }
 

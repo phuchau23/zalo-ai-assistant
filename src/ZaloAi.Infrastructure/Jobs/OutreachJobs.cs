@@ -331,7 +331,7 @@ public sealed partial class OutreachTenantJob(
             .TakeLast(6)
             .Select(m => new BotHistoryTurn(m.Sender, encryptor.Decrypt(m.ContentEnc)))
             .ToList();
-        var texts = await ComposeAsync(tenant, contact, OutreachMessageKind.AcceptedThanks, new Intro("customer", null, null), recent, conversation.Id, cancellationToken);
+        var texts = await ComposeAsync(tenant, contact, OutreachMessageKind.AcceptedThanks, new Intro("customer", null, null), recent, conversation.Id, conversation.ConnectionId, cancellationToken);
         target.NextActionAt = null; // gửi đúng một lần: lưu cùng tin trước khi gửi
         var messages = AddProactive(tenantId, conversation, texts);
         await conversations.SaveChangesAsync(cancellationToken);
@@ -343,7 +343,7 @@ public sealed partial class OutreachTenantJob(
     /// một biến thể. Ghi chi phí AI theo tenant.
     /// </summary>
     private async Task<IReadOnlyList<string>> ComposeAsync(
-        Tenant tenant, Contact contact, OutreachMessageKind kind, Intro intro, IReadOnlyList<BotHistoryTurn> recent, Guid? conversationId, CancellationToken cancellationToken)
+        Tenant tenant, Contact contact, OutreachMessageKind kind, Intro intro, IReadOnlyList<BotHistoryTurn> recent, Guid? conversationId, Guid? connectionId, CancellationToken cancellationToken)
     {
         var offerings = await outreach.OfferingsAsync(tenant.Id, 5, cancellationToken);
         var result = await writer.WriteAsync(
@@ -363,6 +363,7 @@ public sealed partial class OutreachTenantJob(
                 OutputTokens = u.OutputTokens,
                 CostUsd = u.CostUsd,
                 ConversationId = conversationId,
+                ConnectionId = connectionId,
             });
         }
 
@@ -438,7 +439,7 @@ public sealed partial class OutreachTenantJob(
         var tenantId = tenant.Id;
         var conversation = await conversations.FindOpenConversationAsync(tenantId, contact.Id, connection.Id, cancellationToken)
             ?? conversations.AddConversation(tenantId, new Conversation { ContactId = contact.Id, Channel = ChannelKind.ZaloPersonal, ConnectionId = connection.Id });
-        var texts = await ComposeAsync(tenant, contact, kind, intro, [], conversation.Id, cancellationToken);
+        var texts = await ComposeAsync(tenant, contact, kind, intro, [], conversation.Id, connection.Id, cancellationToken);
         var messages = AddProactive(tenantId, conversation, texts);
         var message = messages[0];
         await conversations.SaveChangesAsync(cancellationToken);
@@ -527,7 +528,7 @@ public sealed partial class OutreachTenantJob(
 
         var greeting = afterReply
             ? OutreachGreeting.InviteAfterReply(tenant.BotName, tenant.BotPronoun, tenant.Name, contact.Salutation, contact.DisplayName)
-            : (await ComposeAsync(tenant, contact, OutreachMessageKind.Invite, intro, [], null, cancellationToken))[0];
+            : (await ComposeAsync(tenant, contact, OutreachMessageKind.Invite, intro, [], null, connection.Id, cancellationToken))[0];
         var sent = await sidecar.SendFriendRequestAsync(connection.Id, target.ZaloUid!, greeting, cancellationToken);
         await limiter.CountAsync(connection.Id, PacingCounter.Invites, cancellationToken);
         if (countNewContact)
