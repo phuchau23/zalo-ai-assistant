@@ -9,6 +9,7 @@ using ZaloAi.Core.Errors;
 using ZaloAi.Core.Options;
 using ZaloAi.IndustryTemplates;
 using ZaloAi.Infrastructure.Admin;
+using ZaloAi.Infrastructure.Billing;
 using ZaloAi.Infrastructure.Dashboard;
 using ZaloAi.Infrastructure.Repositories;
 
@@ -39,13 +40,16 @@ public sealed record AdminTenantItem(
     int? Quota,
     int? QuotaOverride,
     decimal AiCostThisMonthUsd,
-    decimal AiCostLastMonthUsd);
+    decimal AiCostLastMonthUsd,
+    decimal? AiCostThisMonthVnd,
+    decimal? AiCostLastMonthVnd);
 
 /// <param name="Role">owner | staff</param>
 public sealed record AdminMember(Guid UserId, string Email, string Name, string Role);
 
 /// <param name="Month">Ngày 1 của tháng (giờ Việt Nam).</param>
-public sealed record AdminMonthlyCost(DateOnly Month, decimal CostUsd, int Calls);
+/// <param name="CostVnd">Quy ra VND theo giá bán USD Vietcombank từng ngày (+ phí thẻ); null nếu chưa có tỷ giá.</param>
+public sealed record AdminMonthlyCost(DateOnly Month, decimal CostUsd, int Calls, decimal? CostVnd);
 
 /// <param name="MonthlyCosts">12 tháng gần nhất, đủ mọi tháng (tháng không có = 0), cũ trước.</param>
 public sealed record AdminTenantDetail(AdminTenantItem Tenant, IReadOnlyList<AdminMember> Members, IReadOnlyList<AdminMonthlyCost> MonthlyCosts);
@@ -132,31 +136,36 @@ internal static class AdminEndpoints
 
     private static async Task<Ok<List<AdminTenantItem>>> ListAsync(
         SuperAdminRepository superAdmin,
+        UsdVndConverter vnd,
         IOptions<BillingOptions> billing,
         TimeProvider time,
         CancellationToken cancellationToken)
     {
         var tenants = await superAdmin.ListTenantsAsync(cancellationToken);
-        var stats = await StatsAsync(superAdmin, null, time, cancellationToken);
+        var stats = await StatsAsync(superAdmin, vnd, null, time, cancellationToken);
         return TypedResults.Ok(tenants.Select(t => ToItem(t, stats, billing.Value)).ToList());
     }
 
     private static async Task<Ok<AdminTenantDetail>> GetAsync(
         Guid tenantId,
         SuperAdminRepository superAdmin,
+        UsdVndConverter vnd,
         IOptions<BillingOptions> billing,
         TimeProvider time,
         CancellationToken cancellationToken)
     {
         var tenant = await superAdmin.GetTenantAsync(tenantId, cancellationToken) ?? throw new NotFoundException();
-        var stats = await StatsAsync(superAdmin, tenantId, time, cancellationToken);
-        var monthStart = DashboardStats.Window(time.GetUtcNow(), 1).MonthStart;
+        var stats = await StatsAsync(superAdmin, vnd, tenantId, time, cancellationToken);
+        var now = time.GetUtcNow();
+        var monthStart = DashboardStats.Window(now, 1).MonthStart;
         var firstMonth = SuperAdminRepository.MonthOf(monthStart).AddMonths(-11);
-        var costs = (await superAdmin.MonthlyCostsAsync(new DateTimeOffset(firstMonth.ToDateTime(TimeOnly.MinValue), TimeSpan.FromHours(7)).ToUniversalTime(), tenantId, cancellationToken))
+        var since = new DateTimeOffset(firstMonth.ToDateTime(TimeOnly.MinValue), TimeSpan.FromHours(7)).ToUniversalTime();
+        var toVnd = await vnd.ForRangeAsync(since, now, cancellationToken);
+        var costs = (await superAdmin.MonthlyCostsAsync(since, tenantId, cancellationToken, toVnd))
             .ToDictionary(c => c.Cost.Month, c => c.Cost);
         var months = Enumerable.Range(0, 12)
             .Select(i => firstMonth.AddMonths(i))
-            .Select(m => costs.TryGetValue(m, out var c) ? new AdminMonthlyCost(m, c.CostUsd, c.Calls) : new AdminMonthlyCost(m, 0m, 0))
+            .Select(m => costs.TryGetValue(m, out var c) ? new AdminMonthlyCost(m, c.CostUsd, c.Calls, c.CostVnd) : new AdminMonthlyCost(m, 0m, 0, 0m))
             .ToList();
         return TypedResults.Ok(new AdminTenantDetail(
             ToItem(tenant, stats, billing.Value),
@@ -210,18 +219,20 @@ internal static class AdminEndpoints
 
     private sealed record Stats(
         Dictionary<Guid, int> Conversations,
-        Dictionary<(Guid TenantId, DateOnly Month), decimal> Costs,
+        Dictionary<(Guid TenantId, DateOnly Month), MonthlyCost> Costs,
         IReadOnlyList<(Guid TenantId, TenantMemberRow Member)> Members,
         DateOnly ThisMonth);
 
-    private static async Task<Stats> StatsAsync(SuperAdminRepository superAdmin, Guid? tenantId, TimeProvider time, CancellationToken cancellationToken)
+    private static async Task<Stats> StatsAsync(
+        SuperAdminRepository superAdmin, UsdVndConverter vnd, Guid? tenantId, TimeProvider time, CancellationToken cancellationToken)
     {
         var monthStart = DashboardStats.Window(time.GetUtcNow(), 1).MonthStart;
         var thisMonth = SuperAdminRepository.MonthOf(monthStart);
         var lastMonthStart = new DateTimeOffset(thisMonth.AddMonths(-1).ToDateTime(TimeOnly.MinValue), TimeSpan.FromHours(7)).ToUniversalTime();
         var conversations = await superAdmin.CountConversationsAsync(monthStart, tenantId, cancellationToken);
-        var costs = (await superAdmin.MonthlyCostsAsync(lastMonthStart, tenantId, cancellationToken))
-            .ToDictionary(c => (c.TenantId, c.Cost.Month), c => c.Cost.CostUsd);
+        var toVnd = await vnd.ForRangeAsync(lastMonthStart, time.GetUtcNow(), cancellationToken);
+        var costs = (await superAdmin.MonthlyCostsAsync(lastMonthStart, tenantId, cancellationToken, toVnd))
+            .ToDictionary(c => (c.TenantId, c.Cost.Month), c => c.Cost);
         var members = await superAdmin.ListMembersAsync(tenantId, cancellationToken);
         return new Stats(conversations, costs, members, thisMonth);
     }
@@ -245,7 +256,9 @@ internal static class AdminEndpoints
             stats.Conversations.GetValueOrDefault(t.Id),
             billing.QuotaFor(t.Plan, t.ConversationQuota),
             t.ConversationQuota,
-            stats.Costs.GetValueOrDefault((t.Id, stats.ThisMonth)),
-            stats.Costs.GetValueOrDefault((t.Id, stats.ThisMonth.AddMonths(-1))));
+            stats.Costs.GetValueOrDefault((t.Id, stats.ThisMonth))?.CostUsd ?? 0m,
+            stats.Costs.GetValueOrDefault((t.Id, stats.ThisMonth.AddMonths(-1)))?.CostUsd ?? 0m,
+            stats.Costs.TryGetValue((t.Id, stats.ThisMonth), out var thisMonth) ? thisMonth.CostVnd : 0m,
+            stats.Costs.TryGetValue((t.Id, stats.ThisMonth.AddMonths(-1)), out var lastMonth) ? lastMonth.CostVnd : 0m);
     }
 }
