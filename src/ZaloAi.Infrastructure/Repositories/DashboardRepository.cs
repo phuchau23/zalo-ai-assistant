@@ -59,13 +59,14 @@ public sealed class DashboardRepository(AppDbContext db, ITenantContext tenantCo
         return (rows.Sum(r => r.Count), rows.Where(r => r.IsLead).Sum(r => r.Count));
     }
 
-    /// <summary>Chi phí AI (USD) từ <paramref name="from"/>, gồm cả chat thử (vẫn tốn tiền thật).</summary>
-    public async Task<decimal> SumAiCostAsync(Guid tenantId, DateTimeOffset from, CancellationToken cancellationToken)
+    /// <summary>Các khoản chi phí AI (thời điểm, USD) từ <paramref name="from"/>, gồm cả chat thử (vẫn tốn tiền thật).</summary>
+    public async Task<IReadOnlyList<(DateTimeOffset At, decimal Usd)>> AiCostRowsAsync(Guid tenantId, DateTimeOffset from, CancellationToken cancellationToken)
     {
         EnsureTenant(tenantId);
         return await Db.UsageRecords
             .Where(u => u.TenantId == tenantId && u.CreatedAt >= from)
-            .SumAsync(u => u.CostUsd, cancellationToken);
+            .Select(u => new ValueTuple<DateTimeOffset, decimal>(u.CreatedAt, u.CostUsd))
+            .ToListAsync(cancellationToken);
     }
 
     /// <summary>
