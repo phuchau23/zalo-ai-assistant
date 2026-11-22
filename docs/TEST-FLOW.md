@@ -1,5 +1,7 @@
 # Kịch bản test chi tiết (2026-10-15)
 
+> **Bản đầy đủ, có ô Đạt/Lỗi:** `docs/test-guide/remi-test-guide.html` (mở bằng trình duyệt; nguồn `docs/test-guide/guide.json`, 185 bước, cập nhật 2026-11-17) và bản online artifact "Kịch bản test Remi" (ghim ở thanh bên claude.ai). Tài liệu này giữ chi tiết từng buổi.
+
 Đi kèm [TEST-PLAN.md](TEST-PLAN.md) (checklist để tick). File này ghi **từng bước + câu để chép + kết quả đúng**.
 Dữ liệu dùng để đối chiếu là kho kiến thức hiện tại của "Khoa Học Huyệt Đạo".
 

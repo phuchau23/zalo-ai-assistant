@@ -9,6 +9,7 @@ using ZaloAi.Core.Errors;
 using ZaloAi.Core.Realtime;
 using ZaloAi.Core.Security;
 using ZaloAi.Core.Tenancy;
+using ZaloAi.Infrastructure.Billing;
 using ZaloAi.Infrastructure.Inbox;
 using ZaloAi.Infrastructure.Jobs;
 using ZaloAi.Infrastructure.Repositories;
@@ -62,6 +63,7 @@ public sealed record ChatTestConversationResponse(
     string Urgency,
     bool WaitingForBot,
     decimal CostUsd,
+    decimal? CostVnd,
     int AiCalls,
     DateTimeOffset CreatedAt,
     IReadOnlyList<ChatMessageResponse> Messages);
@@ -127,6 +129,7 @@ internal static class ChatTestEndpoints
         ITenantContext tenant,
         ConversationRepository conversations,
         IFieldEncryptor encryptor,
+        UsdVndConverter usdVnd,
         CancellationToken cancellationToken)
     {
         var tenantId = tenant.RequireTenantId();
@@ -139,7 +142,7 @@ internal static class ChatTestEndpoints
             IsTest = true,
         });
         await conversations.SaveChangesAsync(cancellationToken);
-        return TypedResults.Ok(await ToResponseAsync(tenantId, conversation, conversations, encryptor, cancellationToken));
+        return TypedResults.Ok(await ToResponseAsync(tenantId, conversation, conversations, encryptor, usdVnd, cancellationToken));
     }
 
     private static async Task<Ok<ChatTestConversationResponse>> GetAsync(
@@ -147,11 +150,12 @@ internal static class ChatTestEndpoints
         ITenantContext tenant,
         ConversationRepository conversations,
         IFieldEncryptor encryptor,
+        UsdVndConverter usdVnd,
         CancellationToken cancellationToken)
     {
         var tenantId = tenant.RequireTenantId();
         var conversation = await RequireTestAsync(tenantId, conversationId, conversations, cancellationToken);
-        return TypedResults.Ok(await ToResponseAsync(tenantId, conversation, conversations, encryptor, cancellationToken));
+        return TypedResults.Ok(await ToResponseAsync(tenantId, conversation, conversations, encryptor, usdVnd, cancellationToken));
     }
 
     private static async Task<Accepted<ChatMessageResponse>> SendAsync(
@@ -197,13 +201,14 @@ internal static class ChatTestEndpoints
         ConversationRepository conversations,
         IFieldEncryptor encryptor,
         InboxService inbox,
+        UsdVndConverter usdVnd,
         CancellationToken cancellationToken)
     {
         var tenantId = tenant.RequireTenantId();
         await RequireTestAsync(tenantId, conversationId, conversations, cancellationToken);
         await inbox.ReturnToBotAsync(tenantId, conversationId, tenant.UserId, cancellationToken);
         var conversation = await RequireTestAsync(tenantId, conversationId, conversations, cancellationToken);
-        return TypedResults.Ok(await ToResponseAsync(tenantId, conversation, conversations, encryptor, cancellationToken));
+        return TypedResults.Ok(await ToResponseAsync(tenantId, conversation, conversations, encryptor, usdVnd, cancellationToken));
     }
 
     private static async Task<NoContent> DeleteAsync(
@@ -235,10 +240,12 @@ internal static class ChatTestEndpoints
         Conversation conversation,
         ConversationRepository conversations,
         IFieldEncryptor encryptor,
+        UsdVndConverter usdVnd,
         CancellationToken cancellationToken)
     {
         var all = await conversations.ListMessagesAsync(tenantId, conversation.Id, after: null, cancellationToken);
         var (cost, calls) = await conversations.UsageForConversationAsync(tenantId, conversation.Id, cancellationToken);
+        var costVnd = await usdVnd.SumAsync(await conversations.UsageRowsForConversationAsync(tenantId, conversation.Id, cancellationToken), cancellationToken);
 
         // Chỉ hiện tin khách đã thấy: bot trả lời nhiều tin ngắn thì các tin được lưu cùng lúc rồi gửi lần lượt (cách nhau ~1 giây).
         // Còn tin chờ gửi → vẫn "đang trả lời" để giao diện hỏi lại và hiện từng tin như người thật đang gõ.
@@ -254,6 +261,7 @@ internal static class ChatTestEndpoints
             Lower(conversation.Urgency),
             waiting,
             Math.Round(cost, 6),
+            costVnd,
             calls,
             conversation.CreatedAt,
             messages.Select(m => new ChatMessageResponse(

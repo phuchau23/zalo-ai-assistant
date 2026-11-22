@@ -1,6 +1,9 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Hangfire;
+using Hangfire.Common;
+using Hangfire.States;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -8,6 +11,8 @@ using Microsoft.Extensions.Hosting;
 using ZaloAi.Core.Entities;
 using ZaloAi.Core.Security;
 using ZaloAi.Core.Tenancy;
+using ZaloAi.Infrastructure.Crm;
+using ZaloAi.Infrastructure.Knowledge;
 using ZaloAi.Infrastructure.Repositories;
 using ZaloAi.Infrastructure.Tenancy;
 
@@ -20,8 +25,12 @@ namespace ZaloAi.Infrastructure.Persistence.Seed;
 ///
 /// Có: 2 chi nhánh, 15 mục danh mục (dịch vụ/gói/sản phẩm), 6 nhân viên + ca làm + chấm công 35 ngày, ~220 khách,
 /// lịch hẹn 60 ngày qua + 7 ngày tới, hóa đơn + thanh toán + doanh thu ghi nhận, gói liệu trình + trừ buổi, hoa hồng,
-/// hội thoại Zalo với bot (có ca chuyển nhân viên, ca chờ người), chi phí AI, gợi ý chăm sóc, ghi chú khách.
+/// hội thoại Zalo với bot (có ca chuyển nhân viên, ca chờ người), chi phí AI, gợi ý chăm sóc, ghi chú khách,
+/// kho kiến thức (15 mục danh mục có mô tả / "Sau khi làm" + 13 mục thông tin chung, chính sách, câu hỏi thường gặp; 1 lần nhập
+/// file trong "Lịch sử nhập"; đoạn chờ Worker đánh chỉ mục), kho hàng 30 ngày (phiếu nhập, bán, tiêu hao theo định mức,
+/// chuyển kho, kiểm kê, 2 mặt hàng dưới mức tối thiểu).
 /// Ghi thẳng bằng AppDbContext (cần lùi ngày) nhưng vẫn đặt tenant trước khi ghi — đi qua đúng luật cô lập dữ liệu.
+/// Riêng kho kiến thức đi qua service của app (đồng bộ danh mục, nhập file) để giống hệt dữ liệu thật.
 /// </summary>
 public static class DemoSeeder
 {
@@ -43,7 +52,7 @@ public static class DemoSeeder
 
     private sealed record ServiceDef(string Code, string Name, string Group, long Price, int Minutes, int Weight);
     private sealed record PackageDef(string Code, string Name, long Price, int Sessions, string ServiceCode);
-    private sealed record ProductDef(string Code, string Name, long Price);
+    private sealed record ProductDef(string Code, string Name, long Price, string Unit, string Sku);
     private sealed record StaffDef(string Name, string Title, string Color, int Branch, int StartHour, DayOfWeek DayOff);
 
     private static readonly ServiceDef[] Services =
@@ -67,11 +76,165 @@ public static class DemoSeeder
 
     private static readonly ProductDef[] Products =
     [
-        new("SP01", "Tinh dầu ngải cứu", 220_000),
-        new("SP02", "Muối thảo dược ngâm chân", 120_000),
-        new("SP03", "Kem dưỡng thảo mộc", 380_000),
-        new("SP04", "Trà an thần hoa cúc", 90_000),
+        new("SP01", "Tinh dầu ngải cứu", 220_000, "chai", "TD-NC-100"),
+        new("SP02", "Muối thảo dược ngâm chân", 120_000, "gói", "MU-NC-500"),
+        new("SP03", "Kem dưỡng thảo mộc", 380_000, "hũ", "KD-TM-050"),
+        new("SP04", "Trà an thần hoa cúc", 90_000, "hộp", "TR-HC-020"),
     ];
+
+    /// <summary>
+    /// Định mức vật tư (C4): mỗi buổi dịch vụ trừ bao nhiêu sản phẩm. Mô hình chưa có loại "vật tư không bán" nên dùng chính
+    /// sản phẩm bán lẻ, tính theo phần của đơn vị bán (chai 100 ml, gói 500 g, hũ 50 g).
+    /// </summary>
+    private static readonly (string Service, string Product, decimal PerSession)[] Consumables =
+    [
+        ("DV02", "SP01", 0.05m), // bấm huyệt cổ vai gáy: ~5 ml tinh dầu ngải cứu
+        ("DV03", "SP01", 0.08m), // massage đá nóng: ~8 ml tinh dầu ngải cứu
+        ("DV05", "SP03", 0.04m), // chăm sóc da mặt: ~2 g kem dưỡng
+        ("DV07", "SP02", 0.1m),  // massage chân: ~50 g muối ngâm chân
+    ];
+
+    /// <summary>
+    /// Kế hoạch kho cuối kỳ: tồn mong muốn ở mỗi chi nhánh + mức tối thiểu. Tồn mong muốn null = cố ý không nhập/chuyển thêm
+    /// → cuối kỳ còn 1,5–6,5 đơn vị, dưới mức tối thiểu 8 → trang Kho hiện cảnh báo sắp hết.
+    /// </summary>
+    private static readonly (string Code, int? Cn1Target, int? Cn2Target, int Cn1Min, int Cn2Min)[] StockPlan =
+    [
+        ("SP01", 12, null, 5, 8),
+        ("SP02", null, 6, 8, 3),
+        ("SP03", 8, 6, 4, 3),
+        ("SP04", 15, 8, 6, 4),
+    ];
+
+    /// <summary>Chuyển kho CN1 → CN2 (8 ngày trước).</summary>
+    private static readonly (string Code, int Quantity)[] TransferPlan = [("SP03", 3), ("SP04", 6)];
+
+    /// <summary>Kiểm kê CN1 (3 ngày trước): sản phẩm lệch và số lệch (âm = thiếu).</summary>
+    private const string CountDiffCode = "SP04";
+    private const decimal CountDiff = -1;
+
+    /// <summary>
+    /// Mô tả DN bổ sung cho mục danh mục qua file kiến thức (xuất → sửa → nhập lại). Tên trường như JSON của mẫu
+    /// (docs/KNOWLEDGE-FORMAT.md). Số dùng long (như khi đọc file).
+    /// </summary>
+    private static readonly Dictionary<string, Dictionary<string, object>> CatalogDetails = new(StringComparer.Ordinal)
+    {
+        ["DV01"] = new(StringComparer.Ordinal)
+        {
+            ["description"] = "Gội bằng nước bồ kết, sả, vỏ bưởi nấu sẵn; massage da đầu, day nhẹ huyệt vùng đầu cổ; sấy khô và chải tóc.",
+            ["suitableFor"] = "Người hay căng thẳng, đau đầu nhẹ, khó ngủ, tóc bết dầu.",
+            ["notSuitableFor"] = "Da đầu đang có vết thương hở hoặc viêm da đầu nặng.",
+        },
+        ["DV02"] = new(StringComparer.Ordinal)
+        {
+            ["description"] = "Chườm túi thảo dược ấm vùng cổ vai, bấm huyệt và day ấn theo kinh lạc, kéo giãn nhẹ, kết thúc bằng xoa tinh dầu ngải cứu.",
+            ["suitableFor"] = "Dân văn phòng ngồi máy tính nhiều, mỏi cổ vai gáy, cứng cổ khi ngủ dậy.",
+            ["notSuitableFor"] = "Đang mang thai, vừa chấn thương hoặc phẫu thuật vùng cổ, huyết áp cao chưa kiểm soát: cần hỏi ý kiến bác sĩ trước khi làm.",
+            ["afterCare"] = "Có thể ê nhẹ ở vùng bấm 1–2 ngày, là bình thường. Uống nước ấm, tránh tắm nước lạnh trong 2 giờ. Nếu đau tăng, tê lan xuống tay hoặc kéo dài quá 3 ngày, báo lại spa để kỹ thuật viên tư vấn.",
+        },
+        ["DV03"] = new(StringComparer.Ordinal)
+        {
+            ["description"] = "Massage toàn thân với đá bazan làm ấm kết hợp tinh dầu, giúp giãn cơ và ấm người.",
+            ["suitableFor"] = "Người mệt mỏi, lạnh tay chân, căng cơ lưng, cần thư giãn sâu.",
+            ["notSuitableFor"] = "Đang mang thai, giãn tĩnh mạch nặng, da cháy nắng hoặc tổn thương, đang sốt.",
+            ["afterCare"] = "Da có thể ửng hồng nhẹ 1–2 giờ rồi hết. Uống đủ nước, nghỉ ngơi, không tắm nước lạnh ngay sau buổi.",
+        },
+        ["DV04"] = new(StringComparer.Ordinal)
+        {
+            ["description"] = "Xông hơi ướt với lá sả, gừng, tràm, vỏ bưởi; thường làm trước hoặc sau massage.",
+            ["notSuitableFor"] = "Huyết áp hoặc tim mạch chưa ổn định, đang mang thai, vừa uống rượu bia.",
+        },
+        ["DV05"] = new(StringComparer.Ordinal)
+        {
+            ["description"] = "Tẩy trang, rửa mặt, tẩy tế bào chết nhẹ, xông hơi, lấy nhân mụn nhẹ, massage mặt, đắp mặt nạ thảo mộc và thoa kem dưỡng thảo mộc.",
+            ["suitableFor"] = "Da thường, da hỗn hợp, da xỉn màu, mụn nhẹ.",
+            ["notSuitableFor"] = "Da đang kích ứng, mụn viêm nặng, vừa peel hoặc laser trong 2 tuần.",
+            ["afterCare"] = "Vùng lấy nhân mụn có thể hơi đỏ vài giờ. Không trang điểm trong 12 giờ, dùng kem chống nắng, không tự nặn mụn.",
+        },
+        ["DV06"] = new(StringComparer.Ordinal)
+        {
+            ["description"] = "Kỹ thuật viên có chứng chỉ y học cổ truyền châm kim vô trùng dùng một lần tại các huyệt vùng lưng, kết hợp chườm ấm.",
+            ["suitableFor"] = "Đau mỏi lưng do ngồi lâu hoặc căng cơ lưng.",
+            ["notSuitableFor"] = "Đang mang thai, rối loạn đông máu hoặc đang dùng thuốc chống đông; đau lưng kèm sốt, tê yếu chân: cần đi khám bác sĩ trước.",
+            ["afterCare"] = "Có thể hơi ê hoặc bầm nhỏ ở chỗ châm 1–2 ngày. Giữ ấm lưng, tránh mang vác nặng trong ngày. Nếu chỗ châm sưng đỏ, chảy dịch hoặc đau tăng, báo lại spa ngay.",
+            ["note"] = "Chỉ nhận khách từ 18 tuổi.",
+        },
+        ["DV07"] = new(StringComparer.Ordinal)
+        {
+            ["description"] = "Ngâm chân nước muối thảo dược ấm 10 phút, massage và bấm huyệt bàn chân, bắp chân.",
+            ["suitableFor"] = "Người đứng hoặc đi lại nhiều, mỏi chân, khó ngủ.",
+            ["notSuitableFor"] = "Vết thương hở ở chân, nấm da chân đang viêm, giãn tĩnh mạch nặng.",
+        },
+        ["DV08"] = new(StringComparer.Ordinal)
+        {
+            ["description"] = "Tẩy tế bào chết toàn thân bằng muối thảo dược, ủ hỗn hợp nghệ, cám gạo, sữa tươi; xông hơi, tắm sạch và dưỡng ẩm.",
+            ["suitableFor"] = "Da toàn thân xỉn màu, không đều màu do nắng.",
+            ["notSuitableFor"] = "Da đang cháy nắng, kích ứng hoặc có vết thương hở.",
+            ["afterCare"] = "Tránh nắng gắt 2–3 ngày, dùng kem chống nắng; không tắm nước quá nóng trong 24 giờ.",
+        },
+        ["G01"] = new(StringComparer.Ordinal)
+        {
+            ["minutesPerSession"] = 60L,
+            ["priceNote"] = "Tiết kiệm 500.000đ so với làm lẻ (350.000đ/buổi). Dùng trong 6 tháng, ở cả 2 chi nhánh.",
+            ["description"] = "10 buổi bấm huyệt cổ vai gáy 60 phút. Nên đi đều 1–2 buổi mỗi tuần để thấy hiệu quả.",
+            ["suitableFor"] = "Mỏi cổ vai gáy kéo dài, ngồi máy tính nhiều.",
+            ["afterCare"] = "Mấy buổi đầu có thể ê nhẹ vùng cổ vai 1–2 ngày, giảm dần ở các buổi sau. Uống nước ấm, giữ ấm cổ. Đau tăng hoặc tê tay thì báo lại spa.",
+        },
+        ["G02"] = new(StringComparer.Ordinal)
+        {
+            ["minutesPerSession"] = 60L,
+            ["priceNote"] = "Tiết kiệm 200.000đ so với làm lẻ (420.000đ/buổi). Dùng trong 6 tháng.",
+            ["description"] = "5 buổi chăm sóc da mặt thảo mộc, nên làm cách nhau 7–10 ngày.",
+            ["afterCare"] = "Không trang điểm trong 12 giờ sau mỗi buổi, dùng kem chống nắng hằng ngày.",
+        },
+        ["G03"] = new(StringComparer.Ordinal)
+        {
+            ["minutesPerSession"] = 90L,
+            ["priceNote"] = "Tiết kiệm 400.000đ so với làm lẻ (550.000đ/buổi). Dùng trong 6 tháng, ở cả 2 chi nhánh.",
+            ["description"] = "8 buổi massage đá nóng 90 phút, có thể chia cho người thân cùng dùng (báo lễ tân khi đặt lịch).",
+        },
+        ["SP01"] = new(StringComparer.Ordinal)
+        {
+            ["description"] = "Tinh dầu ngải cứu nguyên chất, chai 100 ml; dùng xoa bóp vùng cổ vai, lưng, khớp gối.",
+            ["usage"] = "Lấy 5–10 giọt xoa đều vùng mỏi, massage 3–5 phút, tốt nhất sau khi tắm nước ấm. Không bôi lên vết thương hở, vùng mắt.",
+        },
+        ["SP02"] = new(StringComparer.Ordinal)
+        {
+            ["description"] = "Gói 500 g muối hột rang cùng gừng, sả, ngải cứu, quế.",
+            ["usage"] = "Mỗi lần ngâm dùng khoảng 50 g (2–3 thìa) với 3 lít nước ấm, ngâm 15–20 phút trước khi ngủ.",
+        },
+        ["SP03"] = new(StringComparer.Ordinal)
+        {
+            ["description"] = "Hũ 50 g, chiết xuất nghệ, rau má, lô hội; dưỡng ẩm, làm dịu da.",
+            ["usage"] = "Thoa một lớp mỏng sáng và tối sau khi rửa mặt.",
+        },
+        ["SP04"] = new(StringComparer.Ordinal)
+        {
+            ["description"] = "Hộp 20 túi lọc: hoa cúc, tâm sen, cam thảo.",
+            ["usage"] = "Hãm 1 túi với 200 ml nước sôi 3–5 phút, uống buổi tối.",
+        },
+    };
+
+    /// <summary>Thông tin chung, chính sách, câu hỏi thường gặp (mã theo tiền tố gợi ý TT-, CS-, FAQ-).</summary>
+    private static readonly (KnowledgeKind Kind, string Code, string Title, string Body)[] KnowledgeExtras =
+    [
+        (KnowledgeKind.Info, "TT-DIA-CHI-CN1", "Địa chỉ Chi nhánh Quận 1", "12 Lê Thánh Tôn, Q.1, TP.HCM. Điện thoại đặt lịch: 0909 000 111."),
+        (KnowledgeKind.Info, "TT-DIA-CHI-CN2", "Địa chỉ Chi nhánh Thủ Đức", "88 Võ Văn Ngân, TP. Thủ Đức. Điện thoại đặt lịch: 0909 000 222."),
+        (KnowledgeKind.Info, "TT-GIO-MO-CUA", "Giờ mở cửa", "Cả 2 chi nhánh mở cửa 8:00–20:00 tất cả các ngày trong tuần, kể cả Chủ nhật và ngày lễ (nghỉ mùng 1–3 Tết). Nhận khách cuối lúc 19:00; dịch vụ 90 phút nhận khách cuối lúc 18:30."),
+        (KnowledgeKind.Info, "TT-GUI-XE", "Gửi xe", "Chi nhánh Quận 1: gửi xe máy miễn phí ngay trước tiệm, ô tô gửi ở bãi cạnh tiệm (phí theo bãi). Chi nhánh Thủ Đức: bãi xe máy và ô tô miễn phí trong khuôn viên."),
+        (KnowledgeKind.Info, "TT-THANH-TOAN", "Hình thức thanh toán", "Nhận tiền mặt, chuyển khoản (quét mã VietQR in trên hóa đơn) và thẻ ATM, Visa, Mastercard tại quầy. Không thu phí quẹt thẻ."),
+        (KnowledgeKind.Policy, "CS-DAT-HUY-DOI-LICH", "Đặt, đổi, hủy lịch", "Đặt lịch qua Zalo, điện thoại hoặc tại quầy; cuối tuần nên đặt trước 1 ngày. Đổi hoặc hủy lịch miễn phí nếu báo trước ít nhất 3 giờ. Đến trễ quá 15 phút, spa có thể rút ngắn thời gian làm hoặc mời khách đổi giờ để không ảnh hưởng khách sau. Lịch dùng gói liệu trình hủy muộn dưới 1 giờ sẽ trừ 1 buổi."),
+        (KnowledgeKind.Policy, "CS-DAT-COC", "Đặt cọc", "Lịch lẻ thông thường không cần đặt cọc. Nhóm từ 4 người hoặc dịch vụ từ 90 phút vào giờ cao điểm cuối tuần cần cọc 30%; tiền cọc trừ vào hóa đơn, hoàn lại nếu hủy trước 24 giờ."),
+        (KnowledgeKind.Policy, "CS-UU-DAI-KHACH-MOI", "Ưu đãi khách mới", "Khách đến lần đầu được giảm 20% một dịch vụ lẻ bất kỳ và tặng trà thảo mộc sau buổi. Không áp dụng cho gói liệu trình, không cộng dồn với ưu đãi khác."),
+        (KnowledgeKind.Policy, "CS-GOI-LIEU-TRINH", "Sử dụng gói liệu trình", "Gói dùng trong 6 tháng kể từ ngày mua, dùng được ở cả 2 chi nhánh. Gói đã mua không hoàn tiền; trong 30 ngày đầu có thể đổi sang gói khác có giá trị tương đương."),
+        (KnowledgeKind.Faq, "FAQ-TRUOC-LIEU-TRINH", "Trước khi làm dịch vụ cần lưu ý gì?", "Mình nên ăn nhẹ trước khoảng 1 tiếng, không đến khi quá no hoặc quá đói, và đến sớm 10 phút để thay đồ. Nếu đang mang thai, có bệnh nền (huyết áp, tim mạch, tiểu đường), vừa phẫu thuật hoặc có vết thương hở, mình báo kỹ thuật viên trước khi làm."),
+        (KnowledgeKind.Faq, "FAQ-SAU-LIEU-TRINH", "Sau khi massage, bấm huyệt nên làm gì?", "Mình uống 1–2 cốc nước ấm, nghỉ khoảng 15 phút trước khi về, tránh tắm nước lạnh và gió lạnh trực tiếp trong 2 giờ. Hơi ê nhẹ 1–2 ngày đầu là bình thường; nếu đau tăng hoặc kéo dài hơn 3 ngày, mình nhắn spa để được tư vấn."),
+        (KnowledgeKind.Faq, "FAQ-BAM-HUYET-CO-DAU", "Bấm huyệt có đau không?", "Lực bấm được điều chỉnh theo từng người; buổi đầu kỹ thuật viên làm lực vừa và hỏi cảm giác của mình. Có thể hơi ê ở chỗ đang mỏi, mình báo ngay nếu thấy khó chịu để kỹ thuật viên giảm lực."),
+        (KnowledgeKind.Faq, "FAQ-CHON-KY-THUAT-VIEN", "Có chọn được kỹ thuật viên không?", "Dạ được ạ. Mình báo tên kỹ thuật viên quen hoặc yêu cầu kỹ thuật viên nữ/nam khi đặt lịch, spa xếp theo lịch làm việc của kỹ thuật viên đó."),
+    ];
+
+    /// <summary>Mục trị liệu chủ DN đã tích "Đã duyệt chuyên môn" (ngành spa có bộ an toàn y tế, INDUSTRIES.md mục 3).</summary>
+    private static readonly string[] ReviewedCodes = ["DV02", "DV06", "G01"];
 
     private static readonly StaffDef[] Staff =
     [
@@ -154,7 +317,8 @@ public static class DemoSeeder
 
     /// <summary>
     /// Xóa sạch doanh nghiệp demo. SQL thô CÓ điều kiện tenant_id (CLAUDE.md §8): lệnh dev, chỉ xóa đúng doanh nghiệp demo.
-    /// Xóa trước các bảng có khóa ngoại RESTRICT (hóa đơn, gói, lịch hẹn, nhân viên), rồi xóa tenant → các bảng khác xóa dây chuyền.
+    /// Xóa trước các bảng có khóa ngoại RESTRICT (hóa đơn, gói, lịch hẹn, nhân viên), rồi xóa tenant → các bảng khác xóa dây chuyền
+    /// (kể cả kho kiến thức, lần nhập, đoạn chỉ mục, nhật ký và mọi bảng kho hàng: đều CASCADE/SET NULL, không có RESTRICT).
     /// Trả về số doanh nghiệp đã xóa (0 = chưa có demo).
     /// </summary>
     private static async Task<int> ResetAsync(IServiceProvider services, CancellationToken cancellationToken)
@@ -255,8 +419,10 @@ public static class DemoSeeder
             Name = p.Name,
             GroupName = "Sản phẩm",
             Price = p.Price,
-            Unit = "chai",
+            Unit = p.Unit,
+            Sku = p.Sku,
             CostPrice = p.Price * 45 / 100,
+            TrackInventory = true,
             SortOrder = i,
         }).ToArray();
         db.CatalogItems.AddRange(serviceItems);
@@ -310,6 +476,9 @@ public static class DemoSeeder
         var ruleProduct = new CommissionRule { TenantId = TenantId, Scope = CommissionScope.Product, Kind = CommissionKind.Percent, Value = 5 };
         db.CommissionRules.AddRange(ruleService, ruleLan, rulePackage, ruleProduct);
         await db.SaveChangesAsync(cancellationToken);
+
+        // ---------- Kho kiến thức (làm sớm, lúc change tracker còn nhỏ; không dùng rnd → các phần sau giữ nguyên số liệu) ----------
+        var knowledge = await SeedKnowledgeAsync(sp, [.. serviceItems, .. packageItems, .. productItems], owner.Id, now, today, cancellationToken);
 
         // ---------- Khách ----------
         var contacts = new List<Contact>();
@@ -866,6 +1035,10 @@ public static class DemoSeeder
 
         await db.SaveChangesAsync(cancellationToken);
 
+        // ---------- Kho hàng 30 ngày (khớp với hóa đơn + lịch hẹn ở trên) ----------
+        var inventory = SeedInventory(db, branches, serviceByCode, productItems, invoices, lines, appointments, appointmentItems, owner.Id, now, today);
+        await db.SaveChangesAsync(cancellationToken);
+
         var revenue30 = revenue.Where(r => r.Date > today.AddDays(-30)).Sum(r => r.Amount);
         return string.Join(Environment.NewLine,
             $"Đã tạo doanh nghiệp demo \"{TenantName}\".",
@@ -873,8 +1046,355 @@ public static class DemoSeeder
             $"  Đăng nhập nhân viên (Lan, có nút Vào ca): {StaffEmail} / {DevSeeder.DevPassword}",
             $"  {contacts.Count} khách · {appointments.Count} lịch hẹn · {invoices.Count} hóa đơn · {customerPackages.Count} gói · {attendanceCount} lượt chấm công",
             $"  {conversations.Count} hội thoại · {messages.Count} tin nhắn · doanh thu 30 ngày ≈ {revenue30.ToString("N0", CultureInfo.GetCultureInfo("vi-VN"))} đ",
+            $"  Kho kiến thức: {knowledge.Items} mục ({knowledge.Reviewed} đã duyệt chuyên môn) · 1 lần nhập file trong Lịch sử nhập · {knowledge.PendingChunks} đoạn chờ đánh chỉ mục",
+            $"  Kho hàng: {inventory.Products} sản phẩm × {branches.Length} chi nhánh · {inventory.Movements} dòng xuất nhập 30 ngày · {inventory.PurchaseOrders} phiếu nhập · 1 chuyển kho · 1 kiểm kê · {inventory.LowStock} mặt hàng dưới mức tối thiểu",
+            "  Bật Worker (lệnh \"dev\") để tạo vector cho kho kiến thức bằng Gemini — tới lúc đó bot chưa tìm được dữ liệu.",
             "  Chạy lại lệnh bất cứ lúc nào: số liệu được làm mới theo ngày hôm nay.");
     }
+
+    private sealed record KnowledgeSeedResult(int Items, int Reviewed, int PendingChunks);
+
+    /// <summary>
+    /// Kho kiến thức đi đúng hai đường app dùng (không chép lại logic):
+    /// (1) mỗi mục danh mục ghi sang kho kiến thức như khi lưu trên trang Danh mục (<see cref="CatalogKnowledgeSync.PushToKnowledgeAsync"/>);
+    /// (2) chủ DN xuất dữ liệu, bổ sung mô tả / "Sau khi làm" + thông tin chung, chính sách, câu hỏi thường gặp, nhập lại file
+    /// → xem trước + áp dụng của <see cref="KnowledgeImportService"/> (có "Lịch sử nhập", đồng bộ ngược danh mục, nhật ký).
+    /// Không có file thật nào được lưu: lần nhập chỉ giữ bản so sánh, giao diện không tải file về.
+    /// Đoạn (chunk) để ở trạng thái chưa có vector: Worker (IndexKnowledgeJob được xếp khi áp dụng, IndexSweepJob mỗi 5 phút)
+    /// gọi Gemini tạo vector. Seeder KHÔNG gọi AI.
+    /// </summary>
+    private static async Task<KnowledgeSeedResult> SeedKnowledgeAsync(
+        IServiceProvider sp, IReadOnlyList<CatalogItem> catalog, Guid ownerId, DateTimeOffset now, DateOnly today, CancellationToken cancellationToken)
+    {
+        var db = sp.GetRequiredService<AppDbContext>();
+        var items = sp.GetRequiredService<KnowledgeItemRepository>();
+
+        // (1) Danh mục → kho kiến thức. Hàng đợi "bỏ qua": 15 lần ghi không xếp 15 job đánh chỉ mục chạy cùng lúc (gọi Gemini trùng
+        // cho cùng đoạn); job duy nhất được xếp ở bước (2), sau khi mọi đoạn đã có.
+        var sync = new CatalogKnowledgeSync(db, sp.GetRequiredService<ITenantContext>(), sp.GetRequiredService<ChunkRepository>(), new SkipJobClient());
+        foreach (var item in catalog)
+        {
+            await sync.PushToKnowledgeAsync(TenantId, item, ownerId, cancellationToken);
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+
+        // (2) File kiến thức chủ DN bổ sung rồi nhập lại.
+        var entries = (await items.ListAsync(TenantId, kind: null, cancellationToken))
+            .Select(KnowledgeItemMapper.FromItem)
+            .Select(e => CatalogDetails.TryGetValue(e.Code, out var extra) ? WithFields(e, extra) : e)
+            .Concat(KnowledgeExtras.Select(x => new KnowledgeEntry(x.Kind, x.Code, new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                [KnowledgeTemplate.TitleField(x.Kind)] = x.Title,
+                [x.Kind == KnowledgeKind.Faq ? "answer" : "content"] = x.Body,
+            })))
+            .ToList();
+        using var file = new MemoryStream();
+        KnowledgeItemMapper.WriteJsonFile(entries, file);
+        file.Position = 0;
+
+        var importer = sp.GetRequiredService<KnowledgeImportService>();
+        var preview = await importer.CreatePreviewAsync(TenantId, ownerId, "kien-thuc-an-nhien.json", file, cancellationToken);
+        if (preview.Import is not { } import || preview.Diff is not { } diff || diff.Summary.PossibleDuplicate > 0)
+        {
+            throw new InvalidOperationException("File kiến thức demo không hợp lệ hoặc có mục nghi trùng: "
+                + string.Join("; ", preview.Errors.Select(e => $"{e.Location} {e.Row} {e.Column}: {e.Message}")));
+        }
+
+        var selections = diff.Entries.Where(e => e.DefaultSelected).Select(e => new KnowledgeSelection(e.Key, null)).ToList();
+        await importer.ApplyAsync(TenantId, ownerId, import.Id, selections, cancellationToken);
+
+        // Lần nhập 45 ngày trước (xem trước 21:10, áp dụng 7 phút sau); hôm sau chủ DN duyệt chuyên môn mục trị liệu (như nút trên trang).
+        var catalogAt = now.AddDays(-140);
+        var previewAt = At(today.AddDays(-45), 21, 10);
+        var appliedAt = previewAt.AddMinutes(7);
+        var reviewedAt = At(today.AddDays(-44), 9, 30);
+        import.CreatedAt = previewAt;
+        import.AppliedAt = appliedAt;
+        var reviewed = await items.GetByCodesAsync(TenantId, ReviewedCodes, cancellationToken);
+        foreach (var item in reviewed)
+        {
+            item.MedicallyReviewed = true;
+            db.AuditLogs.Add(new AuditLog
+            {
+                Id = Guid.CreateVersion7(reviewedAt), // nhiều dòng cùng lần lưu: Id rỗng sẽ trùng khóa trong change tracker
+                TenantId = TenantId,
+                UserId = ownerId,
+                Action = "knowledge.medical_review_set",
+                Target = $"item:{item.Id}",
+                CreatedAt = reviewedAt,
+            });
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+
+        // SaveChanges luôn ghi UpdatedAt = bây giờ → lùi mốc bằng UPDATE trực tiếp, vẫn lọc đúng tenant demo.
+        string[] catalogCodes = [.. catalog.Select(c => c.Code)];
+        await db.KnowledgeItems.Where(k => k.TenantId == TenantId).ExecuteUpdateAsync(s => s
+            .SetProperty(k => k.CreatedAt, k => catalogCodes.Contains(k.Code) ? catalogAt : appliedAt)
+            .SetProperty(k => k.UpdatedAt, k => k.MedicallyReviewed ? reviewedAt : appliedAt), cancellationToken);
+        var importTarget = import.Id.ToString() + "%";
+        await db.AuditLogs.Where(a => a.TenantId == TenantId && a.Target != null && EF.Functions.Like(a.Target, importTarget))
+            .ExecuteUpdateAsync(s => s.SetProperty(a => a.CreatedAt, a => a.Action == "knowledge.import_previewed" ? previewAt : appliedAt), cancellationToken);
+
+        var pending = await db.Chunks.CountAsync(c => c.TenantId == TenantId && c.Embedding == null, cancellationToken);
+        return new KnowledgeSeedResult(catalog.Count + KnowledgeExtras.Length, reviewed.Count, pending);
+    }
+
+    private static KnowledgeEntry WithFields(KnowledgeEntry entry, IReadOnlyDictionary<string, object> extra)
+    {
+        var fields = new Dictionary<string, object>(entry.Fields, StringComparer.Ordinal);
+        foreach (var (name, value) in extra)
+        {
+            fields[name] = value;
+        }
+
+        return entry with { Fields = fields };
+    }
+
+    /// <summary>Hàng đợi bỏ qua mọi job — chỉ dùng cho bước (1) của <see cref="SeedKnowledgeAsync"/>.</summary>
+    private sealed class SkipJobClient : IBackgroundJobClient
+    {
+        public string Create(Job job, IState state) => "";
+
+        public bool ChangeState(string jobId, IState state, string expectedState) => false;
+    }
+
+    private sealed record StockEvent(
+        DateTimeOffset At, int Order, Guid BranchId, Guid ProductId, StockMovementKind Kind, decimal Quantity, string RefType, Guid RefId, long? UnitCost = null);
+
+    private sealed record InventorySeedResult(int Products, int Movements, int PurchaseOrders, int LowStock);
+
+    /// <summary>
+    /// Kho hàng (CRM C4) 30 ngày qua, khớp từng dòng với hóa đơn và lịch hẹn đã tạo:
+    /// phiếu nhập đầu kỳ ở 2 chi nhánh (bắt đầu theo dõi kho) → bán (hóa đơn thu đủ có sản phẩm) + tiêu hao vật tư theo định mức
+    /// (lịch hoàn thành) → nhập bổ sung CN1 (12 ngày trước) → chuyển kho CN1 → CN2 (8 ngày trước) → kiểm kê CN1 lệch 1 hộp trà
+    /// (3 ngày trước). Số nhập tính ngược từ nhu cầu thật để tồn không âm và cuối kỳ đúng <see cref="StockPlan"/>.
+    /// Số dư sau từng dòng, giá vốn bình quân, số lệch kiểm kê tính đúng như InventoryService → tổng các dòng = tồn hiện tại.
+    /// </summary>
+    private static InventorySeedResult SeedInventory(
+        AppDbContext db,
+        Branch[] branches,
+        Dictionary<string, CatalogItem> serviceByCode,
+        CatalogItem[] productItems,
+        List<Invoice> invoices,
+        List<InvoiceLine> lines,
+        List<Appointment> appointments,
+        List<AppointmentItem> appointmentItems,
+        Guid ownerId,
+        DateTimeOffset now,
+        DateOnly today)
+    {
+        var cn1 = branches[0].Id;
+        var cn2 = branches[1].Id;
+        var productByCode = productItems.ToDictionary(p => p.Code, StringComparer.Ordinal);
+
+        var supplier = new Supplier
+        {
+            TenantId = TenantId,
+            Name = "Công ty TNHH Thảo Dược Phương Nam",
+            Phone = "028 3910 0000",
+            Note = "Giao thứ 2 và thứ 5, công nợ 15 ngày",
+            CreatedAt = now.AddDays(-40),
+        };
+        db.Suppliers.Add(supplier);
+
+        var norms = Consumables.Select(c => new ServiceConsumable
+        {
+            TenantId = TenantId,
+            ServiceId = serviceByCode[c.Service].Id,
+            ProductId = productByCode[c.Product].Id,
+            QuantityPerSession = c.PerSession,
+        }).ToList();
+        db.ServiceConsumables.AddRange(norms);
+
+        var trackFrom = new Dictionary<Guid, DateTimeOffset> { [cn1] = At(today.AddDays(-30), 8, 15), [cn2] = At(today.AddDays(-30), 8, 40) };
+        var restockAt = At(today.AddDays(-12), 8, 20);
+        var transferAt = At(today.AddDays(-8), 9, 0);
+        var countAt = At(today.AddDays(-3), 20, 30);
+
+        // Nhu cầu thật sau mốc bắt đầu theo dõi: hóa đơn thu đủ trừ sản phẩm (hóa đơn còn nợ chưa trừ — như app),
+        // lịch hoàn thành trừ vật tư theo định mức.
+        var events = new List<StockEvent>();
+        var productLines = lines.Where(l => l.Kind == InvoiceLineKind.Product && l.CatalogItemId is not null).ToLookup(l => l.InvoiceId);
+        foreach (var invoice in invoices.Where(i => i.Status == InvoiceStatus.Paid && i.PaidAt > trackFrom[i.BranchId] && i.PaidAt <= now))
+        {
+            foreach (var line in productLines[invoice.Id])
+            {
+                events.Add(new StockEvent(invoice.PaidAt!.Value, 1, invoice.BranchId, line.CatalogItemId!.Value, StockMovementKind.Sale, -line.Quantity, "invoice", invoice.Id));
+            }
+        }
+
+        var serviceOf = appointmentItems.ToDictionary(i => i.AppointmentId, i => i.CatalogItemId);
+        var normsByService = norms.ToLookup(n => n.ServiceId);
+        foreach (var appointment in appointments.Where(a => a.Status == AppointmentStatus.Done && a.DoneAt > trackFrom[a.BranchId] && a.DoneAt <= now))
+        {
+            foreach (var norm in normsByService[serviceOf[appointment.Id]])
+            {
+                events.Add(new StockEvent(appointment.DoneAt!.Value, 1, appointment.BranchId, norm.ProductId, StockMovementKind.Consume, -norm.QuantityPerSession, "appointment", appointment.Id));
+            }
+        }
+
+        var demand = events.ToList();
+        decimal Used(Guid branchId, Guid productId, DateTimeOffset before) =>
+            -demand.Where(e => e.BranchId == branchId && e.ProductId == productId && e.At < before).Sum(e => e.Quantity);
+
+        // Số lượng nhập: đủ dùng tới lần nhập/chuyển kế tiếp (dư ≥ 3–4) và cuối kỳ đạt tồn mong muốn; làm tròn lên bội số 5.
+        var transferQty = TransferPlan.ToDictionary(t => productByCode[t.Code].Id, t => (decimal)t.Quantity);
+        var opening1 = new List<(CatalogItem Item, decimal Quantity)>();
+        var restock1 = new List<(CatalogItem Item, decimal Quantity)>();
+        var opening2 = new List<(CatalogItem Item, decimal Quantity)>();
+        var minimum = new Dictionary<(Guid, Guid), decimal>();
+        foreach (var (code, cn1Target, cn2Target, cn1Min, cn2Min) in StockPlan)
+        {
+            var item = productByCode[code];
+            var moved = transferQty.GetValueOrDefault(item.Id);
+            var out1 = moved - (code == CountDiffCode ? CountDiff : 0);
+            var used1 = Used(cn1, item.Id, now.AddMinutes(1));
+            if (cn1Target is { } target1)
+            {
+                var beforeRestock = Used(cn1, item.Id, restockAt);
+                var opening = Math.Max(5, CeilTo5(beforeRestock + 4));
+                opening1.Add((item, opening));
+                restock1.Add((item, Math.Max(5, CeilTo5(target1 + used1 + out1 - opening))));
+            }
+            else
+            {
+                opening1.Add((item, Math.Max(5, CeilTo5(used1 + out1 + 1.5m))));
+            }
+
+            var used2 = Used(cn2, item.Id, now.AddMinutes(1));
+            opening2.Add((item, cn2Target is { } target2
+                ? Math.Max(CeilTo5(Used(cn2, item.Id, transferAt) + 3), Math.Max(5, CeilTo5(used2 + target2 - moved)))
+                : Math.Max(5, CeilTo5(used2 + 1.5m))));
+            minimum[(cn1, item.Id)] = cn1Min;
+            minimum[(cn2, item.Id)] = cn2Min;
+        }
+
+        // Phiếu nhập (đã nhận hàng). Giá nhập đầu kỳ = giá vốn; lần bổ sung nhà cung cấp tăng giá 5%.
+        var orders = new[]
+        {
+            (Branch: cn1, At: trackFrom[cn1], Note: "Nhập đầu kỳ khi bắt đầu theo dõi kho", Rows: opening1, Increase: false),
+            (Branch: cn2, At: trackFrom[cn2], Note: "Nhập đầu kỳ khi bắt đầu theo dõi kho", Rows: opening2, Increase: false),
+            (Branch: cn1, At: restockAt, Note: "Nhập bổ sung — nhà cung cấp tăng giá 5%", Rows: restock1, Increase: true),
+        };
+        for (var i = 0; i < orders.Length; i++)
+        {
+            var (branchId, at, note, rows, increase) = orders[i];
+            var order = new PurchaseOrder
+            {
+                TenantId = TenantId,
+                BranchId = branchId,
+                SupplierId = supplier.Id,
+                Number = i + 1,
+                Status = PurchaseOrderStatus.Received,
+                Note = note,
+                CreatedByUserId = ownerId,
+                ReceivedAt = at,
+                CreatedAt = at.AddDays(-2),
+            };
+            foreach (var (item, quantity) in rows)
+            {
+                var cost = increase ? (item.CostPrice!.Value * 105 / 100 + 500) / 1000 * 1000 : item.CostPrice!.Value;
+                db.PurchaseOrderLines.Add(new PurchaseOrderLine { TenantId = TenantId, PurchaseOrderId = order.Id, CatalogItemId = item.Id, Quantity = quantity, UnitCost = cost });
+                order.Total += (long)Math.Round(quantity * cost);
+                events.Add(new StockEvent(at, 0, branchId, item.Id, StockMovementKind.Purchase, quantity, "purchase_order", order.Id, cost));
+            }
+
+            db.PurchaseOrders.Add(order);
+        }
+
+        var transfer = new StockTransfer { TenantId = TenantId, FromBranchId = cn1, ToBranchId = cn2, Note = "CN Thủ Đức sắp hết kem dưỡng và trà", ByUserId = ownerId, At = transferAt };
+        db.StockTransfers.Add(transfer);
+        foreach (var (productId, quantity) in transferQty)
+        {
+            db.StockTransferLines.Add(new StockTransferLine { TenantId = TenantId, StockTransferId = transfer.Id, CatalogItemId = productId, Quantity = quantity });
+            events.Add(new StockEvent(transferAt, 0, cn1, productId, StockMovementKind.TransferOut, -quantity, "transfer", transfer.Id));
+            events.Add(new StockEvent(transferAt, 1, cn2, productId, StockMovementKind.TransferIn, quantity, "transfer", transfer.Id));
+        }
+
+        var count = new StockCount
+        {
+            TenantId = TenantId,
+            BranchId = cn1,
+            Status = StockCountStatus.Applied,
+            Note = "Kiểm kê cuối tuần — 1 hộp trà bị ẩm, đã hủy",
+            CreatedByUserId = ownerId,
+            AppliedAt = countAt,
+            CreatedAt = countAt.AddMinutes(-25),
+        };
+        db.StockCounts.Add(count);
+        foreach (var item in productItems)
+        {
+            events.Add(new StockEvent(countAt, 0, cn1, item.Id, StockMovementKind.Adjust, item.Code == CountDiffCode ? CountDiff : 0, "stock_count", count.Id));
+        }
+
+        // Chạy lại theo thời gian: số dư sau, giá vốn bình quân gia quyền (như ReceiveCoreAsync), dòng kiểm kê.
+        var state = new Dictionary<(Guid Branch, Guid Product), (decimal Quantity, long AvgCost)>();
+        var transferCost = new Dictionary<Guid, long>();
+        var movements = 0;
+        foreach (var e in events.OrderBy(e => e.At).ThenBy(e => e.Order))
+        {
+            var key = (e.BranchId, e.ProductId);
+            var (quantity, avgCost) = state.GetValueOrDefault(key);
+            var unitCost = avgCost;
+            switch (e.Kind)
+            {
+                case StockMovementKind.Purchase:
+                    var existing = Math.Max(0, quantity);
+                    var after = existing + e.Quantity;
+                    avgCost = after > 0 ? (long)Math.Round((existing * avgCost + e.Quantity * e.UnitCost!.Value) / after) : e.UnitCost!.Value;
+                    unitCost = e.UnitCost.Value;
+                    break;
+                case StockMovementKind.TransferOut:
+                    transferCost[e.ProductId] = avgCost;
+                    break;
+                case StockMovementKind.TransferIn:
+                    unitCost = transferCost[e.ProductId]; // như app: theo giá vốn bên chuyển, không đổi giá vốn bên nhận
+                    break;
+            }
+
+            if (e.RefType == "stock_count")
+            {
+                db.StockCountLines.Add(new StockCountLine { TenantId = TenantId, StockCountId = count.Id, CatalogItemId = e.ProductId, ExpectedQuantity = quantity, CountedQuantity = quantity + e.Quantity });
+                if (e.Quantity == 0)
+                {
+                    continue;
+                }
+            }
+
+            quantity += e.Quantity;
+            state[key] = (quantity, avgCost);
+            db.StockMovements.Add(new StockMovement
+            {
+                TenantId = TenantId,
+                BranchId = e.BranchId,
+                CatalogItemId = e.ProductId,
+                Kind = e.Kind,
+                Quantity = e.Quantity,
+                BalanceAfter = quantity,
+                UnitCost = unitCost,
+                RefType = e.RefType,
+                RefId = e.RefId,
+                Note = e.RefType == "stock_count" ? "Kiểm kê" : null,
+                ByUserId = ownerId,
+                At = e.At,
+            });
+            movements++;
+        }
+
+        var low = 0;
+        foreach (var ((branchId, productId), (quantity, avgCost)) in state)
+        {
+            var min = minimum[(branchId, productId)];
+            db.StockLevels.Add(new StockLevel { TenantId = TenantId, BranchId = branchId, CatalogItemId = productId, Quantity = quantity, MinQuantity = min, AvgCost = avgCost });
+            low += quantity <= min ? 1 : 0;
+        }
+
+        return new InventorySeedResult(productItems.Length, movements, orders.Length, low);
+    }
+
+    private static decimal CeilTo5(decimal value) => Math.Ceiling(value / 5) * 5;
 
     private static Invoice NewInvoice(Guid branchId, Guid contactId, Guid? appointmentId, DateTimeOffset issuedAt) => new()
     {

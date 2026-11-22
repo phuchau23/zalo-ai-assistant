@@ -32,6 +32,7 @@ public sealed record UnansweredQuestion(Guid ConversationId, string? Question, s
 /// <param name="NewContacts">Khách mới trong khoảng (không tính Chat thử).</param>
 /// <param name="NewLeads">Khách mới đã thành khách tiềm năng (Quan tâm, Nóng, Đã chốt).</param>
 /// <param name="AiCostUsdMonth">Chi phí AI từ đầu tháng (giờ Việt Nam), gồm cả Chat thử.</param>
+/// <param name="AiCostVndMonth">Như trên, quy ra VND theo giá bán USD Vietcombank từng ngày (+ phí thẻ); null nếu chưa có tỷ giá.</param>
 /// <param name="Truncated">Quá nhiều tin để vẽ đủ biểu đồ (số liệu ngày có thể thiếu).</param>
 public sealed record DashboardResponse(
     int Days,
@@ -43,6 +44,7 @@ public sealed record DashboardResponse(
     int NewContacts,
     int NewLeads,
     decimal AiCostUsdMonth,
+    decimal? AiCostVndMonth,
     IReadOnlyList<UnansweredQuestion> Unanswered,
     bool Truncated);
 
@@ -84,6 +86,7 @@ internal static class DashboardEndpoints
         int? days,
         ITenantContext tenant,
         DashboardRepository dashboard,
+        UsdVndConverter usdVnd,
         AuditLogRepository audit,
         IDistributedStore store,
         IFieldEncryptor encryptor,
@@ -101,7 +104,7 @@ internal static class DashboardEndpoints
         var activity = await dashboard.ListCustomerActivityAsync(tenantId, window.From, window.To, cancellationToken);
         var neededHuman = await dashboard.ListNeededHumanAsync(tenantId, window.From, window.To, cancellationToken);
         var (newContacts, newLeads) = await dashboard.CountNewContactsAsync(tenantId, window.From, cancellationToken);
-        var cost = await dashboard.SumAiCostAsync(tenantId, window.MonthStart, cancellationToken);
+        var costRows = await dashboard.AiCostRowsAsync(tenantId, window.MonthStart, cancellationToken);
         var unanswered = await dashboard.ListUnansweredAsync(tenantId, window.From, UnansweredLimit, cancellationToken);
 
         if (unanswered.Count > 0
@@ -121,7 +124,8 @@ internal static class DashboardEndpoints
             DashboardStats.BotHandled(conversations, neededHuman),
             newContacts,
             newLeads,
-            cost,
+            costRows.Sum(r => r.Usd),
+            await usdVnd.SumAsync(costRows, cancellationToken),
             unanswered.Select(u => new UnansweredQuestion(
                 u.ConversationId,
                 u.CustomerTextEnc is null ? null : PiiMasker.Mask(encryptor.Decrypt(u.CustomerTextEnc), new PiiVault()),

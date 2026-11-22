@@ -48,7 +48,7 @@ public sealed class GroqCallSiteTests
         result.Messages.ShouldBe(["Dạ massage body 60 phút giá 450.000đ ạ.", $"Em ghi số {Phone} để nhân viên gọi lại chị nha."]);
         result.DetectedSalutation.ShouldBe("chị");
         result.Confidence.ShouldBe("high");
-        result.Usage.ShouldHaveSingleItem().Provider.ShouldBe("groq");
+        result.Usage.Single(u => u.Kind == UsageKind.Chat).Provider.ShouldBe("groq");
         JsonDocument.Parse(result.TraceJson).RootElement.GetProperty("model").GetString().ShouldBe(AiFakes.GroqMain);
         GroqPrompt(handler).ShouldNotContain(Phone);
         GroqPrompt(handler).ShouldContain("[PHONE_1]");

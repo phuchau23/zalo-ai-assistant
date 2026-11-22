@@ -80,12 +80,21 @@ public sealed partial class BotEngine(
             return Finish(request, texts, trace, vault, usage, new Decision([texts.Sticker], false, null, Urgency.None, "high", null, []));
         }
 
-        // 2. Tìm kiến thức (câu đã che — không gửi dữ liệu cá nhân cho dịch vụ tạo vector).
-        var chunks = await SearchAsync(request.TenantId, maskedMessage, maskedHistory, trace, cancellationToken);
+        // 2. Tìm kiến thức (câu đã che — không gửi dữ liệu cá nhân cho dịch vụ tạo vector). Tin cảm ơn/tạm biệt: không cần dữ liệu.
+        var smallTalk = SmallTalk.IsClosing(request.CustomerMessage);
+        IReadOnlyList<PromptChunk> chunks = [];
+        if (smallTalk)
+        {
+            trace.Guards.Add("small_talk_no_search");
+        }
+        else
+        {
+            chunks = await SearchAsync(request.TenantId, maskedMessage, maskedHistory, trace, usage, cancellationToken);
+        }
 
         // 3. Gọi AI.
         var system = PromptBuilder.BuildSystem(
-            template, request.Profile, chunks, maskedSummary, time.GetUtcNow(), addressing, request.Booking, Opening(request, maskedHistory), request.MaxMessages);
+            template, request.Profile, chunks, maskedSummary, time.GetUtcNow(), addressing, request.Booking, Opening(request, maskedHistory), request.MaxMessages, smallTalk);
         var turns = BuildTurns(maskedHistory, maskedMessage);
         BotAnswer? answer;
         try
@@ -164,6 +173,7 @@ public sealed partial class BotEngine(
         string maskedMessage,
         List<BotHistoryTurn> maskedHistory,
         TurnTrace trace,
+        List<BotUsage> usage,
         CancellationToken cancellationToken)
     {
         // Tin quá ngắn ("còn 90p?", "có", "còn gì không") tự nó không tìm ra gì → ghép ngữ cảnh: tin khách trước đó + các tin bên mình vừa
@@ -188,12 +198,14 @@ public sealed partial class BotEngine(
         try
         {
             var hits = (await search.SearchAsync(tenantId, query, _options.BotSearchLimit, cancellationToken)).ToList();
+            usage.Add(EmbedUsage(query));
 
             // Tin ngắn kiểu "có", "còn gì không", "gửi đi": khách muốn nghe thêm mà câu hỏi không nói dịch vụ nào → thêm vài dịch vụ/gói
             // tiêu biểu để bot đưa được thông tin cụ thể (tên, giá) thay vì hỏi lại chung chung.
             if (vague)
             {
                 var overview = await search.SearchAsync(tenantId, OverviewQuery, OverviewExtra + _options.BotSearchLimit, cancellationToken);
+                usage.Add(EmbedUsage(OverviewQuery));
                 var seen = hits.Select(h => h.ChunkId).ToHashSet();
                 hits.AddRange(overview.Where(h => seen.Add(h.ChunkId)).Take(OverviewExtra));
             }
@@ -215,6 +227,17 @@ public sealed partial class BotEngine(
         }
     }
 
+    /// <summary>
+    /// Chi phí tạo vector cho một câu tìm kiếm (2026-11-15, để chi phí theo nick không bỏ sót). API embedding của Gemini KHÔNG trả số
+    /// token → ước tính: (độ dài câu + ~30 ký tự tiền tố "task: search result | query:") ÷ 3,5 ký tự/token (đo trên tiếng Việt với
+    /// tokenizer Gemini ~3,8). Khoảng 0,0000x USD mỗi tin — rất nhỏ so với lần gọi chat, sai số không đáng kể.
+    /// </summary>
+    private BotUsage EmbedUsage(string query)
+    {
+        var tokens = (int)Math.Ceiling((query.Length + 30) / 3.5);
+        return new BotUsage(UsageKind.Embed, _options.EmbedProvider, _options.EmbedModel, tokens, 0, _options.Cost(_options.EmbedModel, tokens, 0));
+    }
+
     /// <summary>Phần cuối của chuỗi (tin gần nhất quan trọng hơn) — giữ câu tìm kiếm ngắn.</summary>
     private static string Tail(string text, int max) => text.Length <= max ? text : text[^max..];
 
@@ -231,8 +254,10 @@ public sealed partial class BotEngine(
             var result = await chat.ChatAsync(
                 new ChatRequest(system, turns, PromptBuilder.ReplySchema, attempt == 0 ? 0.3 : 0.0, MaxOutputTokens),
                 cancellationToken);
-            usage.Add(new BotUsage(UsageKind.Chat, result.Provider, result.Model, result.InputTokens, result.OutputTokens, result.CostUsd));
+            usage.Add(new BotUsage(UsageKind.Chat, result.Provider, result.Model, result.InputTokens, result.OutputTokens, result.CostUsd, result.CachedInputTokens));
             trace.Calls++;
+            trace.InputTokens += result.InputTokens;
+            trace.CachedTokens += result.CachedInputTokens;
             trace.Model = result.Model;
             trace.LatencyMs += result.LatencyMs;
 
@@ -489,6 +514,10 @@ public sealed partial class BotEngine(
 
         public int Calls { get; set; }
 
+        public int InputTokens { get; set; }
+
+        public int CachedTokens { get; set; }
+
         public string? Model { get; set; }
 
         public long LatencyMs { get; set; }
@@ -518,6 +547,8 @@ public sealed partial class BotEngine(
             ["template"] = $"{template.Slug}@{template.Version}",
             ["model"] = Model,
             ["calls"] = Calls,
+            ["inputTokens"] = InputTokens,
+            ["cachedTokens"] = CachedTokens,
             ["latencyMs"] = LatencyMs,
             ["dangerSignal"] = DangerSignal,
             ["guards"] = new JsonArray(Guards.Select(g => (JsonNode?)g).ToArray()),

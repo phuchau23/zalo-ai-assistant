@@ -77,6 +77,7 @@ public sealed class DashboardTests(PostgresFixture db)
         result.NewContacts.ShouldBe(2);
         result.NewLeads.ShouldBe(1);
         result.AiCostUsdMonth.ShouldBe(0.0125m);
+        result.AiCostVndMonth.ShouldBe(0.0125m * FakeVietcombankHandler.Sell); // tỷ giá Vietcombank từng ngày (giả: 25.000 đ), không còn 26.000 cố định
         var question = result.Unanswered.ShouldHaveSingleItem();
         question.Reason.ShouldBe("no_knowledge");
         question.Question.ShouldNotBeNull();

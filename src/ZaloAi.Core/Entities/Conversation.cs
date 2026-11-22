@@ -291,5 +291,11 @@ public sealed class UsageRecord : ITenantOwned
 
     public Guid? ConversationId { get; set; }
 
+    /// <summary>
+    /// Kênh/nick phát sinh chi phí (2026-11-15, tính chi phí theo nick). Có thể trống ở bản ghi cũ: khi đọc thì lấy theo hội thoại
+    /// (conversations.connection_id). Không đặt khóa ngoại để giữ lịch sử chi phí khi nick bị xóa.
+    /// </summary>
+    public Guid? ConnectionId { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
 }

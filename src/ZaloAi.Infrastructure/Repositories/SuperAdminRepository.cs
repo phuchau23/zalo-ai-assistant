@@ -9,7 +9,8 @@ namespace ZaloAi.Infrastructure.Repositories;
 public sealed record TenantMemberRow(Guid UserId, string Email, string Name, TenantRole Role);
 
 /// <param name="Month">Ngày 1 của tháng (giờ Việt Nam).</param>
-public sealed record MonthlyCost(DateOnly Month, decimal CostUsd, int Calls);
+/// <param name="CostVnd">Quy ra VND theo tỷ giá bán USD Vietcombank từng ngày; null nếu không quy đổi được.</param>
+public sealed record MonthlyCost(DateOnly Month, decimal CostUsd, int Calls, decimal? CostVnd = null);
 
 /// <summary>
 /// Truy vấn XUYÊN TENANT cho trang super admin (CLAUDE.md M6 — chỉ chủ dự án). Dùng IgnoreQueryFilters() CÓ CHỦ ĐÍCH: màn hình này
@@ -57,16 +58,18 @@ public sealed class SuperAdminRepository(AppDbContext db, ITenantContext tenantC
     }
 
     /// <summary>Chi phí AI theo DN và tháng (giờ Việt Nam) từ <paramref name="since"/>.</summary>
-    public async Task<IReadOnlyList<(Guid TenantId, MonthlyCost Cost)>> MonthlyCostsAsync(DateTimeOffset since, Guid? tenantId, CancellationToken cancellationToken)
+    /// <param name="toVnd">Quy đổi từng khoản ra VND theo ngày (<see cref="Billing.UsdVndConverter"/>); null = không tính VND.</param>
+    public async Task<IReadOnlyList<(Guid TenantId, MonthlyCost Cost)>> MonthlyCostsAsync(
+        DateTimeOffset since, Guid? tenantId, CancellationToken cancellationToken, Func<DateTimeOffset, decimal, decimal?>? toVnd = null)
     {
         EnsureSuperAdmin();
         var rows = await db.UsageRecords.IgnoreQueryFilters()
             .Where(u => u.CreatedAt >= since && (tenantId == null || u.TenantId == tenantId))
-            .Select(u => new { u.TenantId, u.CreatedAt, u.CostUsd })
+            .Select(u => new { u.TenantId, u.CreatedAt, u.CostUsd, u.Kind })
             .ToListAsync(cancellationToken);
         return rows
             .GroupBy(r => (r.TenantId, Month: MonthOf(r.CreatedAt)))
-            .Select(g => (g.Key.TenantId, new MonthlyCost(g.Key.Month, g.Sum(r => r.CostUsd), g.Count())))
+            .Select(g => (g.Key.TenantId, new MonthlyCost(g.Key.Month, g.Sum(r => r.CostUsd), g.Count(r => r.Kind == UsageKind.Chat), SumVnd(g.Select(r => (r.CreatedAt, r.CostUsd)), toVnd)))) // tiền gồm cả tạo vector; số lần = gọi chat
             .OrderBy(r => r.Item2.Month)
             .ToList();
     }
@@ -79,6 +82,27 @@ public sealed class SuperAdminRepository(AppDbContext db, ITenantContext tenantC
             .Where(t => t.Status == TenantStatus.Active && t.ExpiresAt != null && t.ExpiresAt < cutoff)
             .Select(t => t.Id)
             .ToListAsync(cancellationToken);
+    }
+
+    private static decimal? SumVnd(IEnumerable<(DateTimeOffset At, decimal Usd)> rows, Func<DateTimeOffset, decimal, decimal?>? toVnd)
+    {
+        if (toVnd is null)
+        {
+            return null;
+        }
+
+        decimal total = 0;
+        foreach (var (at, usd) in rows)
+        {
+            if (toVnd(at, usd) is not { } vnd)
+            {
+                return null;
+            }
+
+            total += vnd;
+        }
+
+        return total;
     }
 
     public static DateOnly MonthOf(DateTimeOffset at)

@@ -272,14 +272,24 @@ public sealed class ConversationRepository(AppDbContext db, ITenantContext tenan
             .ToList();
     }
 
-    /// <summary>Tổng chi phí AI (USD) và số lần gọi của một hội thoại.</summary>
+    /// <summary>Các khoản chi phí AI (thời điểm, USD) của một hội thoại — để quy ra VND theo tỷ giá từng ngày.</summary>
+    public async Task<IReadOnlyList<(DateTimeOffset At, decimal Usd)>> UsageRowsForConversationAsync(Guid tenantId, Guid conversationId, CancellationToken cancellationToken)
+    {
+        EnsureTenant(tenantId);
+        return await Db.UsageRecords
+            .Where(u => u.TenantId == tenantId && u.ConversationId == conversationId)
+            .Select(u => new ValueTuple<DateTimeOffset, decimal>(u.CreatedAt, u.CostUsd))
+            .ToListAsync(cancellationToken);
+    }
+
+    /// <summary>Tổng chi phí AI (USD, gồm cả tạo vector) và số lần gọi model chat của một hội thoại.</summary>
     public async Task<(decimal CostUsd, int Calls)> UsageForConversationAsync(Guid tenantId, Guid conversationId, CancellationToken cancellationToken)
     {
         EnsureTenant(tenantId);
         var rows = await Db.UsageRecords
             .Where(u => u.TenantId == tenantId && u.ConversationId == conversationId)
             .GroupBy(_ => 1)
-            .Select(g => new { Cost = g.Sum(u => u.CostUsd), Calls = g.Count() })
+            .Select(g => new { Cost = g.Sum(u => u.CostUsd), Calls = g.Count(u => u.Kind == UsageKind.Chat) })
             .FirstOrDefaultAsync(cancellationToken);
         return rows is null ? (0m, 0) : (rows.Cost, rows.Calls);
     }

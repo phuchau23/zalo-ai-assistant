@@ -61,6 +61,37 @@ public sealed class AdminTests(PostgresFixture db)
     }
 
     [Fact]
+    public async Task Ai_cost_is_shown_in_vnd_at_the_daily_vietcombank_rate()
+    {
+        var (tenantId, _) = await db.CreateTenantAsync("Chi phí VND");
+        await using (var context = db.CreateDbContext(tenantId))
+        {
+            context.UsageRecords.Add(new UsageRecord
+            {
+                Id = Guid.CreateVersion7(),
+                TenantId = tenantId,
+                Kind = UsageKind.Chat,
+                Provider = "groq",
+                Model = "m",
+                InputTokens = 1000,
+                OutputTokens = 100,
+                CostUsd = 0.01m,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            await context.SaveChangesAsync();
+        }
+
+        var admin = await AdminAsync();
+        var item = (await admin.GetFromJsonAsync<List<AdminTenantItem>>(Url("/admin/tenants")))!.Single(t => t.Id == tenantId);
+        item.AiCostThisMonthUsd.ShouldBe(0.01m);
+        item.AiCostThisMonthVnd.ShouldBe(0.01m * FakeVietcombankHandler.Sell); // không còn 26.000 đ/USD cố định
+
+        var detail = (await admin.GetFromJsonAsync<AdminTenantDetail>(Url($"/admin/tenants/{tenantId}")))!;
+        detail.MonthlyCosts[^1].CostVnd.ShouldBe(0.01m * FakeVietcombankHandler.Sell);
+        detail.MonthlyCosts.Take(11).ShouldAllBe(m => m.CostVnd == 0m);
+    }
+
+    [Fact]
     public async Task Suspend_blocks_the_business_and_resume_restores_it()
     {
         var (tenantId, _) = await db.CreateTenantAsync("Khóa mở");

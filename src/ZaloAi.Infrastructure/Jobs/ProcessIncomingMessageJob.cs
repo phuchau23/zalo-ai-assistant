@@ -215,7 +215,7 @@ public sealed partial class ProcessIncomingMessageJob(
         }
 
         var replies = AddReplies(tenantId, conversation, message.Id, result);
-        AddUsage(tenantId, conversation.Id, result.Usage);
+        AddUsage(tenantId, conversation.Id, conversation.ConnectionId, result.Usage);
 
         if (result.NeedsHuman)
         {
@@ -367,7 +367,7 @@ public sealed partial class ProcessIncomingMessageJob(
         return replies;
     }
 
-    private void AddUsage(Guid tenantId, Guid conversationId, IEnumerable<BotUsage> usage)
+    private void AddUsage(Guid tenantId, Guid conversationId, Guid? connectionId, IEnumerable<BotUsage> usage)
     {
         foreach (var u in usage)
         {
@@ -380,6 +380,7 @@ public sealed partial class ProcessIncomingMessageJob(
                 OutputTokens = u.OutputTokens,
                 CostUsd = u.CostUsd,
                 ConversationId = conversationId,
+                ConnectionId = connectionId,
             });
         }
     }
@@ -467,7 +468,7 @@ public sealed partial class ProcessIncomingMessageJob(
                 cancellationToken);
             conversation.SummaryEnc = encryptor.Encrypt(summary.Summary);
             conversation.SummarizedUntil = old[^1].CreatedAt;
-            AddUsage(tenantId, conversation.Id, summary.Usage);
+            AddUsage(tenantId, conversation.Id, conversation.ConnectionId, summary.Usage);
             await conversations.SaveChangesAsync(cancellationToken);
         }
         catch (AiProviderException ex)

@@ -1700,6 +1700,43 @@ namespace ZaloAi.Infrastructure.Persistence.Migrations
                     b.ToTable("customer_packages", (string)null);
                 });
 
+            modelBuilder.Entity("ZaloAi.Core.Entities.ExchangeRate", b =>
+                {
+                    b.Property<string>("Currency")
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasColumnName("currency");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date")
+                        .HasColumnName("date");
+
+                    b.Property<DateTimeOffset>("FetchedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("fetched_at");
+
+                    b.Property<decimal>("Sell")
+                        .HasPrecision(14, 2)
+                        .HasColumnType("numeric(14,2)")
+                        .HasColumnName("sell");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("source");
+
+                    b.Property<decimal>("Transfer")
+                        .HasPrecision(14, 2)
+                        .HasColumnType("numeric(14,2)")
+                        .HasColumnName("transfer");
+
+                    b.HasKey("Currency", "Date")
+                        .HasName("pk_exchange_rates");
+
+                    b.ToTable("exchange_rates", (string)null);
+                });
+
             modelBuilder.Entity("ZaloAi.Core.Entities.HandoffSettings", b =>
                 {
                     b.Property<Guid>("TenantId")
@@ -3898,6 +3935,10 @@ namespace ZaloAi.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<Guid?>("ConnectionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("connection_id");
+
                     b.Property<Guid?>("ConversationId")
                         .HasColumnType("uuid")
                         .HasColumnName("conversation_id");
@@ -3949,6 +3990,9 @@ namespace ZaloAi.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("TenantId", "CreatedAt")
                         .HasDatabaseName("ix_usage_records_tenant_id_created_at");
+
+                    b.HasIndex("TenantId", "ConnectionId", "CreatedAt")
+                        .HasDatabaseName("ix_usage_records_tenant_id_connection_id_created_at");
 
                     b.ToTable("usage_records", (string)null);
                 });

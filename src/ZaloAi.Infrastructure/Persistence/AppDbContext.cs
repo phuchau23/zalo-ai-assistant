@@ -61,6 +61,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
 
     public DbSet<UsageRecord> UsageRecords => Set<UsageRecord>();
 
+    /// <summary>Bảng hệ thống (không tenant): tỷ giá theo ngày để quy chi phí AI ra VND.</summary>
+    public DbSet<ExchangeRate> ExchangeRates => Set<ExchangeRate>();
+
     public DbSet<ContactNote> ContactNotes => Set<ContactNote>();
 
     public DbSet<CareSuggestion> CareSuggestions => Set<CareSuggestion>();

@@ -84,7 +84,7 @@ Kết nối OA:
 | Auth | Email + mật khẩu (`PasswordHasher` của ASP.NET Core Identity), cookie authentication httpOnly | |
 | Rate limit | Middleware rate limiting có sẵn của ASP.NET Core | |
 | Gọi HTTP ra ngoài | `HttpClientFactory` + `Microsoft.Extensions.Http.Resilience` (Polly) | Timeout, retry, circuit breaker |
-| AI chat | `IChatProvider`: Gemini, **Groq dự phòng** khi Gemini hết lượt/lỗi (chốt 2026-11-03, trước đó chỉ Gemini), gọi REST qua HttpClient | Model + thứ tự đặt trong config, không hardcode. Dev có thể dùng gói free; **production bắt buộc Gemini gói trả phí** (gói free cho Google dùng dữ liệu); Groq bật Zero Data Retention |
+| AI chat | `IChatProvider`: **Groq `gpt-oss-120b` chính, Gemini dự phòng** (chủ dự án chốt 2026-11-17 vì rẻ hơn ~2,7 lần, eval đạt; trước đó Gemini chính + Groq dự phòng từ 2026-11-03), gọi REST qua HttpClient | Model + thứ tự đặt trong config (`Ai:ChatProviders`), không hardcode. Dev có thể dùng gói free; **production: Groq gói trả phí** (gói free giới hạn tốc độ) + bật Zero Data Retention; **Gemini gói trả phí** (vẫn cần cho embedding và dự phòng; gói free cho Google dùng dữ liệu) |
 | Embedding | Qua `IEmbeddingProvider` (Gemini embedding) | Số chiều vector đặt trong config. Đổi model = tạo lại toàn bộ vector |
 | Parse file | PdfPig (pdf), DocumentFormat.OpenXml (docx), ClosedXML (xlsx) | Chạy trong worker |
 | Kênh Zalo cá nhân | Sidecar **Node 24** + `zca-js` 2.2.0 (không chính thức) + `node-fetch`, `https-proxy-agent`; dev: TypeScript (chạy thẳng bằng type stripping của Node), vitest | `connectors/zalo-personal/`, giao tiếp API qua HTTP nội bộ có chữ ký HMAC theo `connectors/zalo-personal/CONTRACT.md`. Chỉ 1 bản chạy (lease). Chốt 2026-11-12 |
@@ -134,6 +134,7 @@ C:\Zalo_Tool\
 │   ├── CRM-FEATURES.md        # danh sách tính năng CRM (đầy đủ, theo nhóm)
 │   ├── CRM-PLAN.md            # đợt C1–C8 của CRM, schema từng đợt
 │   ├── TEST-PLAN.md / TEST-FLOW.md  # checklist + kịch bản test tay
+│   ├── test-guide/            # sổ tay test theo hành trình người dùng: guide.json → `node docs/test-guide/build.js` → remi-test-guide.html (bản online: artifact "Kịch bản test Remi")
 │   ├── ONBOARDING-FLOW.md     # dựng 1 DN từ đầu (super admin → nạp dữ liệu → lịch → test chat → Zalo cá nhân)
 │   └── zalo-api-notes.md      # ghi chú API Zalo đã kiểm chứng từ docs chính thức
 ├── .claude/skills/            # skills (mục 10) tách ra từ file này ở M1
@@ -192,6 +193,7 @@ Zalo__OAuthRedirectUrl=
 
 Sentry__Dsn=
 Telegram__BotToken=                          # kênh thông báo nhân viên giai đoạn đầu
+Cost__CardFeePercent=0                       # phí thẻ (%) cộng vào chi phí AI quy ra VND (tỷ giá bán USD Vietcombank theo ngày)
 
 ZaloPersonal__SidecarUrl=http://127.0.0.1:4100   # sidecar Zalo cá nhân (mạng nội bộ, không ra internet)
 ZaloPersonal__SharedSecret=                  # ≥ 32 ký tự, giống REMI_SHARED_SECRET của sidecar
