@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text;
@@ -176,18 +177,22 @@ public sealed class CrmFoundationTests(PostgresFixture db)
         (await owner.PutAsJsonAsync(Url($"/staff/{lan.Id}/services"), new SetStaffServicesRequest([service.Id]))).StatusCode.ShouldBe(HttpStatusCode.NoContent);
         (await owner.PutAsJsonAsync(Url($"/staff/{lan.Id}/services"), new SetStaffServicesRequest([Guid.NewGuid()]))).StatusCode.ShouldBe(HttpStatusCode.NotFound);
 
-        // Ca cố định T2–T6 9:00–18:00; thứ 4 (2026-10-21) ghi đè ca tay 13:00–21:00; thứ 5 nghỉ.
+        // Ca cố định T2–T6 9:00–18:00; thứ 4 tuần sau ghi đè ca tay 13:00–21:00; thứ 5 nghỉ.
+        // Ngày tính theo hôm nay: chi tiết nhân viên chỉ trả nghỉ phép từ 30 ngày trước trở đi, ngày cố định sẽ hết hạn.
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var monday = today.AddDays(7 + ((((int)DayOfWeek.Monday - (int)today.DayOfWeek) + 7) % 7));
+        static string Day(DateOnly d) => d.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         var templates = Enumerable.Range(1, 5).Select(d => new ShiftTemplateItem(d, "09:00", "18:00")).ToList();
         (await owner.PutAsJsonAsync(Url($"/staff/{lan.Id}/shift-templates"), new SetShiftTemplatesRequest(templates))).StatusCode.ShouldBe(HttpStatusCode.NoContent);
-        (await owner.PutAsJsonAsync(Url($"/staff/{lan.Id}/shifts"), new SetDayShiftsRequest("2026-10-21", [new DayShiftItem(null, "13:00", "21:00")]))).StatusCode.ShouldBe(HttpStatusCode.NoContent);
-        (await owner.PutAsJsonAsync(Url($"/staff/{lan.Id}/shifts"), new SetDayShiftsRequest("2026-10-22", []))).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        (await owner.PutAsJsonAsync(Url($"/staff/{lan.Id}/shifts"), new SetDayShiftsRequest(Day(monday.AddDays(2)), [new DayShiftItem(null, "13:00", "21:00")]))).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        (await owner.PutAsJsonAsync(Url($"/staff/{lan.Id}/shifts"), new SetDayShiftsRequest(Day(monday.AddDays(3)), []))).StatusCode.ShouldBe(HttpStatusCode.NoContent);
 
         var detail = (await owner.GetFromJsonAsync<StaffDetailResponse>(Url($"/staff/{lan.Id}")))!;
         detail.Phone.ShouldBe("0912345678");
         detail.ServiceIds.ShouldBe([service.Id]);
         detail.ShiftTemplates.Count.ShouldBe(5);
         detail.TimeOff.ShouldHaveSingleItem();
-        (await owner.GetFromJsonAsync<List<StaffShiftResponse>>(Url("/staff/shifts?from=2026-10-19&to=2026-10-25")))!.ShouldHaveSingleItem().StartTime.ShouldBe("13:00");
+        (await owner.GetFromJsonAsync<List<StaffShiftResponse>>(Url($"/staff/shifts?from={Day(monday)}&to={Day(monday.AddDays(6))}")))!.ShouldHaveSingleItem().StartTime.ShouldBe("13:00");
         await using (var context = db.CreateDbContext(tenantId))
         {
             (await context.StaffMembers.SingleAsync()).PhoneEnc!.ShouldNotContain("0912345678");
@@ -196,10 +201,10 @@ public sealed class CrmFoundationTests(PostgresFixture db)
         using var scope = db.Api.Services.CreateScope();
         scope.ServiceProvider.GetRequiredService<TenantContext>().Set(tenantId, null, null, isSuperAdmin: false);
         var staff = scope.ServiceProvider.GetRequiredService<StaffService>();
-        (await staff.WorkWindowsAsync(tenantId, branch.Id, new DateOnly(2026, 10, 20), CancellationToken.None)).ShouldHaveSingleItem().Start.ShouldBe(new TimeOnly(9, 0));
-        (await staff.WorkWindowsAsync(tenantId, branch.Id, new DateOnly(2026, 10, 21), CancellationToken.None)).ShouldHaveSingleItem().Start.ShouldBe(new TimeOnly(13, 0));
-        (await staff.WorkWindowsAsync(tenantId, branch.Id, new DateOnly(2026, 10, 22), CancellationToken.None)).ShouldBeEmpty();
-        (await staff.WorkWindowsAsync(tenantId, branch.Id, new DateOnly(2026, 10, 25), CancellationToken.None)).ShouldBeEmpty(); // chủ nhật không có ca
+        (await staff.WorkWindowsAsync(tenantId, branch.Id, monday.AddDays(1), CancellationToken.None)).ShouldHaveSingleItem().Start.ShouldBe(new TimeOnly(9, 0));
+        (await staff.WorkWindowsAsync(tenantId, branch.Id, monday.AddDays(2), CancellationToken.None)).ShouldHaveSingleItem().Start.ShouldBe(new TimeOnly(13, 0));
+        (await staff.WorkWindowsAsync(tenantId, branch.Id, monday.AddDays(3), CancellationToken.None)).ShouldBeEmpty();
+        (await staff.WorkWindowsAsync(tenantId, branch.Id, monday.AddDays(6), CancellationToken.None)).ShouldBeEmpty(); // chủ nhật không có ca
     }
 
     [Fact]
