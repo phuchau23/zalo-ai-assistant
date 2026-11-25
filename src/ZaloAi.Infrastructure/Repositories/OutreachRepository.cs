@@ -2,11 +2,24 @@ using Microsoft.EntityFrameworkCore;
 using ZaloAi.Core.Entities;
 using ZaloAi.Core.Tenancy;
 using ZaloAi.Infrastructure.Persistence;
+using ZaloAi.Infrastructure.ZaloPersonal;
 
 namespace ZaloAi.Infrastructure.Repositories;
 
 /// <summary>Một dòng màn hình "Đang chăm sóc" (người + hồ sơ khách + hội thoại + lịch hẹn sắp tới).</summary>
 public sealed record OutreachRow(OutreachTarget Target, Contact Contact, Guid? ConversationId, DateTimeOffset? NextAppointmentAt);
+
+/// <summary>Một dòng danh sách "Cần gọi điện" (người + hồ sơ + nguồn của đợt dán + hội thoại + các lần nhân viên đã gọi).</summary>
+/// <param name="CallAttempts">Số lần nhân viên đã ghi kết quả gọi kể từ lúc dán số này.</param>
+public sealed record CallListRow(
+    OutreachTarget Target,
+    Contact Contact,
+    string Origin,
+    string? ReferrerName,
+    Guid? ConversationId,
+    DateTimeOffset? LastCustomerMessageAt,
+    int CallAttempts,
+    DateTimeOffset? LastCallAt);
 
 /// <summary>Hàng đợi chăm sóc qua Zalo cá nhân (docs/ZALO-PERSONAL-PLAN.md mục 6.9) — dữ liệu theo tenant.</summary>
 public sealed class OutreachRepository(AppDbContext db, ITenantContext tenantContext) : TenantScopedRepository(db, tenantContext)
@@ -113,8 +126,48 @@ public sealed class OutreachRepository(AppDbContext db, ITenantContext tenantCon
             .FirstOrDefaultAsync(cancellationToken);
     }
 
-    /// <summary>Trạng thái job chăm sóc còn việc khi tới NextActionAt (Replied: mời kết bạn sau khi khách trả lời).</summary>
-    public static readonly OutreachState[] DueStates = [OutreachState.Queued, OutreachState.Friend, OutreachState.Replied];
+    /// <summary>
+    /// Người của nick đã thôi được nhắn (Cần gọi điện, Đã nguội, Lưu trữ, lời mời hết hạn) theo uid — lần dán gần nhất, không có lần dán mới
+    /// hơn (được track). Khách tự nhắn lại / chấp nhận kết bạn muộn → đưa về đúng trạng thái.
+    /// </summary>
+    public Task<OutreachTarget?> FindRevivableByUidAsync(Guid tenantId, Guid connectionId, string uid, CancellationToken cancellationToken)
+    {
+        EnsureTenant(tenantId);
+        return Db.OutreachTargets
+            .Where(t => t.TenantId == tenantId && t.ConnectionId == connectionId && t.ZaloUid == uid
+                        && OutreachLifecycle.RevivableStates.Contains(t.State)
+                        && !Db.OutreachTargets.Any(o => o.TenantId == tenantId && o.ContactId == t.ContactId && o.CreatedAt > t.CreatedAt))
+            .OrderByDescending(t => t.CreatedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Số lần bot đã chạm (nhắn / mời được) từng hồ sơ và lần gần nhất — để chặn dán lại số đã liên hệ (90 ngày, tối đa 2 lần).
+    /// </summary>
+    public async Task<Dictionary<Guid, (int Count, DateTimeOffset Last)>> TouchesAsync(
+        Guid tenantId, IReadOnlyCollection<Guid> contactIds, CancellationToken cancellationToken)
+    {
+        EnsureTenant(tenantId);
+        if (contactIds.Count == 0)
+        {
+            return [];
+        }
+
+        var rows = await Db.OutreachTargets.AsNoTracking()
+            .Where(t => t.TenantId == tenantId && contactIds.Contains(t.ContactId) && (t.FirstMessageAt != null || t.FriendRequestSentAt != null))
+            .Select(t => new { t.ContactId, t.FirstMessageAt, t.FriendRequestSentAt })
+            .ToListAsync(cancellationToken);
+        return rows.GroupBy(r => r.ContactId).ToDictionary(g => g.Key, g => (g.Count(), g.Max(r => Latest(r.FirstMessageAt, r.FriendRequestSentAt))));
+
+        static DateTimeOffset Latest(DateTimeOffset? a, DateTimeOffset? b) =>
+            a is { } x && (b is not { } y || x >= y) ? x : b.GetValueOrDefault();
+    }
+
+    /// <summary>
+    /// Trạng thái job chăm sóc còn việc khi tới NextActionAt (Messaged: mời kết bạn sau tin chào / giới thiệu khi khách vừa chấp nhận;
+    /// Replied: mời kết bạn sau khi khách trả lời / cảm ơn khi chấp nhận).
+    /// </summary>
+    public static readonly OutreachState[] DueStates = [OutreachState.Queued, OutreachState.Friend, OutreachState.Messaged, OutreachState.Replied];
 
     /// <summary>Người đã trả lời gần nhất của nick theo uid (được track) — khi khách chấp nhận lời mời gửi sau lúc trả lời.</summary>
     public Task<OutreachTarget?> FindRepliedByUidAsync(Guid tenantId, Guid connectionId, string uid, CancellationToken cancellationToken)
@@ -162,15 +215,165 @@ public sealed class OutreachRepository(AppDbContext db, ITenantContext tenantCon
     }
 
     /// <summary>Lời mời quá hạn / tin đầu không ai trả lời (được track).</summary>
-    public async Task<IReadOnlyList<OutreachTarget>> ListStaleAsync(Guid tenantId, DateTimeOffset invitedBefore, DateTimeOffset messagedBefore, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<OutreachTarget>> ListStaleInvitesAsync(Guid tenantId, DateTimeOffset invitedBefore, CancellationToken cancellationToken)
     {
         EnsureTenant(tenantId);
         return await Db.OutreachTargets
-            .Where(t => t.TenantId == tenantId
-                        && ((t.State == OutreachState.Invited && t.FriendRequestSentAt < invitedBefore)
-                            || (t.State == OutreachState.Messaged && t.FirstMessageAt < messagedBefore)))
+            .Where(t => t.TenantId == tenantId && t.State == OutreachState.Invited && t.FriendRequestSentAt < invitedBefore)
             .ToListAsync(cancellationToken);
     }
+
+    /// <summary>
+    /// Đã nhận tin bên mình mà im 2 ngày tính từ tin CUỐI bên mình gửi (tin chào / tin giới thiệu / nhân viên nhắn) → "Cần gọi điện"
+    /// (được track). Còn việc sắp chạy (giới thiệu ngay sau khi khách chấp nhận kết bạn) thì đợi việc đó xong.
+    /// </summary>
+    public async Task<IReadOnlyList<OutreachTarget>> ListSilentAsync(Guid tenantId, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        EnsureTenant(tenantId);
+        var before = now - OutreachLifecycle.SilentAfter;
+        var soon = now + OutreachLifecycle.Imminent;
+        return await Db.OutreachTargets
+            .Where(t => t.TenantId == tenantId && t.State == OutreachState.Messaged && t.FirstMessageAt < before
+                        && (t.NextActionAt == null || t.NextActionAt > soon)
+                        && !Db.Conversations.Any(c => c.TenantId == tenantId && c.ContactId == t.ContactId && c.LastMessageAt >= before))
+            .ToListAsync(cancellationToken);
+    }
+
+    /// <summary>Đang tư vấn mà khách im 14 ngày (mọi kênh) → "Đã nguội" (được track).</summary>
+    public async Task<IReadOnlyList<OutreachTarget>> ListGoneColdAsync(Guid tenantId, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        EnsureTenant(tenantId);
+        var before = now - OutreachLifecycle.ColdAfter;
+        var soon = now + OutreachLifecycle.Imminent;
+        return await Db.OutreachTargets
+            .Where(t => t.TenantId == tenantId && t.State == OutreachState.Replied
+                        && (t.NextActionAt == null || t.NextActionAt > soon)
+                        && (t.RepliedAt == null || t.RepliedAt < before)
+                        && !Db.Conversations.Any(c => c.TenantId == tenantId && c.ContactId == t.ContactId && c.LastCustomerMessageAt >= before))
+            .ToListAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Có lịch hẹn (trừ đã hủy) hoặc hóa đơn (trừ đã hủy) tạo SAU lúc dán số → "Đã thành khách" (được track). Lịch hẹn cũ của khách quen
+    /// trước lúc dán không tính.
+    /// </summary>
+    public async Task<IReadOnlyList<OutreachTarget>> ListConvertedAsync(Guid tenantId, CancellationToken cancellationToken)
+    {
+        EnsureTenant(tenantId);
+        return await Db.OutreachTargets
+            .Where(t => t.TenantId == tenantId && OutreachLifecycle.ConvertibleStates.Contains(t.State)
+                        && (Db.Appointments.Any(a => a.TenantId == tenantId && a.ContactId == t.ContactId && a.CreatedAt >= t.CreatedAt
+                                                     && a.Status != AppointmentStatus.Cancelled)
+                            || Db.Invoices.Any(i => i.TenantId == tenantId && i.ContactId == t.ContactId && i.CreatedAt >= t.CreatedAt
+                                                    && i.Status != InvoiceStatus.Void)))
+            .ToListAsync(cancellationToken);
+    }
+
+    /// <summary>Trong danh sách gọi điện 30 ngày không ai xử lý (không đổi gì, kể cả ghi "không nghe máy") → "Lưu trữ" (được track).</summary>
+    public async Task<IReadOnlyList<OutreachTarget>> ListToArchiveAsync(Guid tenantId, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        EnsureTenant(tenantId);
+        var before = now - OutreachLifecycle.ArchiveAfter;
+        return await Db.OutreachTargets
+            .Where(t => t.TenantId == tenantId && OutreachLifecycle.CallStates.Contains(t.State) && t.UpdatedAt < before)
+            .ToListAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Danh sách "Cần gọi điện": đã nguội trước (từng tư vấn), rồi im lặng, rồi không có Zalo; trong nhóm mới nhất trước. Bỏ người đã từ
+    /// chối nhận tin, người có lần dán mới hơn, người vừa nhắn lại (mọi kênh), người đã có lịch hẹn mới.
+    /// </summary>
+    public async Task<IReadOnlyList<CallListRow>> ListCallListAsync(Guid tenantId, int take, CancellationToken cancellationToken)
+    {
+        EnsureTenant(tenantId);
+        var rows = await (from t in CallListQuery(tenantId)
+                          join c in Db.Contacts.AsNoTracking() on t.ContactId equals c.Id
+                          join b in Db.OutreachBatches.AsNoTracking() on t.BatchId equals b.Id
+                          where c.TenantId == tenantId && b.TenantId == tenantId
+                          orderby (t.State == OutreachState.Cold ? 0 : t.State == OutreachState.NoReply ? 1 : 2), t.UpdatedAt descending
+                          select new
+                          {
+                              Target = t,
+                              Contact = c,
+                              b.Origin,
+                              b.ReferrerName,
+                              ConversationId = Db.Conversations.Where(v => v.TenantId == tenantId && v.ContactId == c.Id && v.ConnectionId == t.ConnectionId)
+                                  .OrderByDescending(v => v.CreatedAt).Select(v => (Guid?)v.Id).FirstOrDefault(),
+                              LastCustomerMessageAt = Db.Conversations.Where(v => v.TenantId == tenantId && v.ContactId == c.Id)
+                                  .Max(v => v.LastCustomerMessageAt),
+                              Calls = Db.ContactNotes.Count(n => n.TenantId == tenantId && n.ContactId == c.Id && n.Kind == ContactNoteKind.Call
+                                                                 && n.CreatedAt >= t.CreatedAt),
+                              LastCallAt = Db.ContactNotes.Where(n => n.TenantId == tenantId && n.ContactId == c.Id && n.Kind == ContactNoteKind.Call
+                                                                       && n.CreatedAt >= t.CreatedAt)
+                                  .Max(n => (DateTimeOffset?)n.CreatedAt),
+                          })
+            .Take(take)
+            .ToListAsync(cancellationToken);
+        return rows.Select(r => new CallListRow(
+            r.Target, r.Contact, r.Contact.Origin ?? r.Origin, r.ReferrerName, r.ConversationId, r.LastCustomerMessageAt, r.Calls, r.LastCallAt)).ToList();
+    }
+
+    /// <summary>Tin gần nhất của khách trong từng hội thoại (nội dung mã hóa) — để nhân viên biết khách đã nguội từng hỏi gì.</summary>
+    public async Task<Dictionary<Guid, string>> LastCustomerMessagesAsync(Guid tenantId, IReadOnlyCollection<Guid> conversationIds, CancellationToken cancellationToken)
+    {
+        EnsureTenant(tenantId);
+        if (conversationIds.Count == 0)
+        {
+            return [];
+        }
+
+        var rows = await Db.Messages.AsNoTracking()
+            .Where(m => m.TenantId == tenantId && conversationIds.Contains(m.ConversationId) && m.Sender == MessageSender.Customer)
+            .GroupBy(m => m.ConversationId)
+            .Select(g => g.OrderByDescending(m => m.CreatedAt).Select(m => new { m.ConversationId, m.ContentEnc }).First())
+            .ToListAsync(cancellationToken);
+        return rows.ToDictionary(r => r.ConversationId, r => r.ContentEnc);
+    }
+
+    /// <summary>Số người trong danh sách "Cần gọi điện" và số đã nguội (từng tư vấn) — cho huy hiệu menu, trang Tổng quan, Telegram.</summary>
+    public async Task<(int Total, int Warm)> CountCallListAsync(Guid tenantId, CancellationToken cancellationToken)
+    {
+        EnsureTenant(tenantId);
+        var byState = await CallListQuery(tenantId)
+            .GroupBy(t => t.State)
+            .Select(g => new { State = g.Key, Count = g.Count() })
+            .ToListAsync(cancellationToken);
+        return (byState.Sum(r => r.Count), byState.Where(r => r.State == OutreachState.Cold).Sum(r => r.Count));
+    }
+
+    /// <summary>
+    /// CHỈ môi trường dev (nút "Tua nhanh thời gian" của khung Giả lập): lùi mọi mốc giờ chăm sóc của một nick — người trong hàng đợi,
+    /// hội thoại và tin nhắn của nick — đi <paramref name="by"/>, như thể ngày đã trôi qua. Cập nhật hàng loạt (bỏ qua kiểm tra tenant của
+    /// SaveChanges) nhưng luôn lọc đúng tenant + nick. Giờ hẹn việc kế tiếp (mời kết bạn, giới thiệu) cũng lùi → thành "tới hạn"; nơi gọi
+    /// chạy job hàng đợi rồi job dọn dẹp ngay sau đó, như thể các việc đó đã chạy trong lúc thời gian trôi.
+    /// </summary>
+    public async Task ShiftTimeForDevAsync(Guid tenantId, Guid connectionId, TimeSpan by, CancellationToken cancellationToken)
+    {
+        EnsureTenant(tenantId);
+        await Db.OutreachTargets.Where(t => t.TenantId == tenantId && t.ConnectionId == connectionId).ExecuteUpdateAsync(s => s
+            .SetProperty(t => t.CreatedAt, t => t.CreatedAt - by)
+            .SetProperty(t => t.UpdatedAt, t => t.UpdatedAt - by)
+            .SetProperty(t => t.FirstMessageAt, t => t.FirstMessageAt - by)
+            .SetProperty(t => t.FriendRequestSentAt, t => t.FriendRequestSentAt - by)
+            .SetProperty(t => t.RepliedAt, t => t.RepliedAt - by)
+            .SetProperty(t => t.NextActionAt, t => t.NextActionAt - by), cancellationToken);
+        var conversations = Db.Conversations.Where(c => c.TenantId == tenantId && c.ConnectionId == connectionId);
+        await Db.Messages.Where(m => m.TenantId == tenantId && conversations.Any(c => c.Id == m.ConversationId))
+            .ExecuteUpdateAsync(s => s.SetProperty(m => m.CreatedAt, m => m.CreatedAt - by), cancellationToken);
+        await conversations.ExecuteUpdateAsync(s => s
+            .SetProperty(c => c.CreatedAt, c => c.CreatedAt - by)
+            .SetProperty(c => c.LastMessageAt, c => c.LastMessageAt - by)
+            .SetProperty(c => c.LastCustomerMessageAt, c => c.LastCustomerMessageAt - by), cancellationToken);
+    }
+
+    private IQueryable<OutreachTarget> CallListQuery(Guid tenantId) =>
+        Db.OutreachTargets.AsNoTracking()
+            .Where(t => t.TenantId == tenantId && OutreachLifecycle.CallStates.Contains(t.State)
+                        && !Db.Contacts.Any(c => c.TenantId == tenantId && c.Id == t.ContactId && c.ProactiveOptOutAt != null)
+                        && !Db.OutreachTargets.Any(o => o.TenantId == tenantId && o.ContactId == t.ContactId && o.CreatedAt > t.CreatedAt)
+                        && !Db.Conversations.Any(v => v.TenantId == tenantId && v.ContactId == t.ContactId && v.LastCustomerMessageAt > t.UpdatedAt)
+                        && !Db.Appointments.Any(a => a.TenantId == tenantId && a.ContactId == t.ContactId && a.CreatedAt >= t.CreatedAt
+                                                     && a.Status != AppointmentStatus.Cancelled));
 
     /// <summary>Người đã nhận tin đầu / lời mời mà hồ sơ khách đã từ chối nhận tin ("hủy") — để đánh dấu từ chối (được track).</summary>
     public async Task<IReadOnlyList<OutreachTarget>> ListOptedOutActiveAsync(Guid tenantId, CancellationToken cancellationToken)
@@ -179,7 +382,8 @@ public sealed class OutreachRepository(AppDbContext db, ITenantContext tenantCon
         return await (from t in Db.OutreachTargets
                       join c in Db.Contacts on t.ContactId equals c.Id
                       where t.TenantId == tenantId && c.TenantId == tenantId && c.ProactiveOptOutAt != null
-                            && (ActiveStates.Contains(t.State) || t.State == OutreachState.Replied)
+                            && (ActiveStates.Contains(t.State) || t.State == OutreachState.Replied
+                                || OutreachLifecycle.CallStates.Contains(t.State) || t.State == OutreachState.Archived)
                       select t)
             .ToListAsync(cancellationToken);
     }
@@ -203,10 +407,15 @@ public sealed class OutreachRepository(AppDbContext db, ITenantContext tenantCon
             .ToListAsync(cancellationToken);
         var invites = rows.Count(r => r.FriendRequestSentAt >= since);
 
-        // Mời trước khi khách trả lời (khách chặn người lạ): đã trả lời = đã chấp nhận. Mời SAU khi khách trả lời: xem đã là bạn chưa.
+        // Đã là bạn → chấp nhận. Lời mời ĐI TRƯỚC tin đầu (khách chặn tin người lạ: tin đầu chỉ gửi được sau khi chấp nhận) → có tin / trả lời
+        // về sau nghĩa là đã chấp nhận. Lời mời gửi SAU tin chào (2026-11-25) hoặc sau khi trả lời → chỉ tính khi đã là bạn.
         var accepted = rows.Count(r => r.FriendRequestSentAt >= since
-                                       && (r.State is OutreachState.Friend or OutreachState.Messaged or OutreachState.NoReply
-                                           || (r.State == OutreachState.Replied && (r.IsFriend || r.FriendRequestSentAt < r.RepliedAt))));
+                                       && (r.IsFriend
+                                           || r.State == OutreachState.Friend
+                                           || ((r.FirstMessageAt == null || r.FriendRequestSentAt < r.FirstMessageAt)
+                                               && (r.State is OutreachState.Messaged or OutreachState.NoReply or OutreachState.Archived
+                                                   || (r.State is OutreachState.Replied or OutreachState.Cold or OutreachState.Converted
+                                                       && r.FriendRequestSentAt < r.RepliedAt)))));
         var firstMessages = rows.Count(r => r.FirstMessageAt >= since);
         var negatives = rows.Count(r => r.State == OutreachState.Declined);
         return (invites, accepted, firstMessages, negatives);
@@ -261,7 +470,11 @@ public sealed class OutreachRepository(AppDbContext db, ITenantContext tenantCon
     public async Task<Dictionary<Guid, int>> BookedCountsAsync(Guid tenantId, DateTimeOffset now, CancellationToken cancellationToken)
     {
         EnsureTenant(tenantId);
-        OutreachState[] reached = [OutreachState.Invited, OutreachState.Friend, OutreachState.Messaged, OutreachState.Replied, OutreachState.NoReply];
+        OutreachState[] reached =
+        [
+            OutreachState.Invited, OutreachState.Friend, OutreachState.Messaged, OutreachState.Replied, OutreachState.NoReply,
+            OutreachState.Converted, OutreachState.Cold, OutreachState.Archived,
+        ];
         return await Db.OutreachTargets.AsNoTracking()
             .Where(t => t.TenantId == tenantId && t.ConnectionId != null && reached.Contains(t.State)
                         && Db.Appointments.Any(a => a.TenantId == tenantId && a.ContactId == t.ContactId && a.StartAt >= now
@@ -353,9 +566,10 @@ public sealed class OutreachLookup(AppDbContext db)
             .Distinct()
             .ToListAsync(cancellationToken);
 
+    /// <summary>Tenant còn người cần job dọn dẹp để mắt tới (đang chạy, đang tư vấn, trong danh sách gọi điện).</summary>
     public async Task<IReadOnlyList<Guid>> TenantsWithOutreachAsync(CancellationToken cancellationToken) =>
         await db.OutreachTargets.IgnoreQueryFilters()
-            .Where(t => OutreachRepository.ActiveStates.Contains(t.State) || t.State == OutreachState.Replied)
+            .Where(t => OutreachRepository.ActiveStates.Contains(t.State) || t.State == OutreachState.Replied || OutreachLifecycle.CallStates.Contains(t.State))
             .Select(t => t.TenantId)
             .Distinct()
             .ToListAsync(cancellationToken);

@@ -27,14 +27,26 @@ public enum OutreachState
     /// <summary>14 ngày không chấp nhận kết bạn → đã rút lời mời, thôi.</summary>
     Expired,
 
-    /// <summary>7 ngày sau tin đầu vẫn im → vào danh sách gọi điện (nhân viên quyết định).</summary>
+    /// <summary>
+    /// "Cần gọi điện": 2 ngày sau tin cuối bên mình gửi mà khách vẫn im (chủ dự án chốt 2026-11-25, trước là 7 ngày) → bot thôi nhắn,
+    /// vào danh sách gọi điện ở trang Cần chăm sóc. Khách trả lời muộn → tự về <see cref="Replied"/>.
+    /// </summary>
     NoReply,
 
-    /// <summary>DN dừng chăm sóc người này / người này đã đang chat với DN.</summary>
+    /// <summary>DN dừng chăm sóc người này / người này đã đang chat với DN / nhân viên gọi điện, khách không quan tâm (LastError "not_interested").</summary>
     Stopped,
 
     /// <summary>Lỗi không gửi được (ghi LastError).</summary>
     Failed,
+
+    /// <summary>"Đã thành khách": có lịch hẹn hoặc hóa đơn sau lần được dán số → rời bảng chăm sóc qua nick, CRM chăm tiếp.</summary>
+    Converted,
+
+    /// <summary>"Đã nguội": từng trả lời (đang tư vấn) rồi im 14 ngày → bot thôi nhắc, vào đầu danh sách gọi điện. Khách nhắn lại → về Replied.</summary>
+    Cold,
+
+    /// <summary>"Lưu trữ": nằm trong danh sách gọi điện 30 ngày không ai xử lý → ra khỏi danh sách (vẫn xem được ở bảng theo dõi).</summary>
+    Archived,
 }
 
 /// <summary>Một lần DN dán SĐT hàng loạt (ai dán, nguồn, xác nhận nguồn lúc nào).</summary>

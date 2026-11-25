@@ -46,13 +46,16 @@ public sealed partial class FakeChatProvider : IChatProvider
         {
             // Tin chủ động gửi người được dán SĐT: 1 đoạn ngắn (vừa lời mời kết bạn), có "trợ lý AI", không con số.
             var thanks = request.System.Contains("ĐÃ NÓI CHUYỆN", StringComparison.Ordinal);
+            var intro = request.System.Contains("ĐÃ NHẬN tin chào", StringComparison.Ordinal);
             text = JsonSerializer.Serialize(new
             {
                 outreach_messages = new[]
                 {
                     thanks
                         ? "Dạ em cảm ơn mình đã kết bạn ạ, bên em có các liệu trình chăm sóc tùy nhu cầu, cần gì mình cứ nhắn em nha."
-                        : "Dạ em chào mình, em là trợ lý AI của tiệm (giả lập). Mình có muốn em gửi thông tin phù hợp không ạ?",
+                        : intro
+                            ? "Dạ em cảm ơn mình đã đồng ý kết bạn ạ. Bên em là tiệm (giả lập), chuyên các liệu trình chăm sóc theo nhu cầu. Mình đang quan tâm phần nào để em gửi thông tin ạ?"
+                            : "Dạ em chào mình, em là trợ lý AI của tiệm (giả lập). Mình có muốn em gửi thông tin phù hợp không ạ?",
                 },
             });
         }

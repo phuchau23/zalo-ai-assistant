@@ -94,8 +94,9 @@ public sealed class ZaloPersonalAlertJob(
             stats = new NickQueueStats(
                 waiting,
                 OutreachAllocator.Eta(waiting, perDay),
-                Count(OutreachState.Invited, OutreachState.Friend, OutreachState.Messaged, OutreachState.Replied, OutreachState.NoReply, OutreachState.Declined, OutreachState.Expired),
-                Count(OutreachState.Replied),
+                Count(OutreachState.Invited, OutreachState.Friend, OutreachState.Messaged, OutreachState.Replied, OutreachState.NoReply, OutreachState.Declined,
+                    OutreachState.Expired, OutreachState.Converted, OutreachState.Cold, OutreachState.Archived),
+                Count(OutreachState.Replied, OutreachState.Cold), // từng trả lời (kể cả đã nguội); đã thành khách nằm trong "có lịch hẹn"
                 (await outreach.BookedCountsAsync(tenantId, time.GetUtcNow(), cancellationToken)).GetValueOrDefault(connectionId),
                 Count(OutreachState.NoZalo));
         }

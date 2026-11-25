@@ -74,10 +74,10 @@ public sealed partial class BotEngine(
             return Finish(request, texts, trace, vault, usage, new Decision([texts.Media], true, "media", Urgency.None, "high", null, []));
         }
 
-        if (request.CustomerMessage == InboundText.Sticker)
+        // Sticker (2026-11-25): job đã đổi thành "[Khách gửi sticker: <nghĩa>]" khi hiểu được → AI trả lời theo ngữ cảnh (quy tắc 11c).
+        if (InboundText.IsSticker(request.CustomerMessage))
         {
-            trace.Guards.Add("sticker_reply");
-            return Finish(request, texts, trace, vault, usage, new Decision([texts.Sticker], false, null, Urgency.None, "high", null, []));
+            trace.Guards.Add("sticker");
         }
 
         // 2. Tìm kiến thức (câu đã che — không gửi dữ liệu cá nhân cho dịch vụ tạo vector). Tin cảm ơn/tạm biệt: không cần dữ liệu.
@@ -587,8 +587,6 @@ internal sealed class BotTexts(BotProfile profile, string salutation, string urg
     public string Urgent => Fill(urgentReply);
 
     public string Media => Fill("Dạ {bot} đã nhận được tin của {khach}. Hiện {bot} chưa xem được hình ảnh, âm thanh hay tệp đính kèm, {khach} mô tả giúp {bot} bằng chữ nhé. {bot} cũng đã báo nhân viên của {ten_doanh_nghiep} hỗ trợ {khach} ạ.");
-
-    public string Sticker => Fill("Dạ, {bot} có thể hỗ trợ gì thêm cho {khach} ạ?");
 
     /// <summary>Câu dự phòng khi bot nói về cơ thể mà quên mời kiểm tra trực tiếp — mời về chuyên viên của DN, không đẩy khách đi nơi khác.</summary>
     public string MedicalDisclaimer => Fill("Nếu {khach} thấy cảm giác này kéo dài hoặc khó chịu hơn, {khach} ghé {ten_doanh_nghiep} để chuyên viên bên {bot} kiểm tra trực tiếp cho {khach} nha.");

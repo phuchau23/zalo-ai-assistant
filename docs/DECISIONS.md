@@ -652,3 +652,62 @@ Việc sau (nếu cần): đối chiếu hóa đơn thật hằng tháng và ph�
   nick mất kết nối thì bỏ qua (đã có tin báo riêng). Nội dung tin ở `ZaloPersonalAlertText` (hàm thuần): chỉ tên nick + con số,
   không tên/SĐT khách. Link trong mọi tin báo nick đổi từ `/channels` sang `/zalo-personal/{id}` (trang Kênh chỉ còn OA).
 - Cần DN đã kết nối Telegram (Thiết lập trợ lý → chat id); chưa kết nối thì không gửi.
+
+## 2026-11-23 — Hộp thư: tin mới nhất lên đầu (chủ dự án chốt)
+
+- Bỏ luật cũ (2026-10-04) "ca chờ người lâu nhất lên đầu": khi test, các ca bỏ dở nhiều ngày (chat thử chờ 49 ngày) chiếm đầu danh
+  sách, khách vừa nhắn bị đẩy xuống giữa. Giờ mọi hội thoại xếp theo tin mới nhất như Zalo/Messenger (`ListInboxAsync`).
+- Ca cần người vẫn nhận ra qua nhãn "Cần bạn"/"Khẩn cấp" + thời gian chờ, tab **Cần xử lý** (lọc riêng, huy hiệu số trên menu),
+  nhắc chờ lâu và Telegram như trước. Test: `Newest_message_comes_first_even_above_old_cases_waiting_for_staff`.
+
+## 2026-11-25 — Nick cá nhân: nhắn trước rồi mới mời kết bạn; chấp nhận → một tin giới thiệu (chủ dự án chốt)
+
+- **Thứ tự mới cho người mới:** tìm được Zalo → gửi tin chào ngay (không chờ kết bạn) → 2–5 phút sau gửi MỘT lời mời kết bạn
+  (lời ngắn `InviteAfterReply`). Chỉ khi Zalo chặn tin người lạ mới mời kèm lời chào như cũ. Thay luật 2026-11-15 "còn lượt mời
+  thì kết bạn trước".
+- **Hết lượt mời trong ngày:** vẫn nhắn, lời mời để hôm khác (job `MessagedAsync` thử lại khi còn lượt). Giữ nguyên các chốt an
+  toàn: trần mời người lạ (`ColdInviteCap`), cách ≥ 10 phút giữa 2 lời mời, phanh tự động.
+- **Khách chấp nhận mà chưa trả lời:** đúng MỘT tin `AcceptedIntro` (khóa Redis `zp:accepted-intro:{id}` 180 ngày): cảm ơn +
+  giới thiệu doanh nghiệp + một câu hỏi mở. Chủ dự án: "mình chủ động nhắn để giới thiệu, giống kiếm khách" → cấm kiểu "cần gì cứ
+  nhắn em" (kiểm tra `passive_close`, viết lại / dùng mẫu). Khách đã trả lời rồi mới chấp nhận → không gửi thêm (bot đang tư vấn).
+- **Đo tỷ lệ chấp nhận cho phanh:** tính cả lời mời gửi sau tin chào (`RatesAsync`), không chỉ lời mời kiểu cũ.
+- Còn mở: lời mời gửi sau tin chào chưa tự rút sau 14 ngày.
+
+## 2026-11-25 — Hiểu sticker khách gửi: chữ khóa của Zalo + AI xem hình, lưu nghĩa theo sticker (chủ dự án chọn)
+
+- Trước đây mọi sticker → câu cố định "…có thể hỗ trợ gì thêm ạ?" (không gọi AI). Nay sticker thành tin
+  "[Khách gửi sticker: <nghĩa>]" và đi luồng AI bình thường (prompt quy tắc 11c: hiểu như lời khách — giơ ngón cái sau câu hỏi
+  xin phép = đồng ý).
+- **Lấy nghĩa (Cache-Aside):** Redis `sticker:meaning:{id}` 180 ngày → có thì dùng; chưa có → tải hình (chỉ https, tên miền, không
+  IP/localhost, ≤ 1MB, image/*) → Gemini xem hình (phần `inlineData`, đã kiểm tra docs API 2026-11-25) tả nghĩa ≤ 80 ký tự → lưu.
+  Không tải/không gọi được AI → dùng chữ khóa Zalo (lưu 1 ngày); không có gì → "[Khách gửi sticker]". Chi phí ghi `usage_records`.
+- Không đổi schema: thông tin sticker của tin (id, chữ khóa, link hình) giữ ở Redis `sticker:msg:{messageId}` 2 ngày; job xử lý
+  tin đọc ra, sửa `content_enc` của tin khách thành câu có nghĩa.
+- **An toàn:** sticker KHÔNG BAO GIỜ tự chốt lịch hẹn (bỏ qua bước xác nhận đặt lịch, prompt `booking = null`) — đúng luật "AI chỉ
+  đề xuất, hệ thống mới chốt".
+- Nguồn: nick cá nhân — sidecar gọi `getStickersDetail` của zca-js (giới hạn 3 giây, nhớ 500 sticker; lỗi → gửi tin không kèm
+  sticker), sự kiện gửi lên API giữ đúng thứ tự; OA — `payload.id` + `url` của attachment. **Chưa kiểm chứng với nick thật:** dạng
+  `content` sticker của zca-js và nghĩa trường `text` của `getStickersDetail` (zpt.12 trong sổ tay test).
+- Eval N29 (giơ ngón cái sau câu xin phép → gửi giá). Giả lập: 4 sticker giả (ok, cảm ơn, haha, không chữ khóa) + nút trong khung Giả lập.
+
+## 2026-11-25 — Vòng đời số điện thoại chăm sóc qua nick + danh sách "Cần gọi điện" (chủ dự án chốt)
+
+Chủ dự án hỏi: dán 100 số/ngày thì bot "chăm cộng dồn" mãi sao? Trả lời: mỗi số chỉ được chạm 1 lần (chào + mời + giới thiệu), nhưng có
+4 lỗ hổng — dán lại số cũ là bị nhắn lại, "Đang tư vấn" không bao giờ kết thúc, danh sách gọi chỉ tăng, tin mới và tin trả lời dùng chung
+hạn mức. Chủ dự án duyệt cả gói (máy trạng thái, `OutreachLifecycle`):
+- **Im 2 ngày** (trước là 7) tính từ tin CUỐI bên mình gửi → `NoReply` "Cần gọi điện". Khách trả lời muộn → tự về "Đang tư vấn";
+  chấp nhận kết bạn muộn → một tin giới thiệu, đếm lại 2 ngày.
+- **Đang tư vấn im 14 ngày** (mọi kênh) → `Cold` "Đã nguội", đứng đầu danh sách gọi. **Có lịch hẹn / hóa đơn** tạo sau lúc dán số →
+  `Converted` "Đã thành khách" (CRM chăm tiếp). **30 ngày trong danh sách gọi không ai xử lý** → `Archived` "Lưu trữ".
+- **Danh sách "Cần gọi điện"** ở trang Cần chăm sóc (`/care/call-list`): đã nguội → im lặng → không có Zalo; SĐT đầy đủ để bấm gọi
+  (xem danh sách ghi audit `care.call_list_viewed`). Kết quả: Quan tâm (về Đang tư vấn, tầng Quan tâm) / Không quan tâm (Đã dừng +
+  `not_interested`, từ chối nhận tin chủ động nguồn `staff_call`, tầng Không tiềm năng — KHÔNG tính vào phanh tự động vì không phải tín
+  hiệu Zalo) / Không nghe máy (giữ lại, đếm lại 30 ngày). Mỗi kết quả là một ghi chú loại mới `call` trong nhật ký chăm sóc.
+- **Nhắc:** huy hiệu menu Cần chăm sóc = gợi ý mở + số cần gọi (`/care/count` thêm `toCall`, `toCallWarm`); ô "Số cần gọi điện" ở
+  Tổng quan; Telegram mỗi ngày một tin lúc job dọn dẹp chạy lần đầu trong khung giờ nhắn (chỉ con số + link `/care#call-list`).
+- **Danh sách tạm khóa:** số đã liên hệ mà chưa từng trả lời dán lại bị bỏ qua 90 ngày (`contacted_recently` + ngày dán lại được), đã
+  liên hệ 2 lần → chặn hẳn (`contacted_twice`). Không có Zalo không tính là đã liên hệ.
+- **Dành lượt tin (Backpressure):** người mới (tin chào, mời người lạ) chỉ dùng 70% "Tổng tin mỗi ngày" của nick; quá mức → hẹn mai, khách
+  đang chat luôn còn lượt. Trang nick báo "tạm ngưng nhắn người mới" (`holdingForReplies`). Ô dán SĐT cảnh báo khi hàng chờ > 14 ngày.
+- Không migration: trạng thái lưu dạng chữ, loại ghi chú `call` cũng vậy. Dev: nút "Tua nhanh thời gian" (+1/+3/+15/+31 ngày) trong
+  khung Giả lập (chỉ Development + sidecar giả lập) lùi mọi mốc giờ của nick rồi chạy job hàng đợi + dọn dẹp ngay.

@@ -15,7 +15,7 @@
     "Phải có đủ cửa sổ API, Worker, Portal, ZaloAi Personal :4100. Thiếu Worker là bot im lặng.",
     "Trước khi đụng Zalo cá nhân: xem đang ở chế độ Nick thật hay Giả lập (mục modes). Hiện tại máy đang ở Nick thật.",
     "Trang quản trị: http://localhost:3000. Trang khách: http://localhost:3000/phone-test (điện thoại cùng Wi-Fi: http://<IP máy>:3000/phone-test, IP xem bằng ipconfig dòng IPv4 của Wi-Fi).",
-    "Nút bút ✎ trên trang khách = mở cuộc chat mới = một khách mới.",
+    "Nút bút ✎ trên trang khách = mở cuộc chat mới = một khách mớ  i.",
     "Test việc bot tự nhắn (chăm sóc, dán SĐT) trong 08:00–20:00. Ngoài giờ bot chỉ trả lời, không tự nhắn.",
     "Bot trả lời chat thử trong 2–5 giây, qua nick cá nhân 15–30 giây. Quá 30 giây: chụp cửa sổ Worker gửi Claude.",
     "AI: Groq gpt-oss-120b chính, Gemini dự phòng. Cả hai hết lượt thì bot chuyển nhân viên mọi câu: xem cửa sổ Worker, đừng sửa dữ liệu.",
@@ -182,8 +182,8 @@
           "title": "Thẻ “Thiết lập hệ thống” chỉ việc còn thiếu",
           "who": "Chủ DN",
           "where": "Tổng quan",
-          "steps": ["Đăng nhập chủ Shop Test.", "Xem thẻ Thiết lập hệ thống.", "Bấm một việc (vd link chính sách), làm xong, quay lại Tổng quan."],
-          "expect": ["Mỗi việc dẫn tới đúng trang.", "Việc đã làm biến khỏi thẻ; làm hết thì thẻ tự ẩn."],
+          "steps": ["Đăng nhập chủ Shop Test, bấm Tổng quan (mục đầu thanh bên).", "Cuộn xuống dưới khối Hôm nay: thẻ “Thiết lập hệ thống” (biểu tượng tên lửa, “Đã xong x/7 bước”, thanh %).", "Bấm một việc (vd Thông tin doanh nghiệp → điền link chính sách), làm xong, quay lại Tổng quan."],
+          "expect": ["Mỗi việc dẫn tới đúng trang.", "Việc đã làm có dấu ✓ và gạch ngang, số bước + % tăng; ô viền đậm chuyển sang việc kế tiếp; làm hết 7 bước thì thẻ tự ẩn."],
           "tags": []
         }
       ]
@@ -315,10 +315,24 @@
         {
           "id": "c1.7",
           "title": "Bật/tắt quyền chi tiết cho nhân viên",
-          "who": "Nhân viên",
-          "where": "Cài đặt → Tài khoản & phân quyền → Quyền",
-          "steps": ["Chủ: nhanvien1 → Quyền → bật Quản lý danh mục bán, chi nhánh Q12 → Lưu.", "Tab nhân viên: sửa giá một dịch vụ ở Danh mục; mở Cài đặt → Chi nhánh & giờ mở cửa; mở Nhân viên.", "Chủ tắt Quản lý danh mục bán → nhân viên tải lại."],
-          "expect": ["Nhân viên sửa được giá ở Danh mục.", "Chi nhánh chỉ thấy Q12, không có nút sửa; trang Nhân viên không có nút thêm/sửa.", "Tắt quyền xong nhân viên mất nút sửa Danh mục."],
+          "who": "Chủ DN + Nhân viên (2 cửa sổ)",
+          "where": "Cài đặt → Tài khoản & phân quyền → nút Quyền",
+          "steps": [
+            "Mở 2 cửa sổ: cửa sổ thường đăng nhập CHỦ (owner@khoahochuyetdao.local); cửa sổ ẩn danh (Edge: Ctrl+Shift+N) đăng nhập NHÂN VIÊN nhanvien1@khoahochuyetdao.local / NhanVien@2026 (quên mật khẩu: chủ bấm Cấp lại mật khẩu ở dòng nhanvien1). Cùng một cửa sổ thì đăng nhập người này sẽ đá người kia ra.",
+            "Cửa sổ nhân viên — xem TRƯỚC khi cấp quyền: Quản lý → Danh mục, bấm một dịch vụ.",
+            "Cửa sổ chủ: Cài đặt → Tài khoản & phân quyền → dòng nhanvien1 → nút Quyền (biểu tượng khiên). Hộp “Quyền của …”: ô Chi nhánh làm việc chọn “Chi nhánh Quận 12”; mục Quyền thêm chỉ tích “Quản lý danh mục bán” → Lưu quyền.",
+            "Cửa sổ nhân viên: bấm F5. Danh mục → bấm một dịch vụ → đổi Giá (đ), nhớ giá cũ → Lưu.",
+            "Cửa sổ nhân viên: Cài đặt → Chi nhánh & giờ mở cửa; rồi Quản lý → Nhân viên.",
+            "Cửa sổ chủ: mở lại nút Quyền của nhanvien1 → bỏ tích “Quản lý danh mục bán” → Lưu quyền. Cửa sổ nhân viên: F5 trang Danh mục.",
+            "Dọn: chủ trả giá dịch vụ về giá cũ; mở Quyền của nhanvien1, Chi nhánh làm việc chọn lại “Mọi chi nhánh” → Lưu quyền."
+          ],
+          "expect": [
+            "Trước khi cấp: Danh mục có dòng “Bạn chỉ xem được danh mục…”, bấm dịch vụ chỉ xem, không có nút Lưu.",
+            "Lưu quyền xong: dòng nhanvien1 hiện “1 quyền” và “Chi nhánh Quận 12”.",
+            "Sau F5: dòng “chỉ xem” ở Danh mục biến mất; hộp dịch vụ tên “Sửa dịch vụ”, đổi giá Lưu được.",
+            "Chi nhánh & giờ mở cửa CHỈ hiện Chi nhánh Quận 12 (không thấy chi nhánh khác), ô bị khóa, dòng “Bạn chỉ xem được chi nhánh…”. Trang Nhân viên không có nút Thêm nhân viên, có dòng “Bạn chỉ xem được danh sách…”.",
+            "Bỏ quyền + F5: Danh mục quay lại “Bạn chỉ xem được danh mục…”, không sửa được nữa (không cần đăng xuất)."
+          ],
           "tags": ["safety"]
         }
       ]
@@ -606,7 +620,7 @@
           "who": "Chủ DN",
           "where": "Vận hành → Hộp thư",
           "steps": ["Mở một cuộc chat → Giao cho nhân viên → nhanvien1.", "Tab nhân viên: Hộp thư → Của tôi.", "Thử các tab Cần bạn / Của tôi / Nhân viên / Bot / Tất cả và ô tìm."],
-          "expect": ["Cuộc chat có ở Của tôi của nhanvien1; đầu khung ghi “<tên> đang xử lý”.", "Mỗi tab lọc đúng; tìm theo tên ra đúng người."],
+          "expect": ["Cuộc chat có ở Của tôi của nhanvien1; đầu khung ghi “<tên> đang xử lý”.", "Mỗi tab lọc đúng; tìm theo tên ra đúng người.", "Danh sách xếp theo tin mới nhất: khách vừa nhắn nằm trên cùng, kể cả khi còn ca “Cần bạn” cũ hơn (ca đó vẫn có nhãn màu và nằm ở tab Cần xử lý)."],
           "tags": []
         },
         {
@@ -1490,6 +1504,34 @@
           "expect": ["15–30 giây bot trả lời trên Zalo, giá 550.000đ (đang là bạn bè thì vào Người quen nhắn → Đây là khách).", "Đoạn cũ không gửi chen; bot trả lời gộp.", "Bot xác nhận lịch; Lịch hẹn có lịch; tab Đang chăm sóc hiện giờ hẹn; khách Đã chốt.", "Chủ nick nhắn tay → Hộp thư có dải Bot đang tạm im."],
           "tags": ["real-nick"],
           "warn": "Nick thật. Chỉ dùng nick của chính bạn làm khách. Đừng nhắn “hủy”."
+        },
+        {
+          "id": "zpt.10",
+          "title": "Khách gửi sticker → bot hiểu nghĩa (giả lập)",
+          "who": "Khách (giả lập)",
+          "where": "Trang Nick A → khung Giả lập + Hộp thư",
+          "steps": ["Khung Giả lập: uid fake-khach-sticker, nội dung: bên em có massage không → Gửi tin của khách. Đợi bot trả lời (bot thường hỏi có muốn gửi thông tin không).","Bấm Giơ ngón cái.","Bấm Cảm ơn, rồi Không rõ nghĩa.","Hộp thư → mở hội thoại fake-khach-sticker."],
+          "expect": ["Sau Giơ ngón cái: bot hiểu là đồng ý → gửi luôn thông tin (có giá nếu DN có dữ liệu), không hỏi lại, không nhắc chữ “sticker”.","Cảm ơn: bot đáp ngắn, ấm áp. Không rõ nghĩa: bot đáp thân thiện rồi hỏi khách cần gì. Không còn câu cố định “…có thể hỗ trợ gì thêm ạ?” cho mọi sticker.","Hộp thư hiện tin khách dạng “[Khách gửi sticker: sticker “ok”]”, “[Khách gửi sticker: sticker “cảm ơn”]”; sticker Không rõ nghĩa giữ “[Khách gửi sticker]”.","An Phát chưa nạp dữ liệu (xem mục Giả lập) thì bot chuyển nhân viên khi cần giá — phần hiểu sticker vẫn đạt."],
+          "tags": ["fake-mode","new"]
+        },
+        {
+          "id": "zpt.11",
+          "title": "Sticker không tự đặt lịch",
+          "who": "Khách (giả lập)",
+          "where": "Trang Nick A → khung Giả lập + Lịch hẹn",
+          "steps": ["Cần DN bật Đặt lịch qua chat (Cài đặt → Lịch hẹn & bán hàng). Khung Giả lập, uid fake-khach-lich: mai 3 giờ chiều cho chị làm massage 60 phút → Gửi tin của khách.","Bot hỏi lại / đề nghị giờ → bấm Giơ ngón cái.","Mở Lịch hẹn ngày mai."],
+          "expect": ["Không có lịch hẹn nào được tạo chỉ vì sticker; bot hỏi lại khách bằng lời (vd xác nhận giờ, dịch vụ).","Khách nhắn rõ bằng chữ (“ok em đặt giúp chị”) thì bot mới đi tiếp luồng đặt lịch như bình thường."],
+          "tags": ["fake-mode","safety","new"]
+        },
+        {
+          "id": "zpt.12",
+          "title": "Nick thật: gửi sticker thật",
+          "who": "Khách (điện thoại)",
+          "where": "Zalo nick chính của bạn → nick phụ “Remi Hau”",
+          "steps": ["Nick chính nhắn: bên em có liệu trình cổ vai gáy không. Đợi bot trả lời.","Gửi một sticker giơ ngón cái / gật đầu của Zalo.","Gửi tiếp một sticker cười, rồi gửi lại đúng sticker giơ ngón cái lần nữa.","Trang quản trị → Hộp thư → mở hội thoại."],
+          "expect": ["Hộp thư hiện tin khách dạng “[Khách gửi sticker: giơ ngón cái – đồng ý…]” (AI xem hình tả nghĩa), bot trả lời đúng ngữ cảnh (đồng ý → gửi thông tin).","Sticker gửi lại lần hai hiểu ngay (đã lưu nhớ, không tốn thêm tiền AI).","Nếu Hộp thư chỉ hiện “[Khách gửi sticker]” (không có nghĩa) → chụp màn hình + cửa sổ ZaloAi Personal gửi Claude: thư viện zca-js gửi sticker khác dạng mình dự đoán."],
+          "tags": ["real-nick","new"],
+          "warn": "Nick thật. Chỉ dùng nick của chính bạn làm khách. Đừng nhắn “hủy”."
         }
       ]
     },
@@ -1600,11 +1642,11 @@
         },
         {
           "id": "zpo.3",
-          "title": "Kết bạn trước khi còn lượt mời",
+          "title": "Nhắn trước, vài phút sau mời kết bạn, chấp nhận thì giới thiệu",
           "who": "Chủ DN",
           "where": "Zalo cá nhân → Đang chăm sóc + Hộp thư",
-          "steps": ["Đợi 1–2 phút (bot chạy mỗi phút một lượt).", "Xem tab Đang chăm sóc.", "Hộp thư → hội thoại chị Lan."],
-          "expect": ["Chị Lan: Đã mời kết bạn → (giả lập tự chấp nhận sau ~2 giây) Đã kết bạn → Đã nhắn, chờ trả lời.", "Tin đầu sau khi chấp nhận: cảm ơn + báo trợ lý AI + nói sơ bên mình hỗ trợ gì + hỏi xin phép; nhắc Chị Hoa giới thiệu; KHÔNG có giá.", "0900124000: Không có Zalo – gọi điện."],
+          "steps": ["Đợi 1–2 phút (bot chạy mỗi phút một lượt), xem tab Đang chăm sóc và Hộp thư → hội thoại chị Lan.","Đợi thêm 2–5 phút (lời mời kết bạn), giả lập tự chấp nhận sau ~2 giây.","Đợi thêm ~5 phút (hội thoại yên), xem lại Hộp thư chị Lan."],
+          "expect": ["Bước 1: chị Lan Đã nhắn, chờ trả lời — tin chào: báo trợ lý AI, nhắc Chị Hoa giới thiệu, hỏi xin phép gửi thông tin, KHÔNG giá. Chưa có lời mời kết bạn.","Bước 2: có lời mời kết bạn (câu ngắn “…trợ lý AI của … đang nhắn với chị ạ. Kết bạn để em tiện gửi thông tin…”); trạng thái vẫn Đã nhắn, chờ trả lời.","Bước 3: đúng MỘT tin mới: cảm ơn đã kết bạn + giới thiệu doanh nghiệp (các nhóm dịch vụ) + một câu hỏi mở (vd chị quan tâm phần nào để em gửi thông tin). KHÔNG có câu kiểu “cần gì cứ nhắn em”, không chào lại từ đầu, không giá.","Anh Bình được mời sau chị Lan ít nhất 10 phút (giãn cách an toàn giữa 2 lời mời). 0900124000: Không có Zalo – gọi điện."],
           "tags": ["fake-mode", "new"]
         },
         {
@@ -1630,8 +1672,8 @@
           "title": "Không nhắn tin thứ hai khi khách im",
           "who": "Chủ DN",
           "where": "Hộp thư → hội thoại anh Bình",
-          "steps": ["Anh Bình đang Đã nhắn, chờ trả lời: không trả lời gì.", "Đợi 10–15 phút."],
-          "expect": ["Bot không gửi thêm tin nào (7 ngày im thì chuyển Im lặng – gọi điện)."],
+          "steps": ["Anh Bình đang Đã nhắn, chờ trả lời: không trả lời gì.","Đợi 20–30 phút."],
+          "expect": ["Hộp thư anh Bình chỉ có: tin chào + (nếu đã chấp nhận kết bạn) đúng MỘT tin cảm ơn + giới thiệu. Không có tin thứ ba.","2 ngày im thì chuyển Cần gọi điện (nhóm “Vòng đời số & danh sách gọi”)."],
           "tags": ["fake-mode", "safety"]
         },
         {
@@ -1723,10 +1765,110 @@
           "title": "Nick thật: bot tự đi chào người đã đồng ý",
           "who": "Chủ DN",
           "where": "Zalo cá nhân → Thêm số (owner@khoahochuyetdao.local)",
-          "steps": ["Giao cho một nick (Remi Hau) → dán <SĐT nick chính của bạn>, <tên bạn> → nguồn Khách cũ đã dùng dịch vụ → tích xác nhận → Bắt đầu chăm sóc.", "Đợi 1–2 phút, chấp nhận lời mời trên nick chính.", "Trả lời: có"],
-          "expect": ["Nick chính nhận lời mời kết bạn kèm lời chào (báo trợ lý AI, nêu lý do, không giá) → Đã mời kết bạn.", "Chấp nhận → tin cảm ơn + giới thiệu sơ liệu trình + hỏi xin phép → Đã nhắn, chờ trả lời.", "Trả lời “có” → bot gửi dịch vụ kèm giá, không hỏi lại → Đang tư vấn.", "Báo Không có Zalo → bật cho người khác tìm thấy bằng số điện thoại trên nick chính."],
+          "steps": ["Giao cho một nick (Remi Hau) → dán <SĐT nick chính của bạn>, <tên bạn> → nguồn Khách cũ đã dùng dịch vụ → tích xác nhận → Bắt đầu chăm sóc.","Đợi 1–2 phút: nick chính nhận tin chào. Đợi tiếp 2–5 phút: nhận lời mời kết bạn → chấp nhận.","Đợi ~5 phút, rồi trả lời: có"],
+          "expect": ["Tin chào tới trước (báo trợ lý AI, nêu lý do, không giá) → Đã nhắn, chờ trả lời; vài phút sau mới có lời mời kết bạn.","Nick chính chỉ nhận tin từ bạn bè thì tin chào bị chặn → nhận lời mời kết bạn kèm lời chào thay vào đó (vẫn đạt).","Chấp nhận → đúng MỘT tin cảm ơn + giới thiệu doanh nghiệp + câu hỏi mở (không “cần gì cứ nhắn em”).","Trả lời “có” → bot gửi dịch vụ kèm giá, không hỏi lại → Đang tư vấn. Báo Không có Zalo → bật cho người khác tìm thấy bằng số điện thoại trên nick chính."],
           "tags": ["real-nick"],
           "warn": "Nhắn người thật. Chỉ dán số của chính bạn hoặc người đã đồng ý. Đừng nhắn “hủy” từ nick khách."
+        }
+      ]
+    },
+    {
+      "id": "zalo-ca-nhan-vong-doi",
+      "title": "Zalo cá nhân: vòng đời số & danh sách Cần gọi điện",
+      "summary": "Số im 2 ngày vào danh sách gọi, đang tư vấn im 14 ngày thành đã nguội, có lịch hẹn thành khách, 30 ngày không ai xử lý thì lưu trữ; dán lại số cũ bị chặn 90 ngày. Dùng nút Tua nhanh thời gian để khỏi chờ.",
+      "minutes": 40,
+      "cases": [
+        {
+          "id": "zvd.1",
+          "title": "Im 2 ngày → Cần gọi điện",
+          "who": "Chủ DN",
+          "where": "Zalo cá nhân → Nick A (khung Giả lập) + Cần chăm sóc + Tổng quan",
+          "steps": ["Thêm số cho Nick A: 0900127001, chị Mai và 0900127002, anh Tùng → nguồn Khách cũ → tích xác nhận → Bắt đầu chăm sóc. Đợi 1–2 phút (cả hai Đã nhắn, chờ trả lời).","Trang Nick A → khung Giả lập → Tua nhanh thời gian → +3 ngày.","Xem tab Đang chăm sóc, rồi trang Cần chăm sóc, rồi Tổng quan."],
+          "expect": ["Chị Mai, anh Tùng: Cần gọi điện (bot thôi nhắn).","Cần chăm sóc có khu “Cần gọi điện” kèm số: mỗi người có SĐT đầy đủ (bấm trên điện thoại là gọi), “Đã nhắn chào dd/mm · khách chưa trả lời”, nick đã nhắn, nguồn. 0900124000 (zpo.3) nằm cuối với nhãn “Không có Zalo”.","Menu Cần chăm sóc có huy hiệu số; Tổng quan có ô “Số cần gọi điện”."],
+          "tags": ["fake-mode","new"],
+          "warn": "Tua nhanh dồn thời gian của MỌI người trong nick đó (kể cả người các bước trước). Làm nhóm này sau nhóm Zalo cá nhân: bot tự đi chăm sóc. Bấm trong khung giờ được nhắn (08:00–20:00)."
+        },
+        {
+          "id": "zvd.2",
+          "title": "Khách trả lời muộn tự rời danh sách gọi",
+          "who": "Khách (giả lập)",
+          "where": "Nick A → khung Giả lập + Cần chăm sóc",
+          "steps": ["Khung Giả lập: uid fake-0900127001, tên chị Mai, nội dung: giờ chị mới đọc, gói cổ vai gáy bao nhiêu em → Gửi tin của khách.","Tải lại trang Cần chăm sóc."],
+          "expect": ["Chị Mai về Đang tư vấn, bot trả lời như khách bình thường.","Khu Cần gọi điện không còn chị Mai (nhân viên không gọi người đang chat với bot)."],
+          "tags": ["fake-mode","new"]
+        },
+        {
+          "id": "zvd.3",
+          "title": "Đang tư vấn im 14 ngày → Đã nguội, đứng đầu danh sách",
+          "who": "Chủ DN",
+          "where": "Nick A → khung Giả lập + Cần chăm sóc + Tổng quan",
+          "steps": ["Tua nhanh thời gian → +15 ngày.","Xem Đang chăm sóc, khu Cần gọi điện, ô Số cần gọi điện ở Tổng quan."],
+          "expect": ["Chị Mai: Đã nguội – gọi điện.","Khu Cần gọi điện: chị Mai ĐỨNG ĐẦU, nhãn “Từng tư vấn – đã nguội”, dòng “Khách từng hỏi: “giờ chị mới đọc, gói cổ vai gáy…” · nhắn lần cuối dd/mm”; nút Xem hội thoại mở đúng Hộp thư.","Ô Tổng quan ghi “1 khách từng tư vấn — gọi trước”."],
+          "tags": ["fake-mode","new"]
+        },
+        {
+          "id": "zvd.4",
+          "title": "Bấm kết quả cuộc gọi",
+          "who": "Chủ DN",
+          "where": "Cần chăm sóc → Cần gọi điện",
+          "steps": ["Anh Tùng → Không nghe máy.","Chị Mai → Quan tâm.","0900124000 → Không quan tâm.","Mở hồ sơ khách của 0900124000 → Nhật ký chăm sóc. Rồi Zalo cá nhân → Thêm số → dán 0900124000 → xem Xem trước."],
+          "expect": ["Anh Tùng vẫn trong danh sách, có dòng cam “Đã gọi 1 lần · lần cuối dd/mm hh:mm”.","Chị Mai rời danh sách, về Đang tư vấn, tầng khách Quan tâm.","0900124000 rời danh sách, Đang chăm sóc ghi Đã dừng; Nhật ký chăm sóc có “Gọi điện: Không quan tâm”; dán lại bị bỏ qua “Khách đã từ chối nhận tin”.","Mỗi lần bấm có câu báo “Đã ghi: …” phía trên danh sách."],
+          "tags": ["fake-mode","new","safety"]
+        },
+        {
+          "id": "zvd.5",
+          "title": "Đặt lịch → Đã thành khách",
+          "who": "Chủ DN",
+          "where": "Lịch hẹn + Nick A → khung Giả lập + Zalo cá nhân",
+          "steps": ["Lịch hẹn → Đặt lịch cho anh Tùng (ngày mai, dịch vụ bất kỳ) → Lưu.","Nick A → Tua nhanh +1 ngày (chạy dọn dẹp ngay; không thì đợi tối đa 1 giờ).","Xem Đang chăm sóc, khu Cần gọi điện, thẻ nick."],
+          "expect": ["Anh Tùng: Đã thành khách, rời danh sách gọi.","Thẻ / trang nick vẫn đếm anh Tùng trong “có lịch hẹn”."],
+          "tags": ["fake-mode","new"]
+        },
+        {
+          "id": "zvd.6",
+          "title": "30 ngày không ai xử lý → Lưu trữ",
+          "who": "Chủ DN",
+          "where": "Nick A → khung Giả lập + Cần chăm sóc",
+          "steps": ["Thêm số: 0900127003, chị Ngọc → Bắt đầu → đợi 1–2 phút.","Tua nhanh +3 ngày (chị Ngọc vào Cần gọi điện), rồi Tua nhanh +31 ngày.","Xem Đang chăm sóc và Cần chăm sóc."],
+          "expect": ["Chị Ngọc: Lưu trữ, không còn trong khu Cần gọi điện.","Bấm “Không nghe máy” trong 30 ngày thì đếm lại từ đầu (không bị lưu trữ)."],
+          "tags": ["fake-mode","new"]
+        },
+        {
+          "id": "zvd.7",
+          "title": "Dán lại số đã liên hệ: chặn 90 ngày, tối đa 2 lần",
+          "who": "Chủ DN",
+          "where": "Zalo cá nhân → Thêm số (Nick A) + khung Giả lập",
+          "steps": ["Thêm số: dán 0900127003 → xem Xem trước.","Tua nhanh +91 ngày → dán lại 0900127003 → tích xác nhận → Bắt đầu chăm sóc → đợi 1–2 phút.","Tua nhanh +91 ngày → dán lại 0900127003 → xem Xem trước."],
+          "expect": ["Lần 1: bỏ qua “Đã liên hệ trong 90 ngày qua, chưa trả lời · dán lại được từ dd/mm”.","Lần 2 (sau 91 ngày): nhận số, bot nhắn chào lần cuối.","Lần 3: bỏ qua “Đã liên hệ 2 lần không trả lời — không nhắn chủ động nữa”."],
+          "tags": ["fake-mode","new","safety"]
+        },
+        {
+          "id": "zvd.8",
+          "title": "Dành lượt tin cho khách đang chat",
+          "who": "Chủ DN",
+          "where": "Nick A → Nhịp gửi + Thêm số + thẻ nick",
+          "steps": ["Nick A → Nhịp gửi → Tùy chỉnh → Tổng tin mỗi ngày = 10 → Lưu (người mới chỉ được dùng 7 tin; hôm nay nick đã gửi nhiều tin ở các bước trước).","Thêm số: 0900127004 → Bắt đầu → đợi 2 phút.","Khung Giả lập: uid fake-0900127001 (chị Mai) nhắn: em còn đó không","Đổi lại An toàn."],
+          "expect": ["0900127004 vẫn Chờ tới lượt (hẹn mai); thẻ nick ghi “Hôm nay đã dùng gần hết lượt tin: tạm ngưng nhắn người mới tới mai, dành lượt trả lời khách đang chat.”","Chị Mai vẫn được bot trả lời (khi chưa chạm hẳn 10 tin/ngày).","Hàng chờ dài hơn 14 ngày thì ô dán SĐT cảnh báo “Hàng chờ đã đủ cho khoảng N ngày…”."],
+          "tags": ["fake-mode","new"],
+          "warn": "Nếu hôm nay nick gửi chưa tới 7 tin thì số mới vẫn được nhắn — đạt; thử lại với Tổng tin mỗi ngày nhỏ hơn."
+        },
+        {
+          "id": "zvd.9",
+          "title": "Telegram mỗi sáng: số cần gọi",
+          "who": "Chủ DN",
+          "where": "Nhóm Telegram của DN",
+          "steps": ["DN đã kết nối Telegram, khu Cần gọi điện đang có người.","Trong khung giờ được nhắn: đợi tới phút 20 của giờ kế tiếp, hoặc bấm Tua nhanh +1 ngày (chạy dọn dẹp ngay).","Bấm link trong tin."],
+          "expect": ["Nhóm nhận “📞 Hôm nay có N số cần gọi điện (M người từng tư vấn rồi im — nên gọi trước) — tên DN” + link; không có tên/SĐT khách.","Link mở trang Cần chăm sóc, cuộn tới khu Cần gọi điện.","Mỗi ngày chỉ một tin."],
+          "tags": ["fake-mode","telegram","new"]
+        },
+        {
+          "id": "zvd.10",
+          "title": "Nhân viên gọi được, DN khác không thấy",
+          "who": "Nhân viên",
+          "where": "Cần chăm sóc (tài khoản nhân viên), rồi tài khoản DN khác",
+          "steps": ["Đăng nhập nhân viên của DN này → Cần chăm sóc.","Bấm Không nghe máy cho một người.","Đăng nhập chủ một DN khác → Cần chăm sóc."],
+          "expect": ["Nhân viên thấy khu Cần gọi điện và ghi kết quả được.","DN khác không thấy ai của DN này."],
+          "tags": ["fake-mode","new","safety"]
         }
       ]
     },

@@ -3,7 +3,8 @@ using System.Text.Json;
 namespace ZaloAi.Channels.Zalo;
 
 /// <param name="Type">image, gif, link, audio, video, sticker, location, file...</param>
-public sealed record ZaloAttachment(string Type, string? Url);
+/// <param name="Id">payload.id — có ở sticker (docs/zalo-api-notes.md: sticker {url, id}).</param>
+public sealed record ZaloAttachment(string Type, string? Url, string? Id = null);
 
 /// <summary>
 /// Sự kiện webhook Zalo đã đọc (docs/zalo-api-notes.md mục 4–5). Chỉ giữ trường cần dùng.
@@ -74,7 +75,8 @@ public sealed record ZaloWebhookEvent(
                     var type = Str(a, "type");
                     if (type is not null)
                     {
-                        attachments.Add(new ZaloAttachment(type, Str(Obj(a, "payload"), "url")));
+                        var payload = Obj(a, "payload");
+                        attachments.Add(new ZaloAttachment(type, Str(payload, "url"), Str(payload, "id")));
                     }
                 }
             }

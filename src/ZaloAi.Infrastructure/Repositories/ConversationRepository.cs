@@ -222,7 +222,7 @@ public sealed class ConversationRepository(AppDbContext db, ITenantContext tenan
     }
 
     /// <summary>
-    /// Danh sách hộp thư: ca đang chờ người lên đầu (chờ lâu nhất trước), rồi theo tin mới nhất. Kèm khách và tin cuối.
+    /// Danh sách hộp thư: tin mới nhất lên đầu (kể cả ca đang chờ người). Kèm khách và tin cuối.
     /// </summary>
     /// <param name="filter">attention | bot | human | mine | all</param>
     public async Task<IReadOnlyList<InboxRow>> ListInboxAsync(
@@ -249,10 +249,11 @@ public sealed class ConversationRepository(AppDbContext db, ITenantContext tenan
             _ => query,
         };
 
+        // Mới nhắn lên đầu như Zalo/Messenger (chủ dự án chốt 2026-11-23, bỏ "ca chờ người lâu nhất lên đầu": ca bỏ dở nhiều ngày
+        // chiếm đầu danh sách, khách vừa nhắn bị đẩy xuống). Ca cần người nhận biết qua nhãn + tab "Cần xử lý" + Telegram.
         var conversations = await query
-            .OrderBy(c => c.NeedsAttentionSince == null)
-            .ThenBy(c => c.NeedsAttentionSince)
-            .ThenByDescending(c => c.LastMessageAt ?? c.UpdatedAt)
+            .OrderByDescending(c => c.LastMessageAt ?? c.UpdatedAt)
+            .ThenByDescending(c => c.Id)
             .Take(Math.Clamp(limit, 1, 200))
             .ToListAsync(cancellationToken);
 

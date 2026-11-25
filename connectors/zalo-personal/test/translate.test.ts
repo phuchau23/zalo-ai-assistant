@@ -3,6 +3,7 @@ import {
   FriendEventType,
   THREAD_GROUP,
   THREAD_USER,
+  stickerIdOf,
   translateFriendEvent,
   translateMessage,
   translateUndo,
@@ -48,6 +49,7 @@ describe("translateMessage", () => {
       kind: "text",
       text: "Cho em hỏi giá",
       ts: 1731400000123,
+      sticker: null,
     });
   });
 
@@ -69,7 +71,9 @@ describe("translateMessage", () => {
     expect(translateMessage(userMsg({ msgType: "chat.sticker", content: { id: 1 } }), deps)).toMatchObject({
       kind: "sticker",
       text: null,
+      sticker: { id: "1", keyword: null, imageUrl: null },
     });
+    expect(translateMessage(userMsg({ msgType: "webchat", content: "hi" }), deps)?.sticker).toBeNull();
     expect(translateMessage(userMsg({ msgType: "chat.voice", content: { href: "v" } }), deps)).toMatchObject({
       kind: "other",
       text: null,
@@ -156,5 +160,28 @@ describe("translateFriendEvent", () => {
     ]) {
       expect(translateFriendEvent({ type, threadId: "x", isSelf: false, data: "x" }, OWN, now)).toBeNull();
     }
+  });
+});
+
+describe("stickerIdOf (shape unverified with a real nick: accept a few spellings)", () => {
+  it("reads numeric ids from id / sticker_id / stickerId / sid", () => {
+    expect(stickerIdOf({ id: 1, catId: 1, type: 7 })).toBe("1");
+    expect(stickerIdOf({ sticker_id: "51234" })).toBe("51234");
+    expect(stickerIdOf({ stickerId: 77 })).toBe("77");
+    expect(stickerIdOf({ sid: "9" })).toBe("9");
+  });
+
+  it("rejects missing or non-numeric ids", () => {
+    expect(stickerIdOf(null)).toBeNull();
+    expect(stickerIdOf("text")).toBeNull();
+    expect(stickerIdOf({ id: "../x" })).toBeNull();
+    expect(stickerIdOf({ catId: 3 })).toBeNull();
+  });
+
+  it("a sticker without an id goes up without sticker details", () => {
+    expect(translateMessage(userMsg({ msgType: "chat.sticker", content: { catId: 3 } }), deps)).toMatchObject({
+      kind: "sticker",
+      sticker: null,
+    });
   });
 });

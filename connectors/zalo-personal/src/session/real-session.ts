@@ -12,6 +12,7 @@ import {
   type ListenerHandlers,
   type LoginOutcome,
   type QrHandlers,
+  type StickerDetail,
   type ZaloSession,
 } from "./zalo-session.ts";
 
@@ -175,6 +176,20 @@ export class RealZaloSession implements ZaloSession {
 
   async undoFriendRequest(uid: string): Promise<void> {
     await this.requireApi().undoFriendRequest(uid);
+  }
+
+  /**
+   * zca-js 2.2.0 getStickersDetail(id) → StickerDetail[] { text, stickerUrl, stickerWebpUrl, ... } (dist/models/Sticker.d.ts).
+   * What `text` holds for a real sticker is UNVERIFIED (2026-11-25): treated as a hint only. Prefer the static image for the AI.
+   */
+  async getStickerDetail(stickerId: string): Promise<StickerDetail | null> {
+    const id = Number(stickerId);
+    if (!Number.isSafeInteger(id) || id <= 0) return null;
+    const [d] = await this.requireApi().getStickersDetail(id);
+    if (!d) return null;
+    const keyword = typeof d.text === "string" && d.text.trim().length > 0 ? d.text.trim().slice(0, 60) : null;
+    const imageUrl = [d.stickerUrl, d.stickerWebpUrl].find((u): u is string => typeof u === "string" && u.startsWith("https://")) ?? null;
+    return { keyword, imageUrl };
   }
 
   /** Read the live cookie jar back from zca-js (it is updated from Set-Cookie on every request). */

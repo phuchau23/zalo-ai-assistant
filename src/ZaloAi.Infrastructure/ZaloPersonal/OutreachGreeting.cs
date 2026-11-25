@@ -83,6 +83,22 @@ public static class OutreachGreeting
             : $"Dạ {p} cảm ơn {call} đã kết bạn với {p} ạ 😊 Bên {p} có {offer}, {call} cần gì cứ nhắn {p} nha.";
     }
 
+    /// <summary>
+    /// Đã nhận tin chào rồi chấp nhận lời mời, chưa trả lời: cảm ơn + giới thiệu doanh nghiệp + MỘT câu hỏi mở để khách trả lời (chủ động tìm
+    /// khách — không "cần gì cứ nhắn", chủ dự án chốt 2026-11-25). Không chào lại, không báo trợ lý AI lần nữa (tin chào đã báo).
+    /// </summary>
+    public static string AcceptedIntro(string botPronoun, string businessName, string? salutation, string? customerName, IReadOnlyList<string> offerings, int variant = 0)
+    {
+        var p = Pronoun(botPronoun);
+        var (call, callCap) = Call(salutation, customerName);
+        var offer = Offer(offerings);
+        return variant == 1
+            ? $"Cảm ơn {call} đã đồng ý kết bạn nha 😊 {businessName} bên {p} chuyên {offer}, mỗi người một liệu trình riêng theo nhu cầu. "
+              + $"{callCap} đang quan tâm phần nào để {p} gửi thông tin chi tiết cho mình ạ?"
+            : $"Dạ {p} cảm ơn {call} đã kết bạn với {p} ạ 😊 Bên {p} là {businessName}, có {offer}. "
+              + $"{callCap} muốn {p} gửi thông tin phần nào trước ạ?";
+    }
+
     /// <summary>"các liệu trình trị liệu chuyên sâu, dưỡng sinh tạng và gói dưỡng sinh" — từ nhóm dịch vụ của DN, không giá.</summary>
     public static string Offer(IReadOnlyList<string> offerings)
     {

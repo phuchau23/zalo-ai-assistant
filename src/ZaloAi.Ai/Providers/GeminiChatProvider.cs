@@ -90,7 +90,7 @@ public sealed class GeminiChatProvider(HttpClient http, IOptions<AiOptions> opti
         return new ChatResult(text, ProviderName, usedModel, input, output, _options.Cost(model, input, output, cached), stopwatch.ElapsedMilliseconds, cached);
     }
 
-    private static string? ExtractText(JsonElement root, out string? finishReason)
+    internal static string? ExtractText(JsonElement root, out string? finishReason)
     {
         finishReason = null;
         if (!root.TryGetProperty("candidates", out var candidates) || candidates.GetArrayLength() == 0)
@@ -118,7 +118,7 @@ public sealed class GeminiChatProvider(HttpClient http, IOptions<AiOptions> opti
         return text.Length > 0 ? text.ToString() : null;
     }
 
-    private static (int Input, int Output, int Cached) Usage(JsonElement root)
+    internal static (int Input, int Output, int Cached) Usage(JsonElement root)
     {
         if (!root.TryGetProperty("usageMetadata", out var usage))
         {

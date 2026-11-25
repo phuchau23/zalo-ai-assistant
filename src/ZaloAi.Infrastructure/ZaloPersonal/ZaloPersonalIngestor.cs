@@ -31,7 +31,11 @@ public sealed record PersonalEvent(
     string? Uid = null,
     string? State = null,
     int? Code = null,
-    string? Detail = null);
+    string? Detail = null,
+    PersonalSticker? Sticker = null);
+
+/// <summary>Sticker trong tin khách (CONTRACT.md §5, 2026-11-25): mã, chữ khóa Zalo gắn, đường dẫn ảnh — sidecar lấy qua zca-js.</summary>
+public sealed record PersonalSticker(string? Id = null, string? Keyword = null, string? ImageUrl = null);
 
 /// <summary>
 /// Sự kiện từ nick Zalo cá nhân → dữ liệu CRM (docs/ZALO-PERSONAL-PLAN.md mục 6.2–6.5). Lọc chuyện riêng TRƯỚC khi lưu:
@@ -49,6 +53,7 @@ public sealed partial class ZaloPersonalIngestor(
     IFieldEncryptor encryptor,
     IBackgroundJobClient jobs,
     IInboxNotifier notifier,
+    Stickers.StickerInterpreter stickers,
     IOptions<ZaloPersonalOptions> options,
     TimeProvider time,
     ILogger<ZaloPersonalIngestor> logger)
@@ -199,10 +204,26 @@ public sealed partial class ZaloPersonalIngestor(
                 ? now + OutreachTenantJob.InviteAfterReplyDelay
                 : null;
         }
+        else if (await outreach.FindRevivableByUidAsync(tenantId, route.ConnectionId, customerUid, cancellationToken) is { } late)
+        {
+            // Đã vào "Cần gọi điện" / "Đã nguội" / "Lưu trữ" mà khách tự nhắn lại → về "Đang tư vấn", rời danh sách gọi (2026-11-25).
+            late.State = OutreachState.Replied;
+            late.RepliedAt ??= now;
+            late.LastError = null;
+            late.NextActionAt = !e.IsFriend && late.FriendRequestSentAt is null && late.FirstMessageAt is not null
+                ? now + OutreachTenantJob.InviteAfterReplyDelay
+                : null;
+        }
 
         if (!await TrySaveAsync(cancellationToken))
         {
             return;
+        }
+
+        // Sticker: cất mã / chữ khóa / ảnh theo mã tin; job xử lý tin cho AI xem hình rồi ghi nghĩa vào nội dung (2026-11-25).
+        if (e.Kind == "sticker" && e.Sticker is { } sticker)
+        {
+            await stickers.RememberAsync(message.Id, new Stickers.StickerInfo(sticker.Id, sticker.Keyword, sticker.ImageUrl), cancellationToken);
         }
 
         // Gom tin: job chạy sau vài giây; khách nhắn tiếp thì job của tin cũ thấy có tin mới hơn và để job tin mới trả lời gộp.
@@ -277,12 +298,28 @@ public sealed partial class ZaloPersonalIngestor(
                     target.State = OutreachState.Friend;
                     target.NextActionAt = time.GetUtcNow();
                 }
+                else if (target is { State: OutreachState.Messaged, FriendRequestSentAt: not null })
+                {
+                    // Đã nhận tin chào, chưa trả lời, giờ chấp nhận lời mời gửi sau tin chào → một tin cảm ơn + giới thiệu doanh nghiệp
+                    // (chủ dự án chốt 2026-11-25). Đợi vài phút: job còn kiểm hội thoại yên mới gửi.
+                    target.NextActionAt = time.GetUtcNow() + OutreachTenantJob.ThanksDelay;
+                }
                 else if (target is null
                          && await outreach.FindRepliedByUidAsync(route.TenantId, route.ConnectionId, e.Uid, cancellationToken) is { FriendRequestSentAt: not null } replied)
                 {
                     // Đã nói chuyện rồi mới chấp nhận lời mời của bên mình → một câu cảm ơn + giới thiệu sơ (chủ dự án chốt 2026-11-15).
                     // Đợi vài phút: khách có thể đang chat dở, job còn kiểm hội thoại yên mới gửi.
                     replied.NextActionAt = time.GetUtcNow() + OutreachTenantJob.ThanksDelay;
+                }
+                else if (target is null
+                         && await outreach.FindRevivableByUidAsync(route.TenantId, route.ConnectionId, e.Uid, cancellationToken) is
+                         { State: OutreachState.NoReply or OutreachState.Archived, FriendRequestSentAt: not null, FirstMessageAt: not null } late
+                         && (await outreach.ContactsInActiveOutreachAsync(route.TenantId, [late.ContactId], cancellationToken)).Count == 0)
+                {
+                    // Đã vào "Cần gọi điện" rồi mới chấp nhận lời mời gửi sau tin chào → vẫn một tin cảm ơn + giới thiệu (job gửi đúng một
+                    // lần), đếm lại 2 ngày từ tin đó (2026-11-25).
+                    late.State = OutreachState.Messaged;
+                    late.NextActionAt = time.GetUtcNow() + OutreachTenantJob.ThanksDelay;
                 }
 
                 break;

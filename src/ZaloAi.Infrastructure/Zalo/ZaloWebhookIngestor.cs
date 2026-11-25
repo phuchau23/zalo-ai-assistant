@@ -45,6 +45,7 @@ public sealed partial class ZaloWebhookIngestor(
     IFieldEncryptor encryptor,
     IBackgroundJobClient jobs,
     IInboxNotifier notifier,
+    Stickers.StickerInterpreter stickers,
     TimeProvider time,
     ILogger<ZaloWebhookIngestor> logger)
 {
@@ -122,6 +123,12 @@ public sealed partial class ZaloWebhookIngestor(
         if (!await TrySaveAsync(cancellationToken))
         {
             return WebhookOutcome.Ignored;
+        }
+
+        // Sticker: cất mã + ảnh theo mã tin; job xử lý tin cho AI xem hình rồi ghi nghĩa vào nội dung (2026-11-25).
+        if (e.Attachments.FirstOrDefault(a => a.Type == "sticker") is { } sticker)
+        {
+            await stickers.RememberAsync(message.Id, new Stickers.StickerInfo(sticker.Id, null, sticker.Url), cancellationToken);
         }
 
         var messageId = message.Id;

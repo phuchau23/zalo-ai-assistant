@@ -12,6 +12,7 @@ import {
   SessionExpiredError,
   isFakeControls,
   sessionFingerprint,
+  type StickerDetail,
   type ZaloSession,
 } from "./session/zalo-session.ts";
 import { defaultFakeUid } from "./session/fake-session.ts";
@@ -22,6 +23,7 @@ import {
   type FakeSimulation,
   type ListenerState,
   type ParentToWorker,
+  type PersonalEvent,
   type WorkerCommand,
   type WorkerInit,
   type WorkerToParent,
@@ -43,6 +45,11 @@ export const FRIENDS_RETRY_MS = 5 * 60_000;
 /** Threads remembered for "latest customer message" (oldest forgotten first). Only used to drop superseded bot replies. */
 export const LATEST_INCOMING_MAX = 5_000;
 
+/** Sticker details lookup: wait at most this long before sending the message on without them. */
+export const STICKER_LOOKUP_TIMEOUT_MS = 3_000;
+
+export const STICKER_CACHE_MAX = 500;
+
 export type WorkerIO = {
   send(msg: WorkerToParent): void;
   exit(code: number): void;
@@ -57,6 +64,7 @@ export type WorkerDeps = {
   sleep?: (ms: number) => Promise<void>;
   sessionCheckIntervalMs?: number;
   exitDelayMs?: number;
+  stickerLookupTimeoutMs?: number;
 };
 
 const defaultSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -80,6 +88,10 @@ export class WorkerCore {
   /** threadId → msgId of the newest message the customer sent there (not our own). */
   private readonly latestIncoming = new Map<string, string>();
   private lastSessionFp = "";
+  /** Message events go out one after another: a sticker waiting for its details must not be overtaken by a later message. */
+  private outgoing: Promise<void> = Promise.resolve();
+  /** stickerId → Zalo details (null = Zalo had nothing). Stickers repeat a lot; small LRU. */
+  private readonly stickerDetails = new Map<string, StickerDetail | null>();
   private timers: ReturnType<typeof setTimeout>[] = [];
   private intervals: ReturnType<typeof setInterval>[] = [];
   private loginStartedAt = 0;
@@ -279,18 +291,21 @@ export class WorkerCore {
         const ev = translateMessage(m, { isFriend: (uid) => this.friends.has(uid), now: this.now });
         if (!ev) return;
         if (!ev.isSelf) this.rememberIncoming(ev.threadId, ev.msgId);
-        this.io.send({ type: "event", event: ev });
+        const sticker = ev.sticker;
+        this.emitInOrder(async () =>
+          sticker && !ev.isSelf ? { ...ev, sticker: { ...sticker, ...(await this.stickerDetail(session, sticker.id)) } } : ev,
+        );
       },
       onUndo: (u) => {
         const ev = translateUndo(u, this.now);
-        if (ev) this.io.send({ type: "event", event: ev });
+        if (ev) this.emitInOrder(async () => ev);
       },
       onFriendEvent: (f) => {
         const ev = translateFriendEvent(f, session.ownUid(), this.now);
         if (!ev) return;
         if (ev.event === "add") this.friends.add(ev.uid);
         if (ev.event === "remove") this.friends.delete(ev.uid);
-        this.io.send({ type: "event", event: ev });
+        this.emitInOrder(async () => ev);
       },
     });
     this.intervals.push(
@@ -386,6 +401,50 @@ export class WorkerCore {
 
   private notRunning(): CommandResult {
     return { status: 409, body: { error: "not_running" } };
+  }
+
+  /**
+   * Listener events (message, undo, friend) go up in the order they happened even when one of them waits (sticker details):
+   * each waits for the previous one. A failing build never blocks the queue.
+   */
+  private emitInOrder(build: () => Promise<PersonalEvent>): void {
+    this.outgoing = this.outgoing
+      .then(async () => this.io.send({ type: "event", event: await build() }))
+      .catch((err: unknown) => this.log.debug("event dropped", errFields(err)));
+  }
+
+  /**
+   * Zalo's keyword + image for a sticker the customer sent (CONTRACT §5, 2026-11-25), cached per sticker. Slow or failing lookup
+   * (STICKER_LOOKUP_TIMEOUT_MS) → no details: the message still goes up and the API falls back to "customer sent a sticker".
+   * Failures are not cached, so the next time that sticker is tried again.
+   */
+  private async stickerDetail(session: ZaloSession, stickerId: string): Promise<StickerDetail> {
+    const none: StickerDetail = { keyword: null, imageUrl: null };
+    if (this.stickerDetails.has(stickerId)) return this.stickerDetails.get(stickerId) ?? none;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const detail = await Promise.race([
+        session.getStickerDetail(stickerId),
+        new Promise<"timeout">((resolve) => {
+          timer = setTimeout(() => resolve("timeout"), this.deps.stickerLookupTimeoutMs ?? STICKER_LOOKUP_TIMEOUT_MS);
+        }),
+      ]);
+      if (detail === "timeout") {
+        this.log.debug("sticker lookup timed out");
+        return none;
+      }
+      this.stickerDetails.set(stickerId, detail);
+      if (this.stickerDetails.size > STICKER_CACHE_MAX) {
+        const oldest = this.stickerDetails.keys().next().value;
+        if (oldest !== undefined) this.stickerDetails.delete(oldest);
+      }
+      return detail ?? none;
+    } catch (err) {
+      this.log.debug("sticker lookup failed", errFields(err));
+      return none;
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
   }
 
   private rememberIncoming(threadId: string, msgId: string): void {
