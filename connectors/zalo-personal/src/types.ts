@@ -9,6 +9,16 @@ export type ZaloSessionData = {
 
 export type MessageKind = "text" | "image" | "file" | "sticker" | "other";
 
+/**
+ * Sticker in a message (CONTRACT §5, 2026-11-25). `id` comes from the message itself; `keyword` (Zalo's own short tag, may be
+ * empty) and `imageUrl` come from zca-js getStickersDetail — null when the lookup failed or timed out.
+ */
+export type StickerInfo = {
+  id: string;
+  keyword: string | null;
+  imageUrl: string | null;
+};
+
 export type MessageEvent = {
   type: "message";
   msgId: string;
@@ -20,6 +30,8 @@ export type MessageEvent = {
   kind: MessageKind;
   text: string | null;
   ts: number;
+  /** Only for kind "sticker" (null otherwise, or when the sticker id is missing). */
+  sticker: StickerInfo | null;
 };
 
 export type UndoEvent = {
@@ -86,6 +98,8 @@ export type FakeSimulation = {
   toUid?: string;
   text?: string;
   kind?: string;
+  /** kind "sticker": which fake sticker (see FakeZaloSession.getStickerDetail). Default 1 = thumbs up. */
+  stickerId?: string;
   isFriend?: boolean;
   group?: boolean;
   event?: string;

@@ -17,7 +17,10 @@ public sealed record ChatRequest(
     double Temperature = 0.2,
     int MaxOutputTokens = 2048);
 
+/// <param name="InputTokens">Tổng token đầu vào, GỒM cả phần được nhà cung cấp cache.</param>
 /// <param name="OutputTokens">Gồm cả token "suy nghĩ" của model (tính tiền như output).</param>
+/// <param name="CachedInputTokens">Phần đầu vào trùng lần gọi trước, nhà cung cấp tính giá rẻ (Gemini cachedContentTokenCount,
+/// Groq prompt_tokens_details.cached_tokens).</param>
 public sealed record ChatResult(
     string Text,
     string Provider,
@@ -25,7 +28,8 @@ public sealed record ChatResult(
     int InputTokens,
     int OutputTokens,
     decimal CostUsd,
-    long LatencyMs);
+    long LatencyMs,
+    int CachedInputTokens = 0);
 
 /// <summary>
 /// Gọi model chat. Lỗi gọi ra ngoài ném <see cref="Errors.AiProviderException"/> (job thử lại; bot trả câu dự phòng + chuyển người).

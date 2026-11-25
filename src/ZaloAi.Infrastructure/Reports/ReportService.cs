@@ -44,7 +44,8 @@ public sealed record TodayReport(
     int NewCustomers,
     int OpenInvoices);
 
-public sealed record AiEffectReport(DateOnly From, DateOnly To, int BotBookedAppointments, int BotBookedDone, long RevenueFromBot, int ConversationsHandledByBot, int ConversationsTotal, decimal AiCostUsd);
+/// <param name="AiCostVnd">Quy ra VND theo giá bán USD Vietcombank từng ngày (+ phí thẻ); null nếu chưa có tỷ giá.</param>
+public sealed record AiEffectReport(DateOnly From, DateOnly To, int BotBookedAppointments, int BotBookedDone, long RevenueFromBot, int ConversationsHandledByBot, int ConversationsTotal, decimal AiCostUsd, decimal? AiCostVnd);
 
 public sealed record OccupancyCell(DayOfWeek Day, int Hour, int Appointments);
 
@@ -66,6 +67,7 @@ public sealed class ReportService(
     StaffService staff,
     DashboardRepository dashboard,
     ZaloAi.Core.Security.IFieldEncryptor encryptor,
+    ZaloAi.Infrastructure.Billing.UsdVndConverter usdVnd,
     TimeProvider time) : TenantScopedRepository(db, tenantContext)
 {
     private readonly ITenantContext _caller = tenantContext;
@@ -172,9 +174,11 @@ public sealed class ReportService(
         var activity = await dashboard.ListCustomerActivityAsync(tenantId, from, to, cancellationToken);
         var neededHuman = await dashboard.ListNeededHumanAsync(tenantId, from, to, cancellationToken);
         var conversations = activity.Select(a => a.ConversationId).Distinct().ToList();
-        var cost = await Db.UsageRecords.Where(u => u.TenantId == tenantId && u.CreatedAt >= from && u.CreatedAt < to).SumAsync(u => u.CostUsd, cancellationToken);
+        var usage = await Db.UsageRecords.Where(u => u.TenantId == tenantId && u.CreatedAt >= from && u.CreatedAt < to)
+            .Select(u => new ValueTuple<DateTimeOffset, decimal>(u.CreatedAt, u.CostUsd))
+            .ToListAsync(cancellationToken);
         return new AiEffectReport(fromDate, toDate, botAppointments.Count, botAppointments.Count(s => s == AppointmentStatus.Done), revenueFromBot,
-            Dashboard.DashboardStats.BotHandled(conversations, neededHuman), conversations.Count, cost);
+            Dashboard.DashboardStats.BotHandled(conversations, neededHuman), conversations.Count, usage.Sum(u => u.Item2), await usdVnd.SumAsync(usage, cancellationToken));
     }
 
     public async Task<OccupancyReport> OccupancyAsync(Guid tenantId, DateOnly fromDate, DateOnly toDate, Guid? branchId, CancellationToken cancellationToken)

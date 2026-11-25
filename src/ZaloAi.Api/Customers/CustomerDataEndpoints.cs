@@ -144,6 +144,7 @@ internal static class CustomerDataEndpoints
     {
         ContactNoteKind.Service => "Đã dùng dịch vụ",
         ContactNoteKind.Appointment => "Lịch hẹn",
+        ContactNoteKind.Call => "Gọi điện",
         _ => "Ghi chú",
     };
 }

@@ -11,6 +11,7 @@ using ZaloAi.Core.Tenancy;
 using ZaloAi.Infrastructure.Customers;
 using ZaloAi.Infrastructure.Jobs;
 using ZaloAi.Infrastructure.Repositories;
+using ZaloAi.Infrastructure.ZaloPersonal;
 
 namespace ZaloAi.Api.Customers;
 
@@ -53,7 +54,10 @@ public sealed record UpdateCareSuggestionRequest(string Status, string? Outcome)
 
 public sealed record AssignCareSuggestionRequest(Guid? UserId);
 
-public sealed record CareCountResponse(int Open);
+/// <param name="Open">Gợi ý chăm sóc đang mở.</param>
+/// <param name="ToCall">Người trong danh sách "Cần gọi điện" (bot đã thôi nhắn qua nick: im 2 ngày, đã nguội, không có Zalo).</param>
+/// <param name="ToCallWarm">Trong số đó, người đã nguội (từng tư vấn rồi im) — nên gọi trước.</param>
+public sealed record CareCountResponse(int Open, int ToCall = 0, int ToCallWarm = 0);
 
 internal sealed class UpdateCareSuggestionRequestValidator : AbstractValidator<UpdateCareSuggestionRequest>
 {
@@ -113,8 +117,13 @@ internal static class CareEndpoints
             .ToList());
     }
 
-    private static async Task<Ok<CareCountResponse>> CountAsync(ITenantContext tenant, ContactRepository contacts, CancellationToken cancellationToken) =>
-        TypedResults.Ok(new CareCountResponse(await contacts.CountOpenSuggestionsAsync(tenant.RequireTenantId(), cancellationToken)));
+    private static async Task<Ok<CareCountResponse>> CountAsync(
+        ITenantContext tenant, ContactRepository contacts, CallListService calls, CancellationToken cancellationToken)
+    {
+        var tenantId = tenant.RequireTenantId();
+        var (toCall, warm) = await calls.CountAsync(tenantId, cancellationToken);
+        return TypedResults.Ok(new CareCountResponse(await contacts.CountOpenSuggestionsAsync(tenantId, cancellationToken), toCall, warm));
+    }
 
     private static async Task<NoContent> UpdateAsync(
         Guid suggestionId,

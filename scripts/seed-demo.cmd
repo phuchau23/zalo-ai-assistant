@@ -22,7 +22,8 @@ if not errorlevel 1 (
 rem Ẩn câu lệnh SQL (rất nhiều dòng) — chỉ in phần tóm tắt.
 set "Serilog__MinimumLevel__Override__Microsoft.EntityFrameworkCore=Warning"
 dotnet run --project src\ZaloAi.Api -- seed-demo
-if errorlevel 1 (
+rem "if errorlevel 1" không bắt mã lỗi âm (.NET lỗi trả số âm) → so với 0.
+if not "%errorlevel%"=="0" (
   echo [!] Seed lỗi, xem thông báo phía trên.
   exit /b 1
 )

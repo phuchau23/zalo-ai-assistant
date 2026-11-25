@@ -201,10 +201,24 @@ internal sealed class UsageRecordConfiguration : IEntityTypeConfiguration<UsageR
         builder.Property(u => u.Model).HasMaxLength(100);
         builder.Property(u => u.CostUsd).HasPrecision(14, 8);
 
-        // Báo cáo chi phí theo tenant/tháng (M6).
+        // Báo cáo chi phí theo tenant/tháng (M6) và theo nick (2026-11-15).
         builder.HasIndex(u => new { u.TenantId, u.CreatedAt });
+        builder.HasIndex(u => new { u.TenantId, u.ConnectionId, u.CreatedAt });
 
         builder.HasOne<Tenant>().WithMany().HasForeignKey(u => u.TenantId).OnDelete(DeleteBehavior.Cascade);
         builder.HasOne<Conversation>().WithMany().HasForeignKey(u => u.ConversationId).OnDelete(DeleteBehavior.SetNull);
+    }
+}
+
+internal sealed class ExchangeRateConfiguration : IEntityTypeConfiguration<ExchangeRate>
+{
+    public void Configure(EntityTypeBuilder<ExchangeRate> builder)
+    {
+        builder.ToTable("exchange_rates");
+        builder.HasKey(r => new { r.Currency, r.Date });
+        builder.Property(r => r.Currency).HasMaxLength(3);
+        builder.Property(r => r.Sell).HasPrecision(14, 2);
+        builder.Property(r => r.Transfer).HasPrecision(14, 2);
+        builder.Property(r => r.Source).HasMaxLength(40);
     }
 }

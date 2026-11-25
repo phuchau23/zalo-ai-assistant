@@ -91,7 +91,27 @@ public sealed class BotEngineTests
         var trace = JsonDocument.Parse(result.TraceJson).RootElement;
         trace.GetProperty("chunks")[0].GetProperty("used").GetBoolean().ShouldBeTrue();
         trace.GetProperty("belowThreshold").GetInt32().ShouldBe(1);
-        result.Usage.ShouldHaveSingleItem().CostUsd.ShouldBe(0.001m);
+        result.Usage.Single(u => u.Kind == UsageKind.Chat).CostUsd.ShouldBe(0.001m);
+        result.Usage.Where(u => u.Kind == UsageKind.Embed).ShouldAllBe(u => u.InputTokens > 0); // tạo vector câu tìm kiếm cũng được ghi chi phí
+        result.Usage.Count(u => u.Kind == UsageKind.Embed).ShouldBe(2); // tin ngắn: câu hỏi + nhóm dịch vụ tiêu biểu
+    }
+
+    [Fact]
+    public async Task Thanks_message_skips_knowledge_search_but_still_answers()
+    {
+        var chat = new ScriptedChat(_ => Json("Dạ không có gì ạ, chúc mình một ngày vui nha 😊"));
+        var search = new StaticSearch(Massage);
+
+        var result = await Engine(chat, search).ReplyAsync(Turn("dạ em cảm ơn nhiều nha"), CancellationToken.None);
+
+        search.Queries.ShouldBeEmpty();
+        result.NeedsHuman.ShouldBeFalse();
+        var system = chat.Requests.ShouldHaveSingleItem().System;
+        system.ShouldContain("Tin xã giao — không cần dữ liệu");
+        system.ShouldNotContain("[C1]");
+        var trace = JsonDocument.Parse(result.TraceJson).RootElement;
+        trace.GetProperty("guards").EnumerateArray().Select(g => g.GetString()).ShouldContain("small_talk_no_search");
+        trace.GetProperty("inputTokens").GetInt32().ShouldBe(100);
     }
 
     [Fact]
@@ -161,7 +181,7 @@ public sealed class BotEngineTests
         result.NeedsHuman.ShouldBeTrue();
         result.HandoffReason.ShouldBe("ai_error");
         result.Reply.ShouldNotContain("chuyển"); // câu chuyển tiếp do DN cài, hệ thống gửi sau (InboxService)
-        result.Usage.Count.ShouldBe(2);
+        result.Usage.Count(u => u.Kind == UsageKind.Chat).ShouldBe(2);
     }
 
     [Fact]
@@ -377,13 +397,27 @@ public sealed class BotEngineTests
     }
 
     [Fact]
-    public async Task Sticker_gets_short_reply_without_ai()
+    public async Task Sticker_with_meaning_is_answered_by_ai_in_context()
     {
-        var chat = new ScriptedChat(_ => Json("không được gọi"));
-        var result = await Engine(chat, new StaticSearch()).ReplyAsync(Turn(ZaloAi.Core.Channels.InboundText.Sticker), CancellationToken.None);
+        // 2026-11-25: sticker không còn câu trả lời cố định — job ghi nghĩa vào tin, AI hiểu theo ngữ cảnh (quy tắc 11c).
+        var chat = new ScriptedChat(_ => Json("Dạ vậy em gửi mình bảng giá massage nha"));
+        var sticker = ZaloAi.Core.Channels.InboundText.StickerMeaning("giơ ngón cái – đồng ý, ok");
+        var result = await Engine(chat, new StaticSearch(Massage)).ReplyAsync(Turn(sticker), CancellationToken.None);
 
-        chat.Requests.ShouldBeEmpty();
+        var request = chat.Requests.ShouldHaveSingleItem();
+        request.System.ShouldContain("11c. Tin \"[Khách gửi sticker: …]\"");
+        request.Turns[^1].Text.ShouldContain("giơ ngón cái");
         result.NeedsHuman.ShouldBeFalse();
+        JsonDocument.Parse(result.TraceJson).RootElement.GetProperty("guards").EnumerateArray().Select(g => g.GetString()).ShouldContain("sticker");
+    }
+
+    [Fact]
+    public void Sticker_text_helpers_recognise_both_forms_and_keep_the_marker_intact()
+    {
+        ZaloAi.Core.Channels.InboundText.IsSticker(ZaloAi.Core.Channels.InboundText.Sticker).ShouldBeTrue();
+        ZaloAi.Core.Channels.InboundText.IsSticker("[Khách gửi sticker: vẫy tay – chào]").ShouldBeTrue();
+        ZaloAi.Core.Channels.InboundText.IsSticker("ok em").ShouldBeFalse();
+        ZaloAi.Core.Channels.InboundText.StickerMeaning(" [mèo] cười ").ShouldBe("[Khách gửi sticker: (mèo) cười]");
     }
 
     [Fact]

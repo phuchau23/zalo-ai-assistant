@@ -25,6 +25,14 @@ public static class DependencyInjection
         services.AddHttpClient<GroqChatProvider>(ConfigureGroq)
             .AddStandardResilienceHandler()
             .Configure(ConfigureResilience);
+        services.AddHttpClient<GeminiStickerVision>(ConfigureGemini)
+            .AddStandardResilienceHandler()
+            .Configure(ConfigureResilience);
+        services.AddSingleton<FakeStickerVision>();
+        services.AddTransient<IStickerVision>(sp =>
+            sp.GetRequiredService<IOptions<AiOptions>>().Value.ChatProvider == "fake"
+                ? sp.GetRequiredService<FakeStickerVision>()
+                : sp.GetRequiredService<GeminiStickerVision>());
 
         services.AddSingleton<FakeEmbeddingProvider>();
         services.AddTransient<IEmbeddingProvider>(sp =>

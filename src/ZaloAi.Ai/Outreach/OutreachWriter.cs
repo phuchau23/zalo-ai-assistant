@@ -109,9 +109,16 @@ public sealed partial class OutreachWriter(IChatProvider chat, ILogger<OutreachW
 
         // Kiểm trên bản đã che tên: tên như "Lan Anh" đứng trước "chị" không bị bắt nhầm thành "anh chị".
         var folded = VietText.Fold(joined);
-        if (kind != OutreachMessageKind.AcceptedThanks && !folded.Contains(" tro ly ai ", StringComparison.Ordinal))
+        // Đã báo "trợ lý AI" ở tin trước (khách đã nói chuyện / đã nhận tin chào) thì không bắt nhắc lại.
+        if (kind is not (OutreachMessageKind.AcceptedThanks or OutreachMessageKind.AcceptedIntro) && !folded.Contains(" tro ly ai ", StringComparison.Ordinal))
         {
             return "no_ai_disclosure";
+        }
+
+        // Tin giới thiệu sau khi kết bạn là chủ động tìm khách: phải mở câu hỏi, không kết kiểu chờ khách tự nhắn (chủ dự án 2026-11-25).
+        if (kind == OutreachMessageKind.AcceptedIntro && PassiveClose.Any(p => folded.Contains(p, StringComparison.Ordinal)))
+        {
+            return "passive_close";
         }
 
         if (Promo.Any(p => folded.Contains(p, StringComparison.Ordinal))
@@ -125,6 +132,9 @@ public sealed partial class OutreachWriter(IChatProvider chat, ILogger<OutreachW
 
     /// <summary>Tin chủ động gửi người chưa đồng ý nhận quảng cáo → không mời ưu đãi (CLAUDE.md mục 7).</summary>
     private static readonly string[] Promo = [" khuyen mai ", " uu dai ", " giam gia ", " voucher ", " qua tang ", " mien phi "];
+
+    /// <summary>Câu kết "chờ khách tự nhắn" — không hợp tin chủ động giới thiệu (đã bỏ dấu, có khoảng trắng hai đầu).</summary>
+    private static readonly string[] PassiveClose = [" can gi cu ", " khi nao can ", " co gi cu nhan ", " cu nhan "];
 
     private static string BuildSystem(IndustryTemplate template, OutreachMessageRequest r, PiiVault vault)
     {
@@ -149,10 +159,12 @@ public sealed partial class OutreachWriter(IChatProvider chat, ILogger<OutreachW
                 $"TIN ĐẦU TIÊN gửi người chưa từng nói chuyện: 1–2 tin, mỗi tin tối đa 200 ký tự. Chào, nói rõ mình là trợ lý AI của {p.BusinessName} (dùng đúng cụm \"trợ lý AI\"), nêu đúng lý do liên hệ, có thể nói rất ngắn bên mình làm gì, rồi kết bằng MỘT câu hỏi xin phép gửi thông tin phù hợp. Chưa gửi thông tin dịch vụ chi tiết.",
             OutreachMessageKind.AcceptedGreeting =>
                 $"Người này VỪA CHẤP NHẬN lời mời kết bạn, chưa nói chuyện: 1–2 tin, mỗi tin tối đa 200 ký tự. Cảm ơn đã kết bạn, nói rõ mình là trợ lý AI của {p.BusinessName} (dùng đúng cụm \"trợ lý AI\"), nói sơ bên mình hỗ trợ được gì (theo NHÓM DỊCH VỤ, kiểu \"bên {pronoun} có các liệu trình … tùy nhu cầu\"), rồi kết bằng MỘT câu hỏi xin phép gửi thông tin phù hợp.",
+            OutreachMessageKind.AcceptedIntro =>
+                $"Người này ĐÃ NHẬN tin chào của bên mình (xem TIN GẦN NHẤT), CHƯA trả lời, giờ VỪA CHẤP NHẬN lời mời kết bạn. Bên mình chủ động giới thiệu để người này biết và quan tâm: 1–2 tin, mỗi tin tối đa 200 ký tự. Cảm ơn đã kết bạn, rồi giới thiệu {p.BusinessName}: bên {pronoun} chuyên về gì, các NHÓM DỊCH VỤ chính (chỉ dùng thông tin có ở dưới, không bịa thế mạnh). Kết bằng MỘT câu hỏi mở cụ thể để người này trả lời (vd hỏi người này đang quan tâm nhóm nào để {pronoun} gửi thông tin). KHÔNG chào lại từ đầu, không lặp câu đã nói ở tin chào, KHÔNG viết kiểu \"cần gì cứ nhắn {pronoun}\" / \"khi nào cần thì liên hệ\".",
             _ =>
                 $"Người này ĐÃ NÓI CHUYỆN với bên mình (xem TIN GẦN NHẤT), giờ mới chấp nhận lời mời kết bạn: 1–2 tin ngắn. Cảm ơn đã kết bạn, rồi một câu ngắn bên mình hỗ trợ được gì (theo NHÓM DỊCH VỤ, nối với điều người này quan tâm nếu có). KHÔNG chào lại từ đầu, không lặp lại câu đã nói, không hỏi xin phép, không giới thiệu chi tiết công ty.",
         });
-        if (r.Kind == OutreachMessageKind.AcceptedThanks && r.Recent.Count > 0)
+        if ((r.Kind is OutreachMessageKind.AcceptedThanks or OutreachMessageKind.AcceptedIntro) && r.Recent.Count > 0)
         {
             s.AppendLine();
             s.AppendLine("## TIN GẦN NHẤT (cũ → mới)");

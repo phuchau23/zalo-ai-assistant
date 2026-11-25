@@ -16,7 +16,9 @@ namespace ZaloAi.Ai.Providers;
 /// - POST {base}models/{model}:generateContent, header x-goog-api-key.
 /// - body { system_instruction, contents[{role: user|model, parts[{text}]}], generationConfig{ temperature, maxOutputTokens,
 ///   responseMimeType: "application/json", responseJsonSchema } }. ("response_format" bị API từ chối.)
-/// - response candidates[0].content.parts[].text (bỏ part "thought"), usageMetadata{promptTokenCount, candidatesTokenCount, thoughtsTokenCount}.
+/// - response candidates[0].content.parts[].text (bỏ part "thought"), usageMetadata{promptTokenCount, candidatesTokenCount, thoughtsTokenCount,
+///   cachedContentTokenCount}. promptTokenCount đã GỒM phần cache. Cache ngầm (implicit) tự bật, chỉ áp dụng khi prompt ≥ 4.096 token với
+///   dòng 3.x và phần đầu trùng lần gọi trước (kiểm chứng 2026-11-15: https://aistudio.google.com/docs/caching).
 /// Không log key, không đưa nội dung phản hồi lỗi vào message.
 /// </summary>
 public sealed class GeminiChatProvider(HttpClient http, IOptions<AiOptions> options) : IChatModelClient
@@ -83,12 +85,12 @@ public sealed class GeminiChatProvider(HttpClient http, IOptions<AiOptions> opti
             throw new AiInvalidOutputException(reason ?? "không rõ");
         }
 
-        var (input, output) = Usage(root);
+        var (input, output, cached) = Usage(root);
         var usedModel = root.TryGetProperty("modelVersion", out var version) ? version.GetString() ?? model : model;
-        return new ChatResult(text, ProviderName, usedModel, input, output, _options.Cost(model, input, output), stopwatch.ElapsedMilliseconds);
+        return new ChatResult(text, ProviderName, usedModel, input, output, _options.Cost(model, input, output, cached), stopwatch.ElapsedMilliseconds, cached);
     }
 
-    private static string? ExtractText(JsonElement root, out string? finishReason)
+    internal static string? ExtractText(JsonElement root, out string? finishReason)
     {
         finishReason = null;
         if (!root.TryGetProperty("candidates", out var candidates) || candidates.GetArrayLength() == 0)
@@ -116,14 +118,14 @@ public sealed class GeminiChatProvider(HttpClient http, IOptions<AiOptions> opti
         return text.Length > 0 ? text.ToString() : null;
     }
 
-    private static (int Input, int Output) Usage(JsonElement root)
+    internal static (int Input, int Output, int Cached) Usage(JsonElement root)
     {
         if (!root.TryGetProperty("usageMetadata", out var usage))
         {
-            return (0, 0);
+            return (0, 0, 0);
         }
 
         int Read(string name) => usage.TryGetProperty(name, out var v) && v.TryGetInt32(out var n) ? n : 0;
-        return (Read("promptTokenCount"), Read("candidatesTokenCount") + Read("thoughtsTokenCount"));
+        return (Read("promptTokenCount"), Read("candidatesTokenCount") + Read("thoughtsTokenCount"), Read("cachedContentTokenCount"));
     }
 }

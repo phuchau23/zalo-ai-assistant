@@ -98,6 +98,10 @@ public sealed class OutreachWriterTests
     [InlineData(OutreachMessageKind.Greeting, "Em là trợ lý AI, chào anh/chị ạ.", "promo_or_salutation")]
     [InlineData(OutreachMessageKind.Greeting, "Em là trợ lý AI, bên em mở cửa tới 21 giờ ạ.", "number_or_price")]
     [InlineData(OutreachMessageKind.Greeting, "Em là trợ lý AI, chị [NAME_3] giới thiệu ạ.", "placeholder")]
+    // Giới thiệu sau khi kết bạn (2026-11-25): tin chào đã báo trợ lý AI; phải mở câu hỏi, không kết kiểu chờ khách tự nhắn.
+    [InlineData(OutreachMessageKind.AcceptedIntro, "Dạ em cảm ơn chị [NAME_1] đã kết bạn ạ. Bên em chuyên các liệu trình chăm sóc, chị đang quan tâm phần nào ạ?", null)]
+    [InlineData(OutreachMessageKind.AcceptedIntro, "Dạ em cảm ơn chị [NAME_1] đã kết bạn ạ, cần gì chị cứ nhắn em nha.", "passive_close")]
+    [InlineData(OutreachMessageKind.AcceptedIntro, "Cảm ơn chị [NAME_1] nha, khi nào cần thì liên hệ em ạ.", "passive_close")]
     public void Rules_are_checked_on_masked_text(OutreachMessageKind kind, string text, string? problem) =>
         Check(kind, text).ShouldBe(problem);
 
@@ -145,6 +149,21 @@ public sealed class OutreachTemplateTests
             var thanks = OutreachGreeting.AcceptedThanks("em", "chị", "Hoa", Offerings, v);
             thanks.ShouldContain("ảm ơn chị Hoa đã kết bạn");
             thanks.ShouldContain("dưỡng sinh tạng");
+        }
+    }
+
+    [Fact]
+    public void Intro_after_accepting_thanks_introduces_the_business_and_asks_an_open_question()
+    {
+        for (var v = 0; v < OutreachGreeting.AcceptedVariants; v++)
+        {
+            var intro = OutreachGreeting.AcceptedIntro("em", "Spa An Nhiên", "chị", "Hoa", Offerings, v);
+            intro.ShouldContain("ảm ơn chị Hoa đã");
+            intro.ShouldContain("Spa An Nhiên");
+            intro.ShouldContain("trị liệu chuyên sâu");
+            intro.ShouldEndWith("ạ?");
+            intro.ShouldNotContain("cứ nhắn");
+            intro.Any(char.IsDigit).ShouldBeFalse();
         }
     }
 

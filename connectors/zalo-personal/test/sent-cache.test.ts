@@ -117,6 +117,7 @@ describe("echo suppression timing (isSelf held 3 s)", () => {
     kind: "text",
     text: "x",
     ts: 1,
+    sticker: null,
   });
 
   it("drops an isSelf message whose msgId is recorded as sent within the hold window", async () => {

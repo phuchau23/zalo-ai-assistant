@@ -571,3 +571,143 @@ gần như không tốn thêm (một lần gọi AI trả cả danh sách tin); 
 bớt dữ liệu đưa vào, model rẻ cho câu đơn giản — việc riêng, chưa làm.
 
 **Không đổi schema.** Còn chờ: mẫu chat "vibe người thật" từ chủ dự án để tinh chỉnh giọng (few-shot).
+
+## 2026-11-15 — Trang "Zalo cá nhân" riêng, chia danh sách SĐT cho nhiều nick
+
+**Bối cảnh:** chủ dự án muốn tách giao diện Zalo cá nhân khỏi Zalo OA, nhìn vào là thấy từng nick đang chạy / đang chăm sóc bao
+nhiêu người, giao số cho một nick cụ thể, và dán một danh sách để hệ thống tự chia đều cho các nick.
+
+**Quyết định (chủ dự án đồng ý cả 3 khuyến nghị):**
+- **Tách trang:** thanh bên có nhóm "Kênh Zalo" gồm "Zalo OA" (`/channels`, chỉ còn OA) và "Zalo cá nhân" (`/zalo-personal`, gộp trang
+  "Chăm sóc Zalo cá nhân" cũ; `/zalo-care` chuyển hướng sang). Trang chi tiết từng nick `/zalo-personal/[id]` chứa cài đặt nick (nhịp
+  gửi, IP riêng, bạn bè) chuyển từ trang Kênh sang.
+- **Chia theo sức gửi (Weighted Least-Loaded, `OutreachAllocator`, hàm thuần):** mỗi người giao cho nick có (hàng chờ + 1) ÷ (người
+  mới/ngày) nhỏ nhất → các nick đi hết hàng chờ gần cùng lúc, nick khỏe nhận nhiều hơn. Người đã quen một nick (từng được nick đó
+  nhắn/mời, hoặc có hội thoại Zalo cá nhân với nick đó) giữ nick đó (Sticky). Chỉ chia cho nick đang kết nối, không bị phanh "tạm
+  dừng", hôm nay còn nhận người mới (Health check); không có nick nào → 409 `zalo_personal_no_running_nick`.
+- **Xem trước (Dry-run):** `POST /zalo-outreach/batches` có `dryRun` — cùng đường code, không ghi gì, không cần xác nhận nguồn; giao
+  diện gọi khi DN gõ/dán để hiện "Nick A 60 · Nick B 30 · xong khoảng 3 ngày".
+- **Chuyển nick chỉ cho người chưa được liên hệ** (đang chờ lượt): người đã được nick A nhắn/mời giữ nick A, để khách không thấy hai
+  nick lạ cùng nhắn. `PUT /zalo-outreach/targets` có `moveToConnectionId` (nick đích phải là nick của đúng DN — có test cô lập
+  tenant); `POST /zalo-outreach/nicks/{id}/redistribute` chia lại hàng chờ của một nick (mất kết nối, bị phanh) cho các nick khác.
+  Ghi audit log `outreach.moved` / `outreach.redistributed`.
+- **Tóm tắt nick** (`GET /zalo-outreach/summary`) thêm `stateCounts`, `booked` (người đã liên hệ được đang có lịch hẹn), `recent`
+  (5 việc gần nhất) cho thẻ nick trực quan.
+
+**Không đổi schema** (`outreach_batches.connection_id` và `outreach_targets.connection_id` vốn nullable; đợt chia nhiều nick để
+`connection_id` của đợt = null). Mỗi nick vẫn giữ giới hạn riêng; quy tắc xác nhận nguồn, khung giờ, "hủy" không đổi.
+
+## 2026-11-15 — Chi phí AI theo từng nick, quy ra VND theo tỷ giá Vietcombank từng ngày
+
+**Bối cảnh:** chủ dự án cần biết mỗi tài khoản Zalo cá nhân đã tốn bao nhiêu tiền, quy ra tiền Việt "thật và chuẩn".
+
+**Quyết định (chủ dự án chốt):** chỉ tính chi phí AI; tỷ giá Vietcombank tự động theo ngày; super admin và chủ DN đều xem được.
+- **Ghi nick ngay lúc gọi AI:** `usage_records.connection_id` (nullable, không khóa ngoại để giữ lịch sử khi nick bị xóa; index
+  `(tenant_id, connection_id, created_at)`). Bản ghi cũ: khi đọc lấy nick theo `conversations.connection_id` — không sửa tay
+  migration. Phần không thuộc nick nào (Chat thử, nạp kho kiến thức, hỏi số liệu) hiện riêng, không chia bừa.
+- **Không bỏ sót:** tin chào gửi kèm lời mời kết bạn (chưa có hội thoại) nay ghi nick; tạo vector cho câu tìm kiếm của bot nay
+  được ghi (`UsageKind.Embed`). API embedding của Gemini không trả số token → ước tính (độ dài + 30) ÷ 3,5 ký tự/token; mỗi tin chỉ
+  cỡ 0,0000x USD nên sai số không đáng kể.
+- **Quy ra VND:** USD gốc mỗi lần gọi = token nhà cung cấp báo × bảng giá chính thức (đã trừ phần cache), lưu 8 số lẻ. Cộng USD theo
+  NGÀY (giờ VN) rồi nhân giá BÁN USD Vietcombank đúng ngày đó (`exchange_rates`, bảng hệ thống), × (1 + `Cost:CardFeePercent`).
+  Không làm tròn giữa chừng; giao diện mới làm tròn tới đồng. Nguồn kiểm chứng 2026-11-15:
+  `GET https://www.vietcombank.com.vn/api/exchangerates?date=yyyy-MM-dd` (có cả ngày cũ, cả cuối tuần; trang ghi "chỉ mang tính
+  chất tham khảo"). Job `exchange-rate-sync` 23:30 mỗi đêm lấy lại giá hôm nay + hôm qua và bù 93 ngày; Vietcombank lỗi → dùng giá
+  ngày gần nhất và đánh dấu "ước tính" (`approximatedDays`).
+- **API:** chủ DN `GET /channels/costs?from&to`; super admin `GET /admin/tenants/{id}/costs?from&to` (scope riêng, tenant context =
+  DN đó). Tối đa 93 ngày/lần. Kèm số người đã nhắn/trò chuyện, khách trả lời, lịch hẹn tạo trong kỳ để tính đ/người.
+
+**Giới hạn cần biết (để "chuẩn"):** số VND này khớp công thức tính tiền của nhà cung cấp, nhưng tiền thật trên sao kê còn phụ thuộc
+ngày ngân hàng trừ tiền (tỷ giá ngày đó), phí thẻ, thuế trên hóa đơn, và việc bảng giá trong cấu hình được cập nhật đúng hạn
+(vd Gemini 3.8 Flash tăng gấp đôi từ 2027-01-01). Dùng key gói miễn phí thì tiền thật là 0 dù báo cáo vẫn tính theo giá niêm yết.
+Việc sau (nếu cần): đối chiếu hóa đơn thật hằng tháng và phân bổ theo tỷ lệ dùng.
+
+## 2026-11-17 — Groq gpt-oss-120b làm model chat chính; mọi chi phí AI hiện bằng VND theo tỷ giá từng ngày
+
+**Quyết định (chủ dự án chốt):**
+- **Model chat:** `Ai:ChatProviders=groq,gemini`, `Ai:GroqModels=openai/gpt-oss-120b` (bỏ gpt-oss-20b khỏi chuỗi: chưa đo chất
+  lượng; Groq 120b lỗi/hết lượt → sang thẳng Gemini 3.5 Flash-Lite đã đo 34/34). Lý do: eval spa 58 câu Groq 120b đạt 32/34 câu
+  thường, 24/24 an toàn, 0 bịa giá, ~0,0006 USD/lượt (Gemini 3.5 Flash-Lite ~0,0016). Chạy lại nhóm hội thoại nhiều lượt
+  N25–N28 ba lần: 12/12. Groq cache phần đầu prompt trùng (giảm 50%, giữ 2 giờ, không cần độ dài tối thiểu) — nhờ prompt
+  "cố định trước" (2026-11-15). Không thêm "giảm đau" vào câu cấm spa (chủ dự án quyết).
+- **Việc phải làm trước production:** Groq gói trả phí (gói free bị 429 thường xuyên — chuỗi tự chuyển sang Gemini nhưng tốn hơn),
+  bật Zero Data Retention; Gemini vẫn gói trả phí (embedding + dự phòng); cập nhật hồ sơ chuyển dữ liệu ra nước ngoài (Groq là bên
+  nhận chính).
+- **VND ở mọi màn hình chi phí AI:** bỏ tỷ giá cố định 26.000 đ/USD ở FE. BE trả thêm trường VND tính bằng `UsdVndConverter`
+  (giá bán USD Vietcombank đúng ngày phát sinh × (1 + phí thẻ)): super admin (`aiCostThisMonthVnd`, `aiCostLastMonthVnd`,
+  `monthlyCosts[].costVnd`), dashboard (`aiCostVndMonth`), báo cáo hiệu quả AI (`aiCostVnd`), Chat thử (`costVnd`). null = chưa có
+  tỷ giá → giao diện hiện USD. Job `exchange-rate-sync` bù 400 ngày (đủ biểu đồ 12 tháng). Test dùng Vietcombank giả
+  (`FakeVietcombankHandler`, 25.000 đ) — không gọi mạng.
+
+## 2026-11-17 — Telegram: danh sách SĐT sắp hết / đã hết, phanh chạy lại bình thường
+
+**Quyết định (chủ dự án chọn cả 3):**
+- **Hết danh sách** (`zp:queue_empty`): hàng chờ (chờ lượt + đã kết bạn chờ tin đầu) của một nick đã từng được giao số về 0 → báo
+  một lần, kèm số đã liên hệ / trả lời / có lịch hẹn / không có Zalo và link "Thêm số". Dán thêm → lần hết sau báo lại.
+- **Sắp hết** (`zp:queue_low`): còn ≤ số người mới nick nhận được trong 1 ngày → báo một lần; chỉ khi trước đó hàng chờ từng dài
+  hơn mức này (vừa dán vài số thì không báo "sắp hết" ngay).
+- **Phanh tự động:** trước đã báo khi chậm lại / tạm dừng; nay báo thêm khi hết tạm dừng (còn chậm) và khi chạy lại bình thường
+  (`zp:outreach_normal`).
+- `OutreachQueueWatcher` giữ cờ trong Redis (180 ngày), chạy cuối job hàng đợi (mỗi phút khi có việc) và job dọn dẹp (mỗi giờ);
+  nick mất kết nối thì bỏ qua (đã có tin báo riêng). Nội dung tin ở `ZaloPersonalAlertText` (hàm thuần): chỉ tên nick + con số,
+  không tên/SĐT khách. Link trong mọi tin báo nick đổi từ `/channels` sang `/zalo-personal/{id}` (trang Kênh chỉ còn OA).
+- Cần DN đã kết nối Telegram (Thiết lập trợ lý → chat id); chưa kết nối thì không gửi.
+
+## 2026-11-23 — Hộp thư: tin mới nhất lên đầu (chủ dự án chốt)
+
+- Bỏ luật cũ (2026-10-04) "ca chờ người lâu nhất lên đầu": khi test, các ca bỏ dở nhiều ngày (chat thử chờ 49 ngày) chiếm đầu danh
+  sách, khách vừa nhắn bị đẩy xuống giữa. Giờ mọi hội thoại xếp theo tin mới nhất như Zalo/Messenger (`ListInboxAsync`).
+- Ca cần người vẫn nhận ra qua nhãn "Cần bạn"/"Khẩn cấp" + thời gian chờ, tab **Cần xử lý** (lọc riêng, huy hiệu số trên menu),
+  nhắc chờ lâu và Telegram như trước. Test: `Newest_message_comes_first_even_above_old_cases_waiting_for_staff`.
+
+## 2026-11-25 — Nick cá nhân: nhắn trước rồi mới mời kết bạn; chấp nhận → một tin giới thiệu (chủ dự án chốt)
+
+- **Thứ tự mới cho người mới:** tìm được Zalo → gửi tin chào ngay (không chờ kết bạn) → 2–5 phút sau gửi MỘT lời mời kết bạn
+  (lời ngắn `InviteAfterReply`). Chỉ khi Zalo chặn tin người lạ mới mời kèm lời chào như cũ. Thay luật 2026-11-15 "còn lượt mời
+  thì kết bạn trước".
+- **Hết lượt mời trong ngày:** vẫn nhắn, lời mời để hôm khác (job `MessagedAsync` thử lại khi còn lượt). Giữ nguyên các chốt an
+  toàn: trần mời người lạ (`ColdInviteCap`), cách ≥ 10 phút giữa 2 lời mời, phanh tự động.
+- **Khách chấp nhận mà chưa trả lời:** đúng MỘT tin `AcceptedIntro` (khóa Redis `zp:accepted-intro:{id}` 180 ngày): cảm ơn +
+  giới thiệu doanh nghiệp + một câu hỏi mở. Chủ dự án: "mình chủ động nhắn để giới thiệu, giống kiếm khách" → cấm kiểu "cần gì cứ
+  nhắn em" (kiểm tra `passive_close`, viết lại / dùng mẫu). Khách đã trả lời rồi mới chấp nhận → không gửi thêm (bot đang tư vấn).
+- **Đo tỷ lệ chấp nhận cho phanh:** tính cả lời mời gửi sau tin chào (`RatesAsync`), không chỉ lời mời kiểu cũ.
+- Còn mở: lời mời gửi sau tin chào chưa tự rút sau 14 ngày.
+
+## 2026-11-25 — Hiểu sticker khách gửi: chữ khóa của Zalo + AI xem hình, lưu nghĩa theo sticker (chủ dự án chọn)
+
+- Trước đây mọi sticker → câu cố định "…có thể hỗ trợ gì thêm ạ?" (không gọi AI). Nay sticker thành tin
+  "[Khách gửi sticker: <nghĩa>]" và đi luồng AI bình thường (prompt quy tắc 11c: hiểu như lời khách — giơ ngón cái sau câu hỏi
+  xin phép = đồng ý).
+- **Lấy nghĩa (Cache-Aside):** Redis `sticker:meaning:{id}` 180 ngày → có thì dùng; chưa có → tải hình (chỉ https, tên miền, không
+  IP/localhost, ≤ 1MB, image/*) → Gemini xem hình (phần `inlineData`, đã kiểm tra docs API 2026-11-25) tả nghĩa ≤ 80 ký tự → lưu.
+  Không tải/không gọi được AI → dùng chữ khóa Zalo (lưu 1 ngày); không có gì → "[Khách gửi sticker]". Chi phí ghi `usage_records`.
+- Không đổi schema: thông tin sticker của tin (id, chữ khóa, link hình) giữ ở Redis `sticker:msg:{messageId}` 2 ngày; job xử lý
+  tin đọc ra, sửa `content_enc` của tin khách thành câu có nghĩa.
+- **An toàn:** sticker KHÔNG BAO GIỜ tự chốt lịch hẹn (bỏ qua bước xác nhận đặt lịch, prompt `booking = null`) — đúng luật "AI chỉ
+  đề xuất, hệ thống mới chốt".
+- Nguồn: nick cá nhân — sidecar gọi `getStickersDetail` của zca-js (giới hạn 3 giây, nhớ 500 sticker; lỗi → gửi tin không kèm
+  sticker), sự kiện gửi lên API giữ đúng thứ tự; OA — `payload.id` + `url` của attachment. **Chưa kiểm chứng với nick thật:** dạng
+  `content` sticker của zca-js và nghĩa trường `text` của `getStickersDetail` (zpt.12 trong sổ tay test).
+- Eval N29 (giơ ngón cái sau câu xin phép → gửi giá). Giả lập: 4 sticker giả (ok, cảm ơn, haha, không chữ khóa) + nút trong khung Giả lập.
+
+## 2026-11-25 — Vòng đời số điện thoại chăm sóc qua nick + danh sách "Cần gọi điện" (chủ dự án chốt)
+
+Chủ dự án hỏi: dán 100 số/ngày thì bot "chăm cộng dồn" mãi sao? Trả lời: mỗi số chỉ được chạm 1 lần (chào + mời + giới thiệu), nhưng có
+4 lỗ hổng — dán lại số cũ là bị nhắn lại, "Đang tư vấn" không bao giờ kết thúc, danh sách gọi chỉ tăng, tin mới và tin trả lời dùng chung
+hạn mức. Chủ dự án duyệt cả gói (máy trạng thái, `OutreachLifecycle`):
+- **Im 2 ngày** (trước là 7) tính từ tin CUỐI bên mình gửi → `NoReply` "Cần gọi điện". Khách trả lời muộn → tự về "Đang tư vấn";
+  chấp nhận kết bạn muộn → một tin giới thiệu, đếm lại 2 ngày.
+- **Đang tư vấn im 14 ngày** (mọi kênh) → `Cold` "Đã nguội", đứng đầu danh sách gọi. **Có lịch hẹn / hóa đơn** tạo sau lúc dán số →
+  `Converted` "Đã thành khách" (CRM chăm tiếp). **30 ngày trong danh sách gọi không ai xử lý** → `Archived` "Lưu trữ".
+- **Danh sách "Cần gọi điện"** ở trang Cần chăm sóc (`/care/call-list`): đã nguội → im lặng → không có Zalo; SĐT đầy đủ để bấm gọi
+  (xem danh sách ghi audit `care.call_list_viewed`). Kết quả: Quan tâm (về Đang tư vấn, tầng Quan tâm) / Không quan tâm (Đã dừng +
+  `not_interested`, từ chối nhận tin chủ động nguồn `staff_call`, tầng Không tiềm năng — KHÔNG tính vào phanh tự động vì không phải tín
+  hiệu Zalo) / Không nghe máy (giữ lại, đếm lại 30 ngày). Mỗi kết quả là một ghi chú loại mới `call` trong nhật ký chăm sóc.
+- **Nhắc:** huy hiệu menu Cần chăm sóc = gợi ý mở + số cần gọi (`/care/count` thêm `toCall`, `toCallWarm`); ô "Số cần gọi điện" ở
+  Tổng quan; Telegram mỗi ngày một tin lúc job dọn dẹp chạy lần đầu trong khung giờ nhắn (chỉ con số + link `/care#call-list`).
+- **Danh sách tạm khóa:** số đã liên hệ mà chưa từng trả lời dán lại bị bỏ qua 90 ngày (`contacted_recently` + ngày dán lại được), đã
+  liên hệ 2 lần → chặn hẳn (`contacted_twice`). Không có Zalo không tính là đã liên hệ.
+- **Dành lượt tin (Backpressure):** người mới (tin chào, mời người lạ) chỉ dùng 70% "Tổng tin mỗi ngày" của nick; quá mức → hẹn mai, khách
+  đang chat luôn còn lượt. Trang nick báo "tạm ngưng nhắn người mới" (`holdingForReplies`). Ô dán SĐT cảnh báo khi hàng chờ > 14 ngày.
+- Không migration: trạng thái lưu dạng chữ, loại ghi chú `call` cũng vậy. Dev: nút "Tua nhanh thời gian" (+1/+3/+15/+31 ngày) trong
+  khung Giả lập (chỉ Development + sidecar giả lập) lùi mọi mốc giờ của nick rồi chạy job hàng đợi + dọn dẹp ngay.

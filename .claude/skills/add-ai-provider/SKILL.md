@@ -5,12 +5,12 @@ description: Thêm hoặc đổi nhà cung cấp/model AI (chat: Gemini + Groq d
 
 # Thêm / đổi nhà cung cấp AI
 
-Hiện tại: chat **Gemini, Groq làm dự phòng** khi Gemini hết lượt/lỗi (chủ dự án chốt 2026-11-03); embedding **chỉ Gemini**. Thêm provider khác → hỏi chủ dự án trước.
+Hiện tại: chat **Groq `gpt-oss-120b` chính, Gemini dự phòng** (`Ai:ChatProviders=groq,gemini`, `Ai:GroqModels=openai/gpt-oss-120b` — chủ dự án chốt 2026-11-17; trước đó Gemini chính, Groq dự phòng từ 2026-11-03); embedding **chỉ Gemini**. Chi phí ghi cả phần cache (`CachedInputPerMillionUsd`). Thêm provider khác → hỏi chủ dự án trước.
 
 1. Interface ở Core, tách chat và embedding (cấu hình độc lập):
    - `IChatProvider` (`src/ZaloAi.Core/Ai/IChatProvider.cs`): `ChatAsync(ChatRequest(System, Turns, JsonSchema?, Temperature, MaxOutputTokens))` → `ChatResult(Text, Provider, Model, InputTokens, OutputTokens, CostUsd, LatencyMs)`. Output tokens gồm cả token "suy nghĩ". Code nghiệp vụ chỉ dùng interface này, không đọc cấu trúc riêng của nhà cung cấp.
    - `IEmbeddingProvider` (`src/ZaloAi.Core/Ai/IEmbeddingProvider.cs`): tài liệu và câu hỏi có tiền tố nhiệm vụ riêng.
-   - Mỗi nhà cung cấp chat là một `IChatModelClient` (`src/ZaloAi.Ai/Providers/ChatModelClient.cs`) gọi **đúng một model**: `GeminiChatProvider`, `GroqChatProvider`. `FallbackChatProvider` là `IChatProvider` thật, chạy chuỗi bước theo `Ai:ChatProviders` (mặc định `gemini,groq`: `ChatModel` → `ChatFallbackModel` → `GroqModels` theo thứ tự). Đăng ký trong `src/ZaloAi.Ai/DependencyInjection.cs` (`ChatSteps`); `Ai:ChatProvider=fake` cho test.
+   - Mỗi nhà cung cấp chat là một `IChatModelClient` (`src/ZaloAi.Ai/Providers/ChatModelClient.cs`) gọi **đúng một model**: `GeminiChatProvider`, `GroqChatProvider`. `FallbackChatProvider` là `IChatProvider` thật, chạy chuỗi bước theo `Ai:ChatProviders` (appsettings hiện `groq,gemini`: `GroqModels` → `ChatModel` → `ChatFallbackModel`; mặc định trong code vẫn `gemini,groq`). Đăng ký trong `src/ZaloAi.Ai/DependencyInjection.cs` (`ChatSteps`); `Ai:ChatProvider=fake` cho test.
 2. **Kiểm tra docs chính thức** (và một request thật bằng script hoặc `eval --ids`, không in key) trước khi viết request/response; ghi ngày kiểm chứng trong comment class.
 3. Model, key, giá, thứ tự đọc từ `AiOptions` (`src/ZaloAi.Core/Options/AiOptions.cs`, section `Ai`), không hardcode. Key chỉ qua env/user-secrets (API và Worker dùng chung `zaloai-dev`). Giá ở `Ai:Pricing` trong appsettings của **cả Api và Worker** (USD/1 triệu token), cập nhật tay theo trang giá.
 4. HTTP qua typed `HttpClient` + `AddStandardResilienceHandler` (timeout, retry 5xx, circuit breaker; không retry 429 và timeout) và `AiHttp.SendAsync` / `AiHttp.ThrowIfFailed` để map lỗi. Đổi model: đo độ trễ thật trước (model "suy nghĩ" mặc định có thể mất hàng chục giây).

@@ -44,6 +44,7 @@ public static class DependencyInjection
         services.AddValidatedOptions<ZaloOptions>(configuration, ZaloOptions.SectionName);
         services.AddValidatedOptions<TelegramOptions>(configuration, TelegramOptions.SectionName);
         services.AddValidatedOptions<BillingOptions>(configuration, BillingOptions.SectionName);
+        services.AddValidatedOptions<CostOptions>(configuration, CostOptions.SectionName);
 
         services.AddSingleton<IFieldEncryptor, AesGcmFieldEncryptor>();
         services.AddSingleton<IPhoneHasher, HmacPhoneHasher>();
@@ -104,6 +105,7 @@ public static class DependencyInjection
         services.AddScoped<ZaloPersonal.ZaloPersonalConnectionService>();
         services.AddScoped<IChannelAdapter, ZaloPersonal.ZaloPersonalAdapter>();
         services.AddScoped<ZaloPersonalAlertJob>();
+        services.AddScoped<ZaloPersonal.OutreachQueueWatcher>();
         services.AddScoped<ZaloPersonalHealthJob>();
         services.AddScoped<ZaloPersonal.PersonalSendLimiter>();
         services.AddScoped<ZaloPersonal.ProxyPoolService>();
@@ -112,6 +114,8 @@ public static class DependencyInjection
         services.AddScoped<QuickReplyRepository>();
         services.AddScoped<OutreachLookup>();
         services.AddScoped<ZaloPersonal.OutreachService>();
+        services.AddScoped<ZaloPersonal.CallListService>();
+        services.AddScoped<Jobs.CallListDigest>();
         services.AddScoped<OutreachSweepJob>();
         services.AddScoped<OutreachTenantJob>();
         services.AddScoped<OutreachMaintenanceSweepJob>();
@@ -141,6 +145,33 @@ public static class DependencyInjection
         services.AddScoped<ZaloAi.Infrastructure.Admin.TenantAdminService>();
         services.AddScoped<TenantExpiryJob>();
         services.AddScoped<ZaloAi.Infrastructure.Billing.ConversationQuotaService>();
+
+        // Hiểu sticker khách gửi (2026-11-25): tải ảnh sticker có giới hạn thời gian, AI xem hình (IStickerVision ở ZaloAi.Ai).
+        services.AddHttpClient(Stickers.StickerInterpreter.ImageClient, http => http.Timeout = Timeout.InfiniteTimeSpan)
+            .AddStandardResilienceHandler(resilience =>
+            {
+                resilience.AttemptTimeout.Timeout = TimeSpan.FromSeconds(5);
+                resilience.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(12);
+                resilience.Retry.MaxRetryAttempts = 1;
+            });
+        services.AddScoped<Stickers.StickerInterpreter>();
+
+        // Chi phí AI theo nick, quy ra VND theo tỷ giá Vietcombank từng ngày (2026-11-15).
+        services.AddHttpClient<ZaloAi.Infrastructure.Billing.VietcombankRateClient>((sp, http) =>
+            {
+                http.BaseAddress = new Uri(sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<CostOptions>>().Value.VietcombankBaseUrl);
+                http.Timeout = Timeout.InfiniteTimeSpan;
+            })
+            .AddStandardResilienceHandler(resilience =>
+            {
+                resilience.AttemptTimeout.Timeout = TimeSpan.FromSeconds(8);
+                resilience.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(20);
+            });
+        services.AddScoped<ZaloAi.Infrastructure.Billing.ExchangeRateService>();
+        services.AddScoped<ZaloAi.Infrastructure.Billing.UsdVndConverter>();
+        services.AddScoped<UsageCostRepository>();
+        services.AddScoped<ZaloAi.Infrastructure.Billing.NickCostService>();
+        services.AddScoped<ExchangeRateSyncJob>();
         services.AddScoped<QuotaNotifyJob>();
         services.AddScoped<ZaloAi.Infrastructure.Team.TeamService>();
         services.AddScoped<ZaloAi.Infrastructure.Customers.ContactImportService>();

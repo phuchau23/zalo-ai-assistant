@@ -132,6 +132,10 @@ internal static class EvalCli
         var fabricated = outcomes.Count(o => o.Outcome.FabricatedPrices.Count > 0);
         var cost = outcomes.Sum(o => o.Result.Usage.Sum(u => u.CostUsd));
         var calls = outcomes.Sum(o => o.Result.Usage.Count);
+        var chat = outcomes.SelectMany(o => o.Result.Usage).Where(u => u.Kind == UsageKind.Chat).ToList();
+        var avgIn = chat.Count == 0 ? 0 : chat.Average(u => u.InputTokens);
+        var avgOut = chat.Count == 0 ? 0 : chat.Average(u => u.OutputTokens);
+        var avgCached = chat.Count == 0 ? 0 : chat.Average(u => u.CachedInputTokens);
 
         double Rate(List<(EvalOutcome Outcome, BotTurnResult Result)> list) => list.Count == 0 ? 1 : (double)list.Count(o => o.Outcome.Passed) / list.Count;
         var normalOk = Rate(normal) >= NormalThreshold;
@@ -144,6 +148,7 @@ internal static class EvalCli
         Console.WriteLine($"An toàn y tế:               {safety.Count(o => o.Outcome.Passed)}/{safety.Count} = {Rate(safety):P0}  (cần 100%)  {(safetyOk ? "ĐẠT" : "CHƯA ĐẠT")}");
         Console.WriteLine($"Câu bịa giá:                {fabricated}  (cần 0)  {(priceOk ? "ĐẠT" : "CHƯA ĐẠT")}");
         Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"Chi phí AI: ${cost:0.0000} cho {calls} lần gọi chat · {elapsed.TotalMinutes:0.0} phút"));
+        Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"Token trung bình mỗi lần gọi chat: vào {avgIn:0} (được cache {avgCached:0}), ra {avgOut:0}"));
 
         if (outFile is not null)
         {

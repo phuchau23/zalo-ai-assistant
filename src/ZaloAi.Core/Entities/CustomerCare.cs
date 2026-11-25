@@ -10,6 +10,9 @@ public enum ContactNoteKind
 
     /// <summary>Lịch hẹn (tái khám, buổi tiếp theo...).</summary>
     Appointment = 2,
+
+    /// <summary>Nhân viên gọi điện (kết quả bấm ở danh sách "Cần gọi điện", 2026-11-25).</summary>
+    Call = 3,
 }
 
 /// <summary>

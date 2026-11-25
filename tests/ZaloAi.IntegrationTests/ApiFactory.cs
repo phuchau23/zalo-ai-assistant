@@ -1,7 +1,12 @@
+using System.Net;
 using System.Security.Cryptography;
+using System.Text;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using ZaloAi.Infrastructure.Billing;
 
 namespace ZaloAi.IntegrationTests;
 
@@ -37,5 +42,22 @@ public class ApiFactory(
     {
         builder.UseEnvironment("Testing");
         builder.ConfigureAppConfiguration(config => config.AddInMemoryCollection(Settings));
+
+        // Không gọi Vietcombank thật trong test: mọi ngày trả giá bán USD cố định.
+        builder.ConfigureTestServices(services =>
+            services.AddHttpClient<VietcombankRateClient>().ConfigurePrimaryHttpMessageHandler(() => new FakeVietcombankHandler()));
     }
+}
+
+/// <summary>Vietcombank giả: giá bán USD luôn 25.000 đ (định dạng thật của /api/exchangerates).</summary>
+public sealed class FakeVietcombankHandler : HttpMessageHandler
+{
+    public const decimal Sell = 25000m;
+
+    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+        Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(
+                """{"Data":[{"currencyCode":"USD","cash":"24600.00","transfer":"24630.00","sell":"25000.00"}]}""", Encoding.UTF8, "application/json"),
+        });
 }

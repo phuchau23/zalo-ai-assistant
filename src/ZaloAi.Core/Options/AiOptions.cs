@@ -10,6 +10,10 @@ public sealed class ModelPrice
 
     [Range(0, 1000)]
     public decimal OutputPerMillionUsd { get; set; }
+
+    /// <summary>Giá token đầu vào được cache (Gemini ~10%, Groq gpt-oss 50% giá thường). Trống = tính như đầu vào thường.</summary>
+    [Range(0, 1000)]
+    public decimal? CachedInputPerMillionUsd { get; set; }
 }
 
 /// <summary>
@@ -41,6 +45,9 @@ public sealed class AiOptions : IValidatableObject
     /// <summary>Kiểm chứng 2026-10-04: https://ai.google.dev/gemini-api/docs/models</summary>
     [Required]
     public string ChatModel { get; set; } = "gemini-3.8-flash";
+
+    /// <summary>Model Gemini xem hình sticker (cần đọc ảnh — Groq gpt-oss chỉ đọc chữ). Trống = <see cref="ChatModel"/>.</summary>
+    public string? StickerVisionModel { get; set; }
 
     /// <summary>Model Gemini dự phòng khi model chính lỗi tạm thời hoặc hết hạn mức. Để trống = không dùng.</summary>
     public string? ChatFallbackModel { get; set; } = "gemini-3.5-flash-lite";
@@ -119,10 +126,19 @@ public sealed class AiOptions : IValidatableObject
     /// <summary>Bảng giá theo tên model (appsettings.json, section Ai:Pricing). Model không có giá → chi phí ghi 0.</summary>
     public Dictionary<string, ModelPrice> Pricing { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
-    public decimal Cost(string model, int inputTokens, int outputTokens) =>
-        Pricing.TryGetValue(model, out var price)
-            ? ((inputTokens * price.InputPerMillionUsd) + (outputTokens * price.OutputPerMillionUsd)) / 1_000_000m
-            : 0m;
+    /// <param name="inputTokens">Tổng đầu vào, gồm cả phần cache.</param>
+    /// <param name="cachedInputTokens">Phần đầu vào được cache (tính theo CachedInputPerMillionUsd nếu có).</param>
+    public decimal Cost(string model, int inputTokens, int outputTokens, int cachedInputTokens = 0)
+    {
+        if (!Pricing.TryGetValue(model, out var price))
+        {
+            return 0m;
+        }
+
+        var cached = Math.Clamp(cachedInputTokens, 0, inputTokens);
+        var cachedPrice = price.CachedInputPerMillionUsd ?? price.InputPerMillionUsd;
+        return (((inputTokens - cached) * price.InputPerMillionUsd) + (cached * cachedPrice) + (outputTokens * price.OutputPerMillionUsd)) / 1_000_000m;
+    }
 
     public IReadOnlyList<string> ChatProviderOrder => SplitList(ChatProviders);
 

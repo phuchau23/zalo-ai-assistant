@@ -14,6 +14,12 @@ public enum OutreachMessageKind
 
     /// <summary>Khách đã nói chuyện rồi mới chấp nhận lời mời: cảm ơn + giới thiệu sơ bên mình giúp được gì, không chào lại.</summary>
     AcceptedThanks,
+
+    /// <summary>
+    /// Đã nhận tin chào (nhắn trước) rồi chấp nhận lời mời, CHƯA trả lời: cảm ơn + giới thiệu doanh nghiệp (nhóm dịch vụ) + một câu hỏi mở
+    /// để khách phản hồi — chủ động tìm khách, không "cần gì cứ nhắn" (chủ dự án chốt 2026-11-25).
+    /// </summary>
+    AcceptedIntro,
 }
 
 /// <summary>Thông tin để AI viết tin chủ động. Tên/ghi chú là bản gốc — bộ viết tự che trước khi gửi AI.</summary>

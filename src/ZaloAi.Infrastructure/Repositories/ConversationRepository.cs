@@ -222,7 +222,7 @@ public sealed class ConversationRepository(AppDbContext db, ITenantContext tenan
     }
 
     /// <summary>
-    /// Danh sách hộp thư: ca đang chờ người lên đầu (chờ lâu nhất trước), rồi theo tin mới nhất. Kèm khách và tin cuối.
+    /// Danh sách hộp thư: tin mới nhất lên đầu (kể cả ca đang chờ người). Kèm khách và tin cuối.
     /// </summary>
     /// <param name="filter">attention | bot | human | mine | all</param>
     public async Task<IReadOnlyList<InboxRow>> ListInboxAsync(
@@ -249,10 +249,11 @@ public sealed class ConversationRepository(AppDbContext db, ITenantContext tenan
             _ => query,
         };
 
+        // Mới nhắn lên đầu như Zalo/Messenger (chủ dự án chốt 2026-11-23, bỏ "ca chờ người lâu nhất lên đầu": ca bỏ dở nhiều ngày
+        // chiếm đầu danh sách, khách vừa nhắn bị đẩy xuống). Ca cần người nhận biết qua nhãn + tab "Cần xử lý" + Telegram.
         var conversations = await query
-            .OrderBy(c => c.NeedsAttentionSince == null)
-            .ThenBy(c => c.NeedsAttentionSince)
-            .ThenByDescending(c => c.LastMessageAt ?? c.UpdatedAt)
+            .OrderByDescending(c => c.LastMessageAt ?? c.UpdatedAt)
+            .ThenByDescending(c => c.Id)
             .Take(Math.Clamp(limit, 1, 200))
             .ToListAsync(cancellationToken);
 
@@ -272,14 +273,24 @@ public sealed class ConversationRepository(AppDbContext db, ITenantContext tenan
             .ToList();
     }
 
-    /// <summary>Tổng chi phí AI (USD) và số lần gọi của một hội thoại.</summary>
+    /// <summary>Các khoản chi phí AI (thời điểm, USD) của một hội thoại — để quy ra VND theo tỷ giá từng ngày.</summary>
+    public async Task<IReadOnlyList<(DateTimeOffset At, decimal Usd)>> UsageRowsForConversationAsync(Guid tenantId, Guid conversationId, CancellationToken cancellationToken)
+    {
+        EnsureTenant(tenantId);
+        return await Db.UsageRecords
+            .Where(u => u.TenantId == tenantId && u.ConversationId == conversationId)
+            .Select(u => new ValueTuple<DateTimeOffset, decimal>(u.CreatedAt, u.CostUsd))
+            .ToListAsync(cancellationToken);
+    }
+
+    /// <summary>Tổng chi phí AI (USD, gồm cả tạo vector) và số lần gọi model chat của một hội thoại.</summary>
     public async Task<(decimal CostUsd, int Calls)> UsageForConversationAsync(Guid tenantId, Guid conversationId, CancellationToken cancellationToken)
     {
         EnsureTenant(tenantId);
         var rows = await Db.UsageRecords
             .Where(u => u.TenantId == tenantId && u.ConversationId == conversationId)
             .GroupBy(_ => 1)
-            .Select(g => new { Cost = g.Sum(u => u.CostUsd), Calls = g.Count() })
+            .Select(g => new { Cost = g.Sum(u => u.CostUsd), Calls = g.Count(u => u.Kind == UsageKind.Chat) })
             .FirstOrDefaultAsync(cancellationToken);
         return rows is null ? (0m, 0) : (rows.Cost, rows.Calls);
     }

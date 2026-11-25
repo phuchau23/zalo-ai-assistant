@@ -14,15 +14,63 @@ using ZaloAi.Infrastructure.ZaloPersonal;
 
 namespace ZaloAi.Infrastructure.Jobs;
 
-/// <summary>Báo chủ DN qua Telegram khi một nick Zalo cá nhân cần họ xử lý (mở Zalo Web nơi khác, phiên hết hạn, proxy hỏng).</summary>
+/// <summary>Số liệu hàng chờ của một nick để soạn tin "sắp hết / đã hết danh sách".</summary>
+/// <param name="Contacted">Người nick đã mời kết bạn hoặc nhắn tin (mọi đợt).</param>
+public sealed record NickQueueStats(int Waiting, int EtaDays, int Contacted, int Replied, int Booked, int NoZalo);
+
+/// <summary>Nội dung tin Telegram báo về nick Zalo cá nhân (hàm thuần, để test). Không có tên/SĐT khách — chỉ tên nick và con số.</summary>
+public static class ZaloPersonalAlertText
+{
+    public static string Build(string reason, string nickName, string tenantName, string adminUrl, Guid connectionId, NickQueueStats? stats)
+    {
+        var url = adminUrl.TrimEnd('/');
+        var nick = $"Nick Zalo cá nhân \"{nickName}\"";
+        var nickPage = $"Mở trang nick: {url}/zalo-personal/{connectionId}";
+        var addPage = $"{url}/zalo-personal?tab=add";
+        return reason switch
+        {
+            OutreachQueueWatcher.QueueEmpty when stats is not null =>
+                $"📋 {nick} đã nhắn hết danh sách — {tenantName}\n" +
+                $"Đã liên hệ {stats.Contacted} người: {stats.Replied} trả lời, {stats.Booked} có lịch hẹn, {stats.NoZalo} không có Zalo.\n" +
+                $"Dán thêm số để bot chăm sóc tiếp: {addPage}",
+            OutreachQueueWatcher.QueueLow when stats is not null =>
+                $"⏳ {nick} sắp hết danh sách: còn {stats.Waiting} người chờ, khoảng {Math.Max(1, stats.EtaDays)} ngày nữa là nhắn hết — {tenantName}\n" +
+                $"Chuẩn bị thêm số: {addPage}",
+            "zp:outreach_normal" =>
+                $"✅ {nick} đã nhắn lại bình thường vì khách phản hồi tốt hơn — {tenantName}\n{nickPage}",
+            "zp:outreach_slow" =>
+                $"🐢 {nick} đang nhắn chậm lại vì nhiều người từ chối / không chấp nhận kết bạn. Xem lại danh sách SĐT hoặc lời chào — {tenantName}\n{nickPage}",
+            "zp:outreach_paused" =>
+                $"🐢 {nick} đã DỪNG nhắn trước 72 giờ vì nhiều người từ chối / chặn (để giữ nick). Vẫn trả lời khách tự nhắn tới — {tenantName}\n{nickPage}",
+            _ => $"📵 {nick} {Problem(reason)}. Trong lúc này bot không trả lời khách qua nick đó — {tenantName}\n{nickPage}",
+        };
+    }
+
+    private static string Problem(string reason) => reason switch
+    {
+        "zp:opened_elsewhere" => "vừa mở Zalo trên trình duyệt ở nơi khác nên bot bị ngắt. Đóng Zalo Web rồi bấm \"Kết nối lại\"",
+        "zp:session_expired" => "hết phiên đăng nhập. Vào trang Zalo cá nhân, quét lại mã QR",
+        "zp:proxy_failing" => "đang tạm dừng vì đường kết nối riêng (IP) gặp sự cố. Remi đang xử lý",
+        _ => "đang mất kết nối",
+    };
+}
+
+/// <summary>
+/// Báo chủ DN qua Telegram về một nick Zalo cá nhân: cần xử lý (mở Zalo Web nơi khác, phiên hết hạn, proxy hỏng), phanh tự động
+/// chậm lại / tạm dừng / chạy lại bình thường, danh sách SĐT sắp hết / đã hết (2026-11-17). Số liệu hàng chờ tính lúc gửi.
+/// </summary>
 [Queue(JobQueues.Default)]
 public sealed class ZaloPersonalAlertJob(
     TenantContext tenantContext,
     ChannelConnectionRepository connections,
     TenantRepository tenants,
     HandoffSettingsRepository handoffSettings,
+    OutreachRepository outreach,
+    ZaloPersonalRepository personal,
     TelegramClient telegram,
-    IOptions<AppOptions> app)
+    IOptions<AppOptions> app,
+    IOptions<ZaloPersonalOptions> options,
+    TimeProvider time)
 {
     public async Task RunAsync(Guid tenantId, Guid connectionId, string reason, CancellationToken cancellationToken)
     {
@@ -35,22 +83,27 @@ public sealed class ZaloPersonalAlertJob(
             return;
         }
 
-        var what = reason switch
+        NickQueueStats? stats = null;
+        if (reason is OutreachQueueWatcher.QueueLow or OutreachQueueWatcher.QueueEmpty)
         {
-            "zp:opened_elsewhere" => "vừa mở Zalo trên trình duyệt ở nơi khác nên bot bị ngắt. Đóng Zalo Web rồi bấm \"Kết nối lại\"",
-            "zp:session_expired" => "hết phiên đăng nhập. Vào trang Kênh, quét lại mã QR",
-            "zp:proxy_failing" => "đang tạm dừng vì đường kết nối riêng (IP) gặp sự cố. Remi đang xử lý",
-            "zp:outreach_slow" => "đang nhắn chậm lại vì nhiều người từ chối / không chấp nhận kết bạn. Xem lại danh sách SĐT hoặc lời chào",
-            "zp:outreach_paused" => "đã DỪNG nhắn trước 72 giờ vì nhiều người từ chối / chặn (để giữ nick). Vẫn trả lời khách tự nhắn tới",
-            _ => "đang mất kết nối",
-        };
-        var nick = connection.Name ?? "Zalo cá nhân";
-        var head = reason.StartsWith("zp:outreach_", StringComparison.Ordinal)
-            ? $"🐢 Nick Zalo cá nhân \"{nick}\" {what} — {tenant.Name}\n"
-            : $"📵 Nick Zalo cá nhân \"{nick}\" {what}. Trong lúc này bot không trả lời khách qua nick đó — {tenant.Name}\n";
+            var counts = (await outreach.StateCountsAsync(tenantId, cancellationToken)).Where(r => r.ConnectionId == connectionId).ToDictionary(r => r.State, r => r.Count);
+            int Count(params OutreachState[] states) => states.Sum(s => counts.GetValueOrDefault(s));
+            var waiting = await outreach.CountQueuedAsync(tenantId, connectionId, cancellationToken);
+            var account = await personal.GetAccountAsync(tenantId, connectionId, cancellationToken);
+            var perDay = account is null ? 1 : Math.Max(1, PersonalPacing.Effective(account, options.Value, time.GetUtcNow()).NewContactsPerDay);
+            stats = new NickQueueStats(
+                waiting,
+                OutreachAllocator.Eta(waiting, perDay),
+                Count(OutreachState.Invited, OutreachState.Friend, OutreachState.Messaged, OutreachState.Replied, OutreachState.NoReply, OutreachState.Declined,
+                    OutreachState.Expired, OutreachState.Converted, OutreachState.Cold, OutreachState.Archived),
+                Count(OutreachState.Replied, OutreachState.Cold), // từng trả lời (kể cả đã nguội); đã thành khách nằm trong "có lịch hẹn"
+                (await outreach.BookedCountsAsync(tenantId, time.GetUtcNow(), cancellationToken)).GetValueOrDefault(connectionId),
+                Count(OutreachState.NoZalo));
+        }
+
         await telegram.SendAsync(
             settings.TelegramChatId,
-            head + $"Mở trang Kênh: {app.Value.AdminUrl.TrimEnd('/')}/channels",
+            ZaloPersonalAlertText.Build(reason, connection.Name ?? "Zalo cá nhân", tenant.Name, app.Value.AdminUrl, connectionId, stats),
             cancellationToken);
     }
 }
