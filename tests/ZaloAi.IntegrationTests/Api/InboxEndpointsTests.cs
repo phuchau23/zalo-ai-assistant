@@ -221,6 +221,31 @@ public sealed class InboxEndpointsTests(PostgresFixture db)
             .Count(j => j.Value.Job?.Type == typeof(TJob) && j.Value.Job.Args[1] is Guid arg && arg == id);
 
     [Fact]
+    public async Task Newest_message_comes_first_even_above_old_cases_waiting_for_staff()
+    {
+        var (tenantId, owner, waiting) = await HandedOffAsync("Hộp thư thứ tự");
+        using var create = await owner.PostAsync(Conversations, null);
+        var fresh = (await create.Content.ReadFromJsonAsync<ChatTestConversationResponse>())!.Id;
+
+        // Ca chờ người từ 2 ngày trước; khách mới vừa nhắn (bot đang trả lời, không cần người).
+        var now = DateTimeOffset.UtcNow;
+        await using (var context = db.CreateDbContext(tenantId))
+        {
+            var old = await context.Conversations.SingleAsync(c => c.Id == waiting);
+            old.NeedsAttentionSince = now.AddDays(-2);
+            old.LastMessageAt = now.AddDays(-2);
+            var recent = await context.Conversations.SingleAsync(c => c.Id == fresh);
+            recent.LastMessageAt = now.AddMinutes(-1);
+            await context.SaveChangesAsync();
+        }
+
+        var all = (await owner.GetFromJsonAsync<List<InboxConversationItem>>(Inbox()))!;
+        all.Select(c => c.Id).ShouldBe([fresh, waiting]);
+        all[1].NeedsAttentionSince.ShouldNotBeNull(); // vẫn đánh dấu cần người, chỉ không còn chặn đầu danh sách
+        (await owner.GetFromJsonAsync<List<InboxConversationItem>>(Inbox("?filter=attention")))!.Select(c => c.Id).ShouldBe([waiting]);
+    }
+
+    [Fact]
     public async Task Tenant_B_cannot_see_or_act_on_tenant_A_conversations()
     {
         var (_, _, conversationId) = await HandedOffAsync("Hộp thư A");
