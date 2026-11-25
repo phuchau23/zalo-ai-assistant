@@ -254,6 +254,38 @@ public sealed class ZaloPersonalTests(PostgresFixture db) : IAsyncLifetime, IDis
     }
 
     [Fact]
+    public async Task Sticker_meaning_is_saved_on_the_message_and_the_bot_answers_through_ai()
+    {
+        // 2026-11-25: sticker không còn câu trả lời cố định — sidecar gửi mã + chữ khóa, job ghi nghĩa vào tin, bot (AI) trả lời theo ngữ cảnh.
+        var (tenantId, _, connectionId, _) = await ConnectedTenantAsync("Khách gửi sticker");
+        var customer = NewId();
+        await EventsAsync(connectionId, new
+        {
+            type = "message",
+            msgId = "zp-sticker-1",
+            threadId = customer,
+            fromUid = customer,
+            fromName = "Chị Hoa",
+            isSelf = false,
+            isFriend = false,
+            kind = "sticker",
+            text = (string?)null,
+            ts = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            sticker = new { id = "12345", keyword = "ok", imageUrl = (string?)null }, // không có ảnh → dùng chữ khóa của Zalo
+        });
+
+        await RunJobsAsync(tenantId);
+
+        using var scope = _api.Services.CreateScope();
+        var encryptor = scope.ServiceProvider.GetRequiredService<IFieldEncryptor>();
+        var messages = await MessagesAsync(tenantId);
+        encryptor.Decrypt(messages.Single(m => m.Sender == MessageSender.Customer).ContentEnc).ShouldBe("[Khách gửi sticker: sticker “ok”]");
+        var reply = messages.First(m => m.Sender == MessageSender.Bot);
+        reply.DeliveryStatus.ShouldBe(DeliveryStatus.Sent);
+        reply.AiTraceJson.ShouldNotBeNull().ShouldContain("sticker"); // đi qua AI (có trace), không phải câu cố định
+    }
+
+    [Fact]
     public async Task Customer_writing_again_while_the_bot_types_drops_the_stale_reply()
     {
         // Lỗi thật 2026-11-14: bot trả lời 2 đoạn, khách nhắn "có" giữa 2 đoạn → đoạn 2 ("nếu chưa cần thì thong thả") hiện sau "có".

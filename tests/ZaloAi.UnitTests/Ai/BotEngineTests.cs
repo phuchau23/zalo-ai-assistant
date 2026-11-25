@@ -397,13 +397,27 @@ public sealed class BotEngineTests
     }
 
     [Fact]
-    public async Task Sticker_gets_short_reply_without_ai()
+    public async Task Sticker_with_meaning_is_answered_by_ai_in_context()
     {
-        var chat = new ScriptedChat(_ => Json("không được gọi"));
-        var result = await Engine(chat, new StaticSearch()).ReplyAsync(Turn(ZaloAi.Core.Channels.InboundText.Sticker), CancellationToken.None);
+        // 2026-11-25: sticker không còn câu trả lời cố định — job ghi nghĩa vào tin, AI hiểu theo ngữ cảnh (quy tắc 11c).
+        var chat = new ScriptedChat(_ => Json("Dạ vậy em gửi mình bảng giá massage nha"));
+        var sticker = ZaloAi.Core.Channels.InboundText.StickerMeaning("giơ ngón cái – đồng ý, ok");
+        var result = await Engine(chat, new StaticSearch(Massage)).ReplyAsync(Turn(sticker), CancellationToken.None);
 
-        chat.Requests.ShouldBeEmpty();
+        var request = chat.Requests.ShouldHaveSingleItem();
+        request.System.ShouldContain("11c. Tin \"[Khách gửi sticker: …]\"");
+        request.Turns[^1].Text.ShouldContain("giơ ngón cái");
         result.NeedsHuman.ShouldBeFalse();
+        JsonDocument.Parse(result.TraceJson).RootElement.GetProperty("guards").EnumerateArray().Select(g => g.GetString()).ShouldContain("sticker");
+    }
+
+    [Fact]
+    public void Sticker_text_helpers_recognise_both_forms_and_keep_the_marker_intact()
+    {
+        ZaloAi.Core.Channels.InboundText.IsSticker(ZaloAi.Core.Channels.InboundText.Sticker).ShouldBeTrue();
+        ZaloAi.Core.Channels.InboundText.IsSticker("[Khách gửi sticker: vẫy tay – chào]").ShouldBeTrue();
+        ZaloAi.Core.Channels.InboundText.IsSticker("ok em").ShouldBeFalse();
+        ZaloAi.Core.Channels.InboundText.StickerMeaning(" [mèo] cười ").ShouldBe("[Khách gửi sticker: (mèo) cười]");
     }
 
     [Fact]
