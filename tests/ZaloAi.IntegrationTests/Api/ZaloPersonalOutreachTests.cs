@@ -124,8 +124,8 @@ public sealed class ZaloPersonalOutreachTests(PostgresFixture db) : IAsyncLifeti
     }
 
     /// <summary>
-    /// Đặt số lời mời/ngày của nick. 1 = người mới KHÔNG được mời (lượt duy nhất giữ cho người đã trả lời) → luồng "nhắn trước";
-    /// mặc định (nick mới tuần đầu: 3, người mới dùng 2) → luồng "kết bạn trước" (chủ dự án chốt 2026-11-15).
+    /// Đặt số lời mời/ngày của nick. 1 = người mới KHÔNG được mời (lượt duy nhất giữ cho người đã trả lời) → chỉ nhắn, mời khi khách trả
+    /// lời; mặc định (nick mới tuần đầu: 3, người mới dùng 2) → nhắn trước rồi vài phút sau mời kết bạn (chủ dự án chốt 2026-11-25).
     /// </summary>
     private static async Task InvitesPerDayAsync(HttpClient owner, Guid connectionId, int invites, int? newContacts = null)
     {
@@ -270,51 +270,65 @@ public sealed class ZaloPersonalOutreachTests(PostgresFixture db) : IAsyncLifeti
     }
 
     [Fact]
-    public async Task Invite_first_then_greeting_after_accepting()
+    public async Task Greeting_first_then_invite_then_one_intro_after_accepting()
     {
-        // Mặc định (nick mới tuần đầu 3 lời mời/ngày, người mới dùng 2): còn lượt mời → KẾT BẠN TRƯỚC, chưa nhắn gì (2026-11-15).
-        var (tenantId, owner, connectionId) = await ConnectedTenantAsync("Hành trình kết bạn");
+        // Chủ dự án chốt 2026-11-25: có Zalo → NHẮN TRƯỚC, vài phút sau MỜI KẾT BẠN luôn; chấp nhận mà chưa trả lời → MỘT tin cảm ơn +
+        // giới thiệu doanh nghiệp + câu hỏi mở (không "cần gì cứ nhắn").
+        var (tenantId, owner, connectionId) = await ConnectedTenantAsync("Nhắn rồi kết bạn");
         var phone = Phone();
         await PasteAsync(owner, $"{phone}, chị Hoa");
 
         await RunOutreachAsync(tenantId);
 
-        var invite = _sidecar.Calls.Single(c => c.Path == $"/accounts/{connectionId}/friend-request");
-        var inviteBody = JsonDocument.Parse(invite.Body).RootElement;
-        inviteBody.GetProperty("uid").GetString().ShouldBe($"u-{phone}");
-        var inviteText = inviteBody.GetProperty("message").GetString()!;
-        inviteText.Length.ShouldBeLessThanOrEqualTo(150);
-        inviteText.ShouldContain("trợ lý AI");
-        _sidecar.Calls.ShouldNotContain(c => c.Path == $"/accounts/{connectionId}/send");
-        (await TargetsAsync(owner)).Single().State.ShouldBe("invited");
+        _sidecar.Calls.Count(c => c.Path == $"/accounts/{connectionId}/send").ShouldBe(1); // tin chào đi trước
+        _sidecar.Calls.ShouldNotContain(c => c.Path == $"/accounts/{connectionId}/friend-request"); // chưa mời ngay
+        var messaged = (await TargetsAsync(owner)).Single();
+        messaged.State.ShouldBe("messaged");
+        messaged.NextActionAt.ShouldNotBeNull(); // hẹn mời kết bạn sau 2–5 phút
 
-        await RunOutreachAsync(tenantId); // không mời lần hai, không nhắn thêm khi khách chưa chấp nhận
+        await RunOutreachAsync(tenantId, TimeSpan.FromMinutes(6));
+        var invite = JsonDocument.Parse(_sidecar.Calls.Single(c => c.Path == $"/accounts/{connectionId}/friend-request").Body).RootElement;
+        invite.GetProperty("uid").GetString().ShouldBe($"u-{phone}");
+        var inviteText = invite.GetProperty("message").GetString()!;
+        inviteText.ShouldContain("Kết bạn");
+        inviteText.Length.ShouldBeLessThanOrEqualTo(150);
+        (await TargetsAsync(owner)).Single().State.ShouldBe("messaged"); // tin chào đã tới khách: vẫn "đã nhắn"
+
+        await RunOutreachAsync(tenantId, TimeSpan.FromMinutes(30)); // không mời lần hai, không nhắn thêm khi chưa chấp nhận
         _sidecar.Calls.Count(c => c.Path == $"/accounts/{connectionId}/friend-request").ShouldBe(1);
-        _sidecar.Calls.ShouldNotContain(c => c.Path == $"/accounts/{connectionId}/send");
+        _sidecar.Calls.Count(c => c.Path == $"/accounts/{connectionId}/send").ShouldBe(1);
 
         await EventsAsync(connectionId, new { type = "friend", @event = "add", uid = $"u-{phone}", ts = 1L });
-        (await TargetsAsync(owner)).Single().State.ShouldBe("friend");
+        await RunOutreachAsync(tenantId, TimeSpan.FromMinutes(45));
+        await RunOutreachAsync(tenantId, TimeSpan.FromMinutes(60));
+        await EventsAsync(connectionId, new { type = "friend", @event = "add", uid = $"u-{phone}", ts = 2L }); // xóa rồi kết bạn lại
+        await RunOutreachAsync(tenantId, TimeSpan.FromMinutes(90));
 
-        await RunOutreachAsync(tenantId);
+        var texts = await ProactiveTextsAsync(tenantId);
+        texts.Count.ShouldBe(2); // tin chào + đúng MỘT tin giới thiệu
+        texts[1].ShouldContain("cảm ơn");
+        texts[1].ShouldEndWith("ạ?"); // kết bằng câu hỏi mở để khách trả lời
+        texts[1].ShouldNotContain("cứ nhắn");
         (await TargetsAsync(owner)).Single().State.ShouldBe("messaged");
-        var greeting = (await ProactiveTextsAsync(tenantId)).ShouldHaveSingleItem();
-        greeting.ShouldContain("trợ lý AI");
-        greeting.Any(char.IsDigit).ShouldBeFalse();
     }
 
     [Fact]
-    public async Task New_people_use_the_invites_left_for_them_then_get_messaged()
+    public async Task New_people_use_the_invites_left_for_them_and_the_rest_are_invited_another_day()
     {
-        // 2 lời mời/ngày: 1 giữ cho người đã trả lời, 1 cho người mới → người thứ nhất được mời, người thứ hai được nhắn trước.
-        var (tenantId, owner, connectionId) = await ConnectedTenantAsync("Hết lượt mời thì nhắn");
+        // 2 lời mời/ngày: 1 giữ cho người đã trả lời, 1 cho người mới → cả hai được nhắn; chỉ người thứ nhất được mời hôm nay.
+        var (tenantId, owner, connectionId) = await ConnectedTenantAsync("Hết lượt mời thì mời sau");
         await InvitesPerDayAsync(owner, connectionId, 2);
         await PasteAsync(owner, $"{Phone()}\n{Phone()}");
 
         await RunOutreachAsync(tenantId);
+        await RunOutreachAsync(tenantId, TimeSpan.FromMinutes(6));
+        await RunOutreachAsync(tenantId, TimeSpan.FromMinutes(30)); // qua khoảng cách 10–20 phút giữa 2 lời mời
 
+        _sidecar.Calls.Count(c => c.Path == $"/accounts/{connectionId}/send").ShouldBe(2);
         _sidecar.Calls.Count(c => c.Path == $"/accounts/{connectionId}/friend-request").ShouldBe(1);
-        _sidecar.Calls.Count(c => c.Path == $"/accounts/{connectionId}/send").ShouldBe(1);
-        (await TargetsAsync(owner)).Select(t => t.State).OrderBy(s => s, StringComparer.Ordinal).ShouldBe(["invited", "messaged"]);
+        var targets = await TargetsAsync(owner);
+        targets.ShouldAllBe(t => t.State == "messaged");
+        targets.Count(t => t.NextActionAt > DateTimeOffset.UtcNow.AddHours(1)).ShouldBe(1); // người còn lại: mời vào ngày còn lượt
     }
 
     [Fact]
@@ -366,15 +380,17 @@ public sealed class ZaloPersonalOutreachTests(PostgresFixture db) : IAsyncLifeti
         var phone = Phone();
         _sidecar.SendResponse = _ => (HttpStatusCode.UnprocessableEntity, """{"error":"rejected","code":114,"reason":"stranger"}""");
         await PasteAsync(owner, phone);
-        await RunOutreachAsync(tenantId); // kết bạn trước
+        await RunOutreachAsync(tenantId); // nhắn trước bị chặn tin người lạ → kết bạn kèm lời chào
+        _sidecar.Calls.Count(c => c.Path == $"/accounts/{connectionId}/friend-request").ShouldBe(1);
+        (await TargetsAsync(owner)).Single().State.ShouldBe("invited");
         await EventsAsync(connectionId, new { type = "friend", @event = "add", uid = $"u-{phone}", ts = 1L });
 
-        await RunOutreachAsync(tenantId);
-        await RunOutreachAsync(tenantId);
+        await RunOutreachAsync(tenantId, TimeSpan.FromMinutes(5));
+        await RunOutreachAsync(tenantId, TimeSpan.FromMinutes(10));
 
         (await TargetsAsync(owner)).Single().State.ShouldBe("failed");
-        // Đúng 1 lần thử nhắn sau khi kết bạn; không gửi lại ở các lượt sau.
-        _sidecar.Calls.Count(c => c.Path == $"/accounts/{connectionId}/send").ShouldBe(1);
+        // Tin chào lần đầu + đúng 1 lần thử nhắn sau khi kết bạn; không gửi lại ở các lượt sau.
+        _sidecar.Calls.Count(c => c.Path == $"/accounts/{connectionId}/send").ShouldBe(2);
     }
 
     [Fact]

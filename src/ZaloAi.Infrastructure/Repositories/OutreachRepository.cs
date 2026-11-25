@@ -113,8 +113,11 @@ public sealed class OutreachRepository(AppDbContext db, ITenantContext tenantCon
             .FirstOrDefaultAsync(cancellationToken);
     }
 
-    /// <summary>Trạng thái job chăm sóc còn việc khi tới NextActionAt (Replied: mời kết bạn sau khi khách trả lời).</summary>
-    public static readonly OutreachState[] DueStates = [OutreachState.Queued, OutreachState.Friend, OutreachState.Replied];
+    /// <summary>
+    /// Trạng thái job chăm sóc còn việc khi tới NextActionAt (Messaged: mời kết bạn sau tin chào / giới thiệu khi khách vừa chấp nhận;
+    /// Replied: mời kết bạn sau khi khách trả lời / cảm ơn khi chấp nhận).
+    /// </summary>
+    public static readonly OutreachState[] DueStates = [OutreachState.Queued, OutreachState.Friend, OutreachState.Messaged, OutreachState.Replied];
 
     /// <summary>Người đã trả lời gần nhất của nick theo uid (được track) — khi khách chấp nhận lời mời gửi sau lúc trả lời.</summary>
     public Task<OutreachTarget?> FindRepliedByUidAsync(Guid tenantId, Guid connectionId, string uid, CancellationToken cancellationToken)
@@ -203,10 +206,14 @@ public sealed class OutreachRepository(AppDbContext db, ITenantContext tenantCon
             .ToListAsync(cancellationToken);
         var invites = rows.Count(r => r.FriendRequestSentAt >= since);
 
-        // Mời trước khi khách trả lời (khách chặn người lạ): đã trả lời = đã chấp nhận. Mời SAU khi khách trả lời: xem đã là bạn chưa.
+        // Đã là bạn → chấp nhận. Lời mời ĐI TRƯỚC tin đầu (khách chặn tin người lạ: tin đầu chỉ gửi được sau khi chấp nhận) → có tin / trả lời
+        // về sau nghĩa là đã chấp nhận. Lời mời gửi SAU tin chào (2026-11-25) hoặc sau khi trả lời → chỉ tính khi đã là bạn.
         var accepted = rows.Count(r => r.FriendRequestSentAt >= since
-                                       && (r.State is OutreachState.Friend or OutreachState.Messaged or OutreachState.NoReply
-                                           || (r.State == OutreachState.Replied && (r.IsFriend || r.FriendRequestSentAt < r.RepliedAt))));
+                                       && (r.IsFriend
+                                           || r.State == OutreachState.Friend
+                                           || ((r.FirstMessageAt == null || r.FriendRequestSentAt < r.FirstMessageAt)
+                                               && (r.State is OutreachState.Messaged or OutreachState.NoReply
+                                                   || (r.State == OutreachState.Replied && r.FriendRequestSentAt < r.RepliedAt)))));
         var firstMessages = rows.Count(r => r.FirstMessageAt >= since);
         var negatives = rows.Count(r => r.State == OutreachState.Declined);
         return (invites, accepted, firstMessages, negatives);

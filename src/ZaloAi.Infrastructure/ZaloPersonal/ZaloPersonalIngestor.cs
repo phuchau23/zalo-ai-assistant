@@ -277,6 +277,12 @@ public sealed partial class ZaloPersonalIngestor(
                     target.State = OutreachState.Friend;
                     target.NextActionAt = time.GetUtcNow();
                 }
+                else if (target is { State: OutreachState.Messaged, FriendRequestSentAt: not null })
+                {
+                    // Đã nhận tin chào, chưa trả lời, giờ chấp nhận lời mời gửi sau tin chào → một tin cảm ơn + giới thiệu doanh nghiệp
+                    // (chủ dự án chốt 2026-11-25). Đợi vài phút: job còn kiểm hội thoại yên mới gửi.
+                    target.NextActionAt = time.GetUtcNow() + OutreachTenantJob.ThanksDelay;
+                }
                 else if (target is null
                          && await outreach.FindRepliedByUidAsync(route.TenantId, route.ConnectionId, e.Uid, cancellationToken) is { FriendRequestSentAt: not null } replied)
                 {

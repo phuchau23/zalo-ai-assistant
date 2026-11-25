@@ -31,10 +31,11 @@ public sealed class OutreachSweepJob(OutreachLookup lookup, IBackgroundJobClient
 }
 
 /// <summary>
-/// Đi hàng đợi chăm sóc của một tenant (docs/ZALO-PERSONAL-PLAN.md mục 6.6–6.9, chủ dự án chốt lại 2026-11-15): tìm Zalo theo SĐT →
-/// còn lượt mời cho người mới thì KẾT BẠN TRƯỚC (kèm lời chào), hết lượt (hoặc đã là bạn) thì NHẮN TRƯỚC → khách chấp nhận lời mời thì
-/// gửi tin đầu (cảm ơn + giới thiệu sơ + hỏi xin phép); khách trả lời tin nhắn trước thì mời kết bạn sau; đã chat rồi mới chấp nhận thì
-/// một câu cảm ơn. Lời chào do AI viết riêng từng người (<see cref="IOutreachWriter"/>), sai luật thì dùng mẫu <see cref="OutreachGreeting"/>.
+/// Đi hàng đợi chăm sóc của một tenant (docs/ZALO-PERSONAL-PLAN.md mục 6.6–6.9, chủ dự án chốt lại 2026-11-25): tìm Zalo theo SĐT →
+/// NHẮN TRƯỚC (lời chào AI viết) → 2–5 phút sau MỜI KẾT BẠN luôn (câu ngắn, lượt mời của người mới; hết lượt thì hôm sau / khi khách trả
+/// lời) → khách chấp nhận mà chưa trả lời: một tin cảm ơn + giới thiệu doanh nghiệp + câu hỏi mở; khách trả lời trước khi được mời: mời
+/// sau vài phút; đã chat rồi mới chấp nhận: một câu cảm ơn. Nhắn trước bị chặn tin người lạ → kết bạn kèm lời chào, chấp nhận rồi mới nhắn.
+/// Lời chào do AI viết riêng từng người (<see cref="IOutreachWriter"/>), sai luật thì dùng mẫu <see cref="OutreachGreeting"/>.
 /// Luôn trong khung giờ được nhắn, trong giới hạn từng nick (tra SĐT, người mới, lời mời — giữ ~1/3 cho người đã trả lời, khoảng cách
 /// ≥ 10 phút giữa 2 lời mời), mỗi người chỉ được liên hệ chủ động một lần, người đã từ chối không bao giờ bị liên hệ lại.
 /// </summary>
@@ -68,6 +69,14 @@ public sealed partial class OutreachTenantJob(
 
     /// <summary>Hội thoại có tin trong chừng này → khách đang chat dở, dời câu cảm ơn.</summary>
     private static readonly TimeSpan ChatQuietFor = TimeSpan.FromMinutes(2);
+
+    /// <summary>
+    /// Nhắn tin chào xong → chờ ngẫu nhiên trong khoảng này rồi mới gửi lời mời kết bạn (chủ dự án chốt 2026-11-25: "vài phút sau", giống
+    /// người thật hơn gửi cùng lúc — tin + lời mời dồn liền nhau với người lạ là kiểu Zalo hay soi).
+    /// </summary>
+    public static readonly TimeSpan FollowUpInviteMin = TimeSpan.FromMinutes(2);
+
+    public static readonly TimeSpan FollowUpInviteMax = TimeSpan.FromMinutes(5);
 
     private const int PerRun = 15;
 
@@ -155,6 +164,13 @@ public sealed partial class OutreachTenantJob(
             return;
         }
 
+        // Đã nhận tin chào, chưa trả lời: tới giờ mời kết bạn, hoặc khách vừa chấp nhận lời mời → giới thiệu doanh nghiệp (2026-11-25).
+        if (target.State == OutreachState.Messaged)
+        {
+            await MessagedAsync(tenant, target, contact, connection, limits, tomorrow, cancellationToken);
+            return;
+        }
+
         // Bước 1: tìm nick Zalo theo SĐT.
         if (target.ZaloUid is null)
         {
@@ -231,8 +247,8 @@ public sealed partial class OutreachTenantJob(
             return;
         }
 
-        // Bước 3 (chủ dự án chốt 2026-11-15): còn lượt mời cho người mới → KẾT BẠN TRƯỚC; hết lượt (hoặc đã là bạn) → nhắn trước.
-        // Nhắn trước bị chặn tin người lạ → mời kết bạn khi có lượt. Mỗi người chỉ được liên hệ chủ động một lần.
+        // Bước 3 (chủ dự án chốt 2026-11-25): NHẮN TRƯỚC, rồi 2–5 phút sau mời kết bạn luôn (MessagedAsync).
+        // Nhắn trước bị chặn tin người lạ → mời kết bạn kèm lời chào khi có lượt. Mỗi người chỉ được liên hệ chủ động một lần.
         if (target.LastError == StrangerBlocked)
         {
             await InviteAsync(tenant, target, contact, connection, limits, intro, tomorrow, InviteKind.Cold, countNewContact: false, cancellationToken);
@@ -245,26 +261,30 @@ public sealed partial class OutreachTenantJob(
             return;
         }
 
-        var known = await personal.GetPeerAsync(tenantId, connection.Id, target.ZaloUid!, cancellationToken);
-        if (known is not { IsFriend: true } && target.LastError != InviteRejected && await HasInviteRoomAsync(connection.Id, limits, InviteKind.Cold, cancellationToken))
-        {
-            await InviteAsync(tenant, target, contact, connection, limits, intro, tomorrow, InviteKind.Cold, countNewContact: true, cancellationToken);
-            return;
-        }
-
         if (await SendFirstMessageAsync(tenant, target, contact, connection, intro, OutreachMessageKind.Greeting, tomorrow, countNewContact: true, cancellationToken))
         {
+            var known = await personal.GetPeerAsync(tenantId, connection.Id, target.ZaloUid!, cancellationToken);
+            if (target.State == OutreachState.Messaged && known is not { IsFriend: true })
+            {
+                var spread = (int)(FollowUpInviteMax - FollowUpInviteMin).TotalSeconds;
+                target.NextActionAt = time.GetUtcNow() + FollowUpInviteMin + TimeSpan.FromSeconds(Random.Shared.Next(0, spread + 1));
+            }
+
             return;
         }
 
         await InviteAsync(tenant, target, contact, connection, limits, intro, tomorrow, InviteKind.Cold, countNewContact: false, cancellationToken);
     }
 
-    /// <summary>Lời mời cho người mới (Cold) chỉ dùng phần lượt mời không giữ cho người đã trả lời (AfterReply).</summary>
+    /// <summary>
+    /// Lời mời cho người chưa trả lời (Cold: kết bạn kèm lời chào khi bị chặn tin người lạ; FollowUp: mời sau tin chào) chỉ dùng phần lượt
+    /// mời không giữ cho người đã trả lời (AfterReply).
+    /// </summary>
     private enum InviteKind
     {
         Cold,
         AfterReply,
+        FollowUp,
     }
 
     /// <summary>Lý do liên hệ + ghi chú cho AI của đợt dán (bản gốc; bộ viết tự che trước khi gửi AI).</summary>
@@ -277,7 +297,77 @@ public sealed partial class OutreachTenantJob(
     public static int ColdInviteCap(int invitesPerDay) => invitesPerDay <= 0 ? 0 : invitesPerDay - Math.Max(1, invitesPerDay / 3);
 
     private Task<bool> HasInviteRoomAsync(Guid connectionId, PacingLimits limits, InviteKind kind, CancellationToken cancellationToken) =>
-        limiter.HasRoomAsync(connectionId, PacingCounter.Invites, kind == InviteKind.Cold ? ColdInviteCap(limits.InvitesPerDay) : limits.InvitesPerDay, cancellationToken);
+        limiter.HasRoomAsync(connectionId, PacingCounter.Invites, kind == InviteKind.AfterReply ? limits.InvitesPerDay : ColdInviteCap(limits.InvitesPerDay), cancellationToken);
+
+    /// <summary>
+    /// Người đã nhận tin chào, chưa trả lời (chủ dự án chốt 2026-11-25): chưa là bạn → gửi lời mời kết bạn MỘT lần (câu ngắn, hết lượt thì
+    /// hôm sau); khách vừa chấp nhận lời mời của bên mình → đúng MỘT tin cảm ơn + giới thiệu doanh nghiệp + câu hỏi mở (chủ động tìm khách),
+    /// chỉ khi hội thoại đang yên và bot đang tự lo.
+    /// </summary>
+    private async Task MessagedAsync(
+        Tenant tenant, OutreachTarget target, Contact contact, ChannelConnection connection, PacingLimits limits, DateTimeOffset tomorrow, CancellationToken cancellationToken)
+    {
+        var tenantId = tenant.Id;
+        var now = time.GetUtcNow();
+        var peer = target.ZaloUid is null ? null : await personal.GetPeerAsync(tenantId, connection.Id, target.ZaloUid, cancellationToken);
+        if (peer is null or { Kind: PeerKind.Private })
+        {
+            target.NextActionAt = null;
+            return;
+        }
+
+        if (!peer.IsFriend)
+        {
+            if (target.FriendRequestSentAt is not null || target.LastError == InviteRejected)
+            {
+                target.NextActionAt = null; // đã mời (chờ khách chấp nhận) hoặc Zalo đã từ chối lời mời: không mời lại
+                return;
+            }
+
+            await InviteAsync(tenant, target, contact, connection, limits, new Intro("customer", null, null), tomorrow, InviteKind.FollowUp, countNewContact: false, cancellationToken);
+            return;
+        }
+
+        // Đã là bạn: chỉ giới thiệu khi CHÍNH bên mình đã mời (vốn là bạn / khách tự kết bạn thì không có gì để cảm ơn).
+        var conversation = target.FriendRequestSentAt is null
+            ? null
+            : await conversations.FindOpenConversationAsync(tenantId, contact.Id, connection.Id, cancellationToken);
+        if (conversation is null || conversation.Mode == ConversationMode.Human || conversation.BotPausedUntil > now)
+        {
+            target.NextActionAt = null; // nhân viên / chủ nick đang lo thì bot không chen vào
+            return;
+        }
+
+        if (conversation.LastMessageAt > now - ChatQuietFor)
+        {
+            target.NextActionAt = now + ThanksDelay; // vừa có tin (tin chào / khách đang gõ) → đợi yên rồi mới giới thiệu
+            return;
+        }
+
+        if (!await limiter.HasRoomAsync(connection.Id, PacingCounter.Messages, limits.MessagesPerDay, cancellationToken))
+        {
+            target.NextActionAt = tomorrow;
+            return;
+        }
+
+        // Đúng một lần cho mỗi người (khách xóa rồi kết bạn lại cũng không nhận lần hai).
+        target.NextActionAt = null;
+        if (!await store.SetIfNotExistsAsync($"zp:accepted-intro:{target.Id:N}", "1", TimeSpan.FromDays(180), cancellationToken))
+        {
+            return;
+        }
+
+        var recent = (await conversations.ListMessagesAsync(tenantId, conversation.Id, null, cancellationToken))
+            .Where(m => m.Sender != MessageSender.System && m.DeliveryStatus != DeliveryStatus.Skipped)
+            .TakeLast(6)
+            .Select(m => new BotHistoryTurn(m.Sender, encryptor.Decrypt(m.ContentEnc)))
+            .ToList();
+        var texts = await ComposeAsync(
+            tenant, contact, OutreachMessageKind.AcceptedIntro, new Intro(contact.Origin ?? "customer", null, null), recent, conversation.Id, conversation.ConnectionId, cancellationToken);
+        var messages = AddProactive(tenantId, conversation, texts);
+        await conversations.SaveChangesAsync(cancellationToken);
+        await DeliverAllAsync(tenantId, conversation, contact, messages, cancellationToken);
+    }
 
     /// <summary>
     /// Người đã trả lời: chưa là bạn → mời kết bạn một lần (đợi vài phút sau tin trả lời); đã chấp nhận lời mời của bên mình (sự kiện
@@ -385,6 +475,8 @@ public sealed partial class OutreachTenantJob(
                     Random.Shared.Next(OutreachGreeting.AcceptedVariants))],
             OutreachMessageKind.AcceptedThanks =>
                 [OutreachGreeting.AcceptedThanks(tenant.BotPronoun, contact.Salutation, contact.DisplayName, offerings, Random.Shared.Next(OutreachGreeting.AcceptedVariants))],
+            OutreachMessageKind.AcceptedIntro =>
+                [OutreachGreeting.AcceptedIntro(tenant.BotPronoun, tenant.Name, contact.Salutation, contact.DisplayName, offerings, Random.Shared.Next(OutreachGreeting.AcceptedVariants))],
             _ =>
                 [OutreachGreeting.FirstMessage(tenant.BotName, tenant.BotPronoun, tenant.Name, contact.Salutation, contact.DisplayName, intro.Origin, intro.Referrer,
                     Random.Shared.Next(OutreachGreeting.FirstMessageVariants))],
@@ -498,8 +590,9 @@ public sealed partial class OutreachTenantJob(
     }
 
     /// <param name="kind">
-    /// Cold = người chưa trả lời (kết bạn trước / bị chặn tin người lạ): AI viết lời chào, chỉ dùng phần lượt mời cho người mới.
-    /// AfterReply = khách đã trả lời tin chào: lời chào ngắn theo mẫu, dùng cả lượt giữ riêng, giữ trạng thái Replied.
+    /// Cold = bị chặn tin người lạ (kết bạn kèm lời chào): AI viết lời chào, chỉ dùng phần lượt mời cho người mới.
+    /// FollowUp = đã nhận tin chào, chưa trả lời: câu ngắn theo mẫu, lượt mời cho người mới, giữ trạng thái Messaged.
+    /// AfterReply = khách đã trả lời tin chào: câu ngắn theo mẫu, dùng cả lượt giữ riêng, giữ trạng thái Replied.
     /// </param>
     /// <param name="countNewContact">Lời mời là lần chạm ĐẦU TIÊN với người này → tính vào "người mới hôm nay".</param>
     private async Task InviteAsync(
@@ -514,7 +607,7 @@ public sealed partial class OutreachTenantJob(
         bool countNewContact,
         CancellationToken cancellationToken)
     {
-        var afterReply = kind == InviteKind.AfterReply;
+        var shortNote = kind is InviteKind.AfterReply or InviteKind.FollowUp; // khách đã nhận tin của bên mình → không cần chào lại
         if (!await HasInviteRoomAsync(connection.Id, limits, kind, cancellationToken))
         {
             target.NextActionAt = tomorrow;
@@ -529,7 +622,7 @@ public sealed partial class OutreachTenantJob(
             return;
         }
 
-        var greeting = afterReply
+        var greeting = shortNote
             ? OutreachGreeting.InviteAfterReply(tenant.BotName, tenant.BotPronoun, tenant.Name, contact.Salutation, contact.DisplayName)
             : (await ComposeAsync(tenant, contact, OutreachMessageKind.Invite, intro, [], null, connection.Id, cancellationToken))[0];
         var sent = await sidecar.SendFriendRequestAsync(connection.Id, target.ZaloUid!, greeting, cancellationToken);
@@ -542,9 +635,9 @@ public sealed partial class OutreachTenantJob(
         if (!sent)
         {
             // Zalo từ chối lời mời (đã là bạn, đã mời, chặn lời mời...) → không thử mời lại (gửi dồn bị từ chối dễ bị khóa nick).
-            if (afterReply)
+            if (shortNote)
             {
-                target.LastError = InviteRejected;
+                target.LastError = InviteRejected; // tin chào đã tới khách: giữ nguyên, chỉ không mời nữa
             }
             else if (target.LastError == StrangerBlocked)
             {
@@ -561,9 +654,9 @@ public sealed partial class OutreachTenantJob(
         }
 
         target.FriendRequestSentAt = time.GetUtcNow();
-        if (!afterReply)
+        if (kind == InviteKind.Cold)
         {
-            target.State = OutreachState.Invited;
+            target.State = OutreachState.Invited; // chưa nhắn được gì: chờ chấp nhận rồi mới gửi tin đầu
         }
 
         LogInvited(logger, target.Id);
