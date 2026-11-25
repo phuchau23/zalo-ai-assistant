@@ -46,6 +46,9 @@ public sealed class AiOptions : IValidatableObject
     [Required]
     public string ChatModel { get; set; } = "gemini-3.8-flash";
 
+    /// <summary>Model Gemini xem hình sticker (cần đọc ảnh — Groq gpt-oss chỉ đọc chữ). Trống = <see cref="ChatModel"/>.</summary>
+    public string? StickerVisionModel { get; set; }
+
     /// <summary>Model Gemini dự phòng khi model chính lỗi tạm thời hoặc hết hạn mức. Để trống = không dùng.</summary>
     public string? ChatFallbackModel { get; set; } = "gemini-3.5-flash-lite";
 
