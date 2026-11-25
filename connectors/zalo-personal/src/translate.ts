@@ -107,6 +107,20 @@ export type TranslateDeps = {
   now?: () => number;
 };
 
+/**
+ * Sticker id from a chat.sticker message. zca-js does not type this content; observed / fake shape is { id, catId, type }.
+ * UNVERIFIED with a real nick (2026-11-25): also accept sticker_id / stickerId / sid. Missing → null (no lookup).
+ */
+export function stickerIdOf(content: unknown): string | null {
+  if (!content || typeof content !== "object") return null;
+  const obj = content as Record<string, unknown>;
+  for (const key of ["id", "sticker_id", "stickerId", "sid"]) {
+    const v = str(obj[key]);
+    if (v && /^\d{1,20}$/.test(v)) return v;
+  }
+  return null;
+}
+
 /** Returns null for group messages (CONTRACT: never sent upstream). */
 export function translateMessage(msg: ZcaMessageLike, deps: TranslateDeps): MessageEvent | null {
   if (msg.type !== THREAD_USER) return null;
@@ -127,7 +141,14 @@ export function translateMessage(msg: ZcaMessageLike, deps: TranslateDeps): Mess
     kind,
     text,
     ts: toTs(msg.data.ts, now),
+    sticker: stickerOf(kind, msg.data.content),
   };
+}
+
+function stickerOf(kind: MessageKind, content: unknown): MessageEvent["sticker"] {
+  if (kind !== "sticker") return null;
+  const id = stickerIdOf(content);
+  return id ? { id, keyword: null, imageUrl: null } : null;
 }
 
 /**

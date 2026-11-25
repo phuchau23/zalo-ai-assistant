@@ -69,6 +69,10 @@ Lỗi chung của các lệnh trên nick: `409 {error:"not_running"}` (nick khô
 // Tin nhắn 1–1. Sidecar ĐÃ bỏ tin nhóm (không bao giờ gửi lên).
 { "type": "message", "msgId": "…", "threadId": "<uid người kia>", "fromUid": "…", "fromName": "…"|null,
   "isSelf": false, "isFriend": true, "kind": "text"|"image"|"file"|"sticker"|"other", "text": "…"|null, "ts": 1731400000000 }
+// sticker (2026-11-25): kind="sticker" kèm "sticker": { "id": "123", "keyword": "ok"|null, "imageUrl": "https://…"|null } — id đọc từ
+// tin (content.id, chưa kiểm chứng với nick thật), keyword + imageUrl lấy qua zca-js getStickersDetail (lưu nhớ theo id, chờ tối đa 3 giây;
+// lỗi / quá giờ → null, tin vẫn gửi). Không phải sticker hoặc thiếu id → "sticker": null. Sự kiện tin/thu hồi/kết bạn gửi lên ĐÚNG thứ tự
+// xảy ra (tin sticker đang chờ chi tiết thì tin sau đợi). API cất thông tin, job xử lý tin cho AI xem hình rồi ghi nghĩa vào nội dung tin.
 // isSelf=true: chủ nick tự nhắn từ thiết bị khác (KHÔNG phải tin sidecar vừa gửi — sidecar giữ tin isSelf 3 giây và bỏ nếu msgId
 // nằm trong danh sách vừa gửi). threadId = uid khách.
 { "type": "undo", "msgId": "…", "threadId": "…", "fromUid": "…", "ts": … }
@@ -128,7 +132,7 @@ Sidecar chỉ chạy lại nick khi `/sync` còn trả nick đó. Tiến trình 
 | --- | --- | --- |
 | `scan_qr` | `loginId, uid?, displayName?` | `scanned` rồi `login-result` (uid mặc định `fake-<6 số>`) |
 | `decline_qr` / `expire_qr` | `loginId` | `declined` / `expired` |
-| `incoming` | `connectionId, fromUid, fromName?, text?, kind?, isFriend?, group?` | sự kiện `message` (`group=true` → bị bỏ như thật) |
+| `incoming` | `connectionId, fromUid, fromName?, text?, kind?, stickerId?, isFriend?, group?` | sự kiện `message` (`group=true` → bị bỏ như thật). `kind="sticker"`: `stickerId` 1 = giơ ngón cái (chữ khóa "ok"), 2 = "cảm ơn", 3 = "haha", 4 = không chữ khóa; giả lập không có ảnh |
 | `self_message` | `connectionId, toUid, text` | sự kiện `message` `isSelf=true` |
 | `friend` | `connectionId, uid, event` | sự kiện `friend` |
 | `close` | `connectionId, code` (1006/3000/3003) | như listener thật đóng |

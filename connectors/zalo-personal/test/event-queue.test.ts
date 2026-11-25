@@ -149,6 +149,7 @@ describe("EventQueue", () => {
       kind: "text",
       text: "x",
       ts: 1,
+      sticker: null,
     });
     q.push("a", ev(9));
     await vi.advanceTimersByTimeAsync(1000);

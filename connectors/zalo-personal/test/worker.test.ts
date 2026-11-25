@@ -107,6 +107,15 @@ class StubSession implements ZaloSession {
   }
   async sendFriendRequest() {}
   async undoFriendRequest() {}
+  /** stickerId → details; "slow" never answers (timeout), "boom" throws. Each lookup is recorded. */
+  stickers: Record<string, { keyword: string | null; imageUrl: string | null }> = {};
+  stickerLookups: string[] = [];
+  async getStickerDetail(id: string) {
+    this.stickerLookups.push(id);
+    if (id === "666") return new Promise<never>(() => {});
+    if (id === "500") throw new Error("boom");
+    return this.stickers[id] ?? null;
+  }
   currentSession() {
     return this.session;
   }
@@ -115,7 +124,7 @@ class StubSession implements ZaloSession {
   }
 }
 
-function makeWorker(session: StubSession, opts: { proxyOk?: boolean } = {}) {
+function makeWorker(session: StubSession, opts: { proxyOk?: boolean; stickerLookupTimeoutMs?: number } = {}) {
   const out: WorkerToParent[] = [];
   const exits: number[] = [];
   const sleeps: number[] = [];
@@ -129,6 +138,7 @@ function makeWorker(session: StubSession, opts: { proxyOk?: boolean } = {}) {
     },
     exitDelayMs: 0,
     sessionCheckIntervalMs: 1_000_000_000,
+    stickerLookupTimeoutMs: opts.stickerLookupTimeoutMs,
   });
   return { core, out, exits, sleeps };
 }
@@ -177,6 +187,7 @@ describe("WorkerCore account lifecycle", () => {
       isSelf: false,
       data: { msgId: 3, msgType: "webchat", uidFrom: "new-1", ts: "6", content: "hey" },
     });
+    await settle(); // events go up through an ordered queue
     const events = out.flatMap((m) => (m.type === "event" ? [m.event] : []));
     expect(events.map((e) => e.type)).toEqual(["state", "message", "friend", "message"]);
     expect(events[1]).toMatchObject({ msgId: "1", isFriend: true, text: "hi" });
@@ -339,14 +350,14 @@ describe("WorkerCore send", () => {
     incoming(101, true);
     core.handle({ type: "cmd", id: 20, command: { cmd: "send", args: { threadId: "cust-1", text: "a", typingMs: 0, replyTo: "100" } } });
     await settle();
-    expect(out.at(-1)).toEqual({ type: "reply", id: 20, result: { status: 200, body: { msgId: "8888" } } });
+    expect(out.find((m) => m.type === "reply" && m.id === 20)).toEqual({ type: "reply", id: 20, result: { status: 200, body: { msgId: "8888" } } });
 
     // A newer customer message arrives while "typing" → dropped after the typing delay.
     const sends = s.calls.filter((c) => c.startsWith("send:")).length;
     core.handle({ type: "cmd", id: 21, command: { cmd: "send", args: { threadId: "cust-1", text: "b", typingMs: 5_000, replyTo: "100" } } });
     incoming(102);
     await settle();
-    expect(out.at(-1)).toEqual({ type: "reply", id: 21, result: { status: 409, body: { error: "superseded" } } });
+    expect(out.find((m) => m.type === "reply" && m.id === 21)).toEqual({ type: "reply", id: 21, result: { status: 409, body: { error: "superseded" } } });
     expect(s.calls.filter((c) => c.startsWith("send:"))).toHaveLength(sends);
 
     // Already stale before typing starts → no typing event either. No replyTo / unknown thread → always sent.
@@ -414,5 +425,61 @@ describe("QR expiry decision", () => {
       { type: "loginProgress", state: "expired" },
     ]);
     decisions = [];
+  });
+});
+
+describe("WorkerCore sticker details (CONTRACT §5, 2026-11-25)", () => {
+  const sticker = (s: StubSession, msgId: number, id: string) =>
+    s.handlers!.onMessage({
+      type: 0,
+      threadId: "cust-9",
+      isSelf: false,
+      data: { msgId, msgType: "chat.sticker", uidFrom: "cust-9", ts: "5", content: { id: Number(id), catId: 1, type: 7 } },
+    });
+  const text = (s: StubSession, msgId: number) =>
+    s.handlers!.onMessage({
+      type: 0,
+      threadId: "cust-9",
+      isSelf: false,
+      data: { msgId, msgType: "webchat", uidFrom: "cust-9", ts: "6", content: "ok em" },
+    });
+  const messages = (out: WorkerToParent[]) =>
+    out.flatMap((m) => (m.type === "event" && m.event.type === "message" ? [m.event] : []));
+
+  it("adds Zalo's keyword + image, looks each sticker up once, and keeps message order", async () => {
+    const s = new StubSession();
+    s.stickers["123"] = { keyword: "ok", imageUrl: "https://zalo.example/123.png" };
+    const { core, out } = makeWorker(s);
+    core.handle({ type: "init", init: accountInit() });
+    await settle();
+
+    sticker(s, 1, "123");
+    text(s, 2); // arrives while the sticker is being looked up: must not overtake it
+    sticker(s, 3, "123");
+    await settle();
+
+    const evs = messages(out);
+    expect(evs.map((e) => e.msgId)).toEqual(["1", "2", "3"]);
+    expect(evs[0]?.sticker).toEqual({ id: "123", keyword: "ok", imageUrl: "https://zalo.example/123.png" });
+    expect(evs[1]?.sticker).toBeNull();
+    expect(evs[2]?.sticker?.keyword).toBe("ok");
+    expect(s.stickerLookups).toEqual(["123"]); // cached
+  });
+
+  it("slow or failing lookups still send the message, without details, and are retried next time", async () => {
+    const s = new StubSession();
+    const { core, out } = makeWorker(s, { stickerLookupTimeoutMs: 1 });
+    core.handle({ type: "init", init: accountInit() });
+    await settle();
+
+    sticker(s, 1, "666"); // never answers → timeout
+    sticker(s, 2, "500"); // throws
+    sticker(s, 3, "500");
+    await settle();
+
+    const evs = messages(out);
+    expect(evs.map((e) => e.msgId)).toEqual(["1", "2", "3"]);
+    expect(evs.every((e) => e.sticker?.keyword === null && e.sticker?.imageUrl === null)).toBe(true);
+    expect(s.stickerLookups).toEqual(["666", "500", "500"]); // failures are not cached
   });
 });

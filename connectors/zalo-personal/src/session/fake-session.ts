@@ -11,10 +11,19 @@ import {
   type ListenerHandlers,
   type LoginOutcome,
   type QrHandlers,
+  type StickerDetail,
   type ZaloSession,
 } from "./zalo-session.ts";
 
 /** Fixed QR image (116×116 PNG, QR-looking pattern), base64 without data: prefix. */
+/** Fake stickers for REMI_MODE=fake: 1 thumbs up, 2 thank you, 3 laughing, 4 no keyword (bot only knows "a sticker"). */
+export const FAKE_STICKERS: Readonly<Record<string, StickerDetail>> = {
+  "1": { keyword: "ok", imageUrl: null },
+  "2": { keyword: "cảm ơn", imageUrl: null },
+  "3": { keyword: "haha", imageUrl: null },
+  "4": { keyword: null, imageUrl: null },
+};
+
 export const FAKE_QR_PNG =
   "iVBORw0KGgoAAAANSUhEUgAAAHQAAAB0AQAAAAB84SuKAAAAjUlEQVR42u3VsQ2AMAxEUW9w+2/pDQ45NomhO7eQItJrovgjBTMzAO4ErJZkkCknyIENoNERB2LoXGOv42xo8u6x51McCavH7qt4TZI9SPrMew3s9Tlyk13D1Ka7C3DZzwvp/vt9u9+6Reuhej2hvY/oeE96D9nnPcseAz/6DNx7yI553j0E5y/s9BB9AXwCApGLbAsYAAAAAElFTkSuQmCC";
 
@@ -214,6 +223,11 @@ export class FakeZaloSession implements ZaloSession, FakeControls {
 
   async undoFriendRequest(_uid: string): Promise<void> {}
 
+  /** Fake stickers: keyword only (no image, no network). Unknown id → null, like Zalo returning nothing. */
+  async getStickerDetail(stickerId: string): Promise<StickerDetail | null> {
+    return FAKE_STICKERS[stickerId] ?? null;
+  }
+
   currentSession(): ZaloSessionData | null {
     return this.session;
   }
@@ -240,6 +254,7 @@ export class FakeZaloSession implements ZaloSession, FakeControls {
     fromName?: string | null;
     group?: boolean;
     fromUid?: string;
+    stickerId?: string;
   }): ZcaMessageLike {
     let msgType = "webchat";
     let content: unknown = o.text ?? "";
@@ -254,7 +269,7 @@ export class FakeZaloSession implements ZaloSession, FakeControls {
         break;
       case "sticker":
         msgType = "chat.sticker";
-        content = { id: 1, catId: 1, type: 7 };
+        content = { id: Number(o.stickerId ?? "1") || 1, catId: 1, type: 7 };
         break;
       case "other":
         msgType = "chat.location.new";
@@ -294,6 +309,7 @@ export class FakeZaloSession implements ZaloSession, FakeControls {
             isSelf: false,
             text: sim.text ?? null,
             kind: sim.kind ?? "text",
+            stickerId: sim.stickerId,
             fromName: sim.fromName ?? null,
             group: sim.group === true,
           }),

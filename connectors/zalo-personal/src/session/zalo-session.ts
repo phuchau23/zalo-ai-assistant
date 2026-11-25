@@ -32,6 +32,9 @@ export type LoginOutcome = {
 
 export type FoundUser = { uid: string; displayName: string; avatarUrl: string | null };
 
+/** Sticker details the API needs to understand it: Zalo's keyword (may be empty) and an image URL. */
+export type StickerDetail = { keyword: string | null; imageUrl: string | null };
+
 /** QR login ended by the user declining on the phone. */
 export class QrDeclinedError extends Error {
   constructor() {
@@ -70,6 +73,8 @@ export interface ZaloSession {
   findUser(phone: string): Promise<FoundUser | null>;
   sendFriendRequest(uid: string, message: string): Promise<void>;
   undoFriendRequest(uid: string): Promise<void>;
+  /** Zalo's short tag + image of a sticker (zca-js getStickersDetail). null when Zalo returns nothing for the id. */
+  getStickerDetail(stickerId: string): Promise<StickerDetail | null>;
   /** The live session (cookie may have been refreshed by Zalo). */
   currentSession(): ZaloSessionData | null;
   stop(): void;
