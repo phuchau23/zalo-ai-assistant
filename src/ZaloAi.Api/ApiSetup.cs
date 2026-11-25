@@ -155,6 +155,7 @@ internal static class ApiSetup
         app.MapAdminEndpoints();
         app.MapTeamEndpoints();
         app.MapContactImportEndpoints();
+        app.MapCallListEndpoints();
         app.MapBranchEndpoints();
         app.MapCatalogEndpoints();
         app.MapStaffEndpoints();
