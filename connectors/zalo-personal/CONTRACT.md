@@ -139,6 +139,9 @@ Sidecar chỉ chạy lại nick khi `/sync` còn trả nick đó. Tiến trình 
 | `session_expired` | `connectionId` | `state=session_expired`, dừng nick |
 | `proxy_fail` | `connectionId` | `state=proxy_failing`, dừng nick |
 
+`time_travel` (`connectionId, days` 1–120) KHÔNG tới sidecar: API tự lùi mọi mốc giờ chăm sóc của nick trong DB rồi chạy job hàng đợi +
+dọn dẹp ngay (nút "Tua nhanh thời gian", 2026-11-25).
+
 Giả lập khi gửi/tìm: tin có `[[blocked]]` → 422 `rejected`; có `[[down]]` → 503. `find-user` SĐT tận cùng `000` → 404, còn lại
 uid `fake-<SĐT>`. `friend-request` tới uid có chữ `block` → sự kiện `friend` `reject_request` sau 1 giây; còn lại → `add` sau 2 giây.
 QR giả: một ảnh PNG cố định.

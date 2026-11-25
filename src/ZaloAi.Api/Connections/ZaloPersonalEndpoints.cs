@@ -216,6 +216,8 @@ internal static class ZaloPersonalEndpoints
         SidecarClient sidecar,
         ChannelConnectionRepository connections,
         ZaloPersonalLoginService login,
+        OutreachRepository outreach,
+        IServiceScopeFactory scopes,
         ITenantContext tenant,
         CancellationToken cancellationToken)
     {
@@ -236,6 +238,30 @@ internal static class ZaloPersonalEndpoints
         if (command.TryGetProperty("loginId", out var l) && await login.GetAsync(tenantId, l.GetString() ?? "", cancellationToken) is null)
         {
             throw new NotFoundException();
+        }
+
+        // "Tua nhanh thời gian" (2026-11-25): dồn mọi mốc giờ chăm sóc của nick này về quá khứ rồi chạy job dọn dẹp ngay — để thử luật
+        // 2 ngày / 14 ngày / 30 ngày mà không phải chờ. Xử lý ở API (dữ liệu trong DB), không gửi sang sidecar.
+        if (command.TryGetProperty("action", out var a) && a.GetString() == "time_travel")
+        {
+            if (!command.TryGetProperty("connectionId", out var cid) || !Guid.TryParse(cid.GetString(), out var nick)
+                || !command.TryGetProperty("days", out var d) || !d.TryGetInt32(out var days) || days is < 1 or > 120)
+            {
+                throw new InvalidInputException("Tua nhanh cần connectionId và days (1–120).");
+            }
+
+            await outreach.ShiftTimeForDevAsync(tenantId, nick, TimeSpan.FromDays(days), cancellationToken);
+
+            // Như thể thời gian đã trôi: các việc tới hạn chạy (job hàng đợi — chỉ trong khung giờ được nhắn), rồi job dọn dẹp chuyển trạng thái.
+            // Job tự đặt tenant context → mỗi job một scope riêng (scope của request đã có tenant của người đăng nhập).
+            using (var queue = scopes.CreateScope())
+            {
+                await queue.ServiceProvider.GetRequiredService<ZaloAi.Infrastructure.Jobs.OutreachTenantJob>().RunAsync(tenantId, cancellationToken);
+            }
+
+            using var cleanup = scopes.CreateScope();
+            await cleanup.ServiceProvider.GetRequiredService<ZaloAi.Infrastructure.Jobs.OutreachMaintenanceJob>().RunAsync(tenantId, cancellationToken);
+            return TypedResults.NoContent();
         }
 
         await sidecar.SimulateAsync(command, cancellationToken);
