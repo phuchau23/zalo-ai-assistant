@@ -9,8 +9,9 @@ using ZaloAi.Infrastructure.Repositories;
 
 namespace ZaloAi.Infrastructure.ZaloPersonal;
 
-/// <param name="Reason">invalid | duplicate | opted_out | already_chatting | already_queued</param>
-public sealed record OutreachSkip(string Phone, string Reason);
+/// <param name="Reason">invalid | duplicate | opted_out | already_chatting | already_queued | contacted_recently | contacted_twice</param>
+/// <param name="RetryAfter">contacted_recently: từ lúc này dán lại được (90 ngày sau lần liên hệ gần nhất).</param>
+public sealed record OutreachSkip(string Phone, string Reason, DateTimeOffset? RetryAfter = null);
 
 /// <summary>Một nick nhận bao nhiêu người trong lần dán này.</summary>
 /// <param name="EtaDays">Dự kiến số ngày để nick này đi hết hàng chờ (gồm người đang chờ từ trước).</param>
@@ -29,6 +30,7 @@ public sealed record OutreachActivity(Guid TargetId, string? Name, string? Phone
 /// <param name="NextSendAt">Đang ngoài khung giờ được nhắn của DN → lúc hàng đợi chạy lại (vd 08:00 sáng mai); trong khung giờ → null.</param>
 /// <param name="StateCounts">Số người theo trạng thái (mọi đợt, kể cả đã kết thúc).</param>
 /// <param name="Booked">Số người nick đã liên hệ được mà đang có lịch hẹn sắp tới.</param>
+/// <param name="HoldingForReplies">Hôm nay nick đã dùng 70% lượt tin → tạm ngưng nhắn người mới, dành lượt trả lời khách đang chat.</param>
 public sealed record OutreachSummary(
     Guid ConnectionId,
     string? NickName,
@@ -40,7 +42,8 @@ public sealed record OutreachSummary(
     DateTimeOffset? NextSendAt,
     IReadOnlyDictionary<OutreachState, int> StateCounts,
     int Booked,
-    IReadOnlyList<OutreachActivity> Recent);
+    IReadOnlyList<OutreachActivity> Recent,
+    bool HoldingForReplies = false);
 
 /// <summary>
 /// Ô dán SĐT hàng loạt + màn hình theo dõi (docs/ZALO-PERSONAL-PLAN.md mục 6.9). Chỉ người đã có quan hệ với DN: DN chọn nguồn và
@@ -136,24 +139,28 @@ public sealed class OutreachService(
         var existingIds = existing.Values.Select(c => c.Id).ToList();
         var chatting = await outreach.ContactsChattingAsync(tenantId, existingIds, cancellationToken);
         var queued = await outreach.ContactsInActiveOutreachAsync(tenantId, existingIds, cancellationToken);
+        var touches = await outreach.TouchesAsync(tenantId, existingIds, cancellationToken);
         var familiar = distribute ? await outreach.LastConnectionByContactAsync(tenantId, existingIds, cancellationToken) : [];
 
-        // Lượt 1: lọc người nhận được (chưa ghi gì).
+        // Lượt 1: lọc người nhận được (chưa ghi gì). Số đã liên hệ mà chưa từng trả lời: chặn dán lại 90 ngày, tối đa 2 lần mỗi số
+        // (danh sách tạm khóa, chủ dự án chốt 2026-11-25) — dán đi dán lại cùng số là kiểu spam làm nick bị khóa.
         var accepted = new List<(string Phone, string Hash, string? Name, Contact? Contact)>();
         foreach (var (phone, hash, name) in parsed)
         {
             existing.TryGetValue(hash, out var contact);
+            DateTimeOffset? retryAfter = null;
             var reason = contact switch
             {
                 null => null,
                 _ when contact.ProactiveOptOutAt is not null => "opted_out",
                 _ when chatting.Contains(contact.Id) => "already_chatting",
                 _ when queued.Contains(contact.Id) => "already_queued",
+                _ when touches.TryGetValue(contact.Id, out var touch) => OutreachLifecycle.PasteBlock(touch.Count, touch.Last, now, out retryAfter),
                 _ => null,
             };
             if (reason is not null)
             {
-                skipped.Add(new(PhoneNumber.Mask(phone), reason));
+                skipped.Add(new(PhoneNumber.Mask(phone), reason, retryAfter));
                 continue;
             }
 
@@ -261,11 +268,12 @@ public sealed class OutreachService(
             var limits = PersonalPacing.Effective(account, options.Value, now);
             var queued = await outreach.CountQueuedAsync(tenantId, account.ConnectionId, cancellationToken);
             var recent = await outreach.RecentAsync(tenantId, account.ConnectionId, RecentPerNick, cancellationToken);
+            var usage = await limiter.UsageAsync(account.ConnectionId, cancellationToken);
             list.Add(new OutreachSummary(
                 account.ConnectionId,
                 names.GetValueOrDefault(account.ConnectionId),
                 limits,
-                await limiter.UsageAsync(account.ConnectionId, cancellationToken),
+                usage,
                 queued,
                 OutreachAllocator.Eta(queued, limits.NewContactsPerDay),
                 account.OutreachLevel,
@@ -277,7 +285,8 @@ public sealed class OutreachService(
                     r.Contact.DisplayName,
                     r.Contact.PhoneEnc is null ? null : PhoneNumber.Mask(encryptor.Decrypt(r.Contact.PhoneEnc)),
                     r.Target.State,
-                    r.Target.UpdatedAt)).ToList()));
+                    r.Target.UpdatedAt)).ToList(),
+                queued > 0 && usage.Messages >= OutreachLifecycle.NewOutreachMessageCap(limits.MessagesPerDay)));
         }
 
         return list;

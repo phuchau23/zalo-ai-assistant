@@ -30,8 +30,9 @@ public sealed record CreateOutreachBatchRequest(
     List<Guid>? ConnectionIds = null,
     bool DryRun = false);
 
-/// <param name="Reason">invalid | duplicate | opted_out | already_chatting | already_queued</param>
-public sealed record OutreachSkipResponse(string Phone, string Reason);
+/// <param name="Reason">invalid | duplicate | opted_out | already_chatting | already_queued | contacted_recently (đã liên hệ trong 90 ngày) | contacted_twice (đã liên hệ 2 lần, không trả lời)</param>
+/// <param name="RetryAfter">contacted_recently: từ lúc này dán lại được.</param>
+public sealed record OutreachSkipResponse(string Phone, string Reason, DateTimeOffset? RetryAfter = null);
 
 /// <param name="QueuedAfter">Hàng chờ của nick sau khi nhận thêm.</param>
 public sealed record OutreachAllocationResponse(Guid ConnectionId, string? NickName, int Assigned, int QueuedAfter, int EtaDays);
@@ -40,7 +41,7 @@ public sealed record OutreachAllocationResponse(Guid ConnectionId, string? NickN
 public sealed record OutreachBatchResponse(
     Guid? BatchId, int Accepted, IReadOnlyList<OutreachSkipResponse> Skipped, int EtaDays, IReadOnlyList<OutreachAllocationResponse> Allocations, bool DryRun);
 
-/// <param name="State">queued | nozalo | invited | friend | messaged | replied | declined | expired | noreply | stopped | failed</param>
+/// <param name="State">queued | nozalo | invited | friend | messaged | replied | declined | expired | noreply (cần gọi điện) | stopped | failed | converted (đã thành khách) | cold (đã nguội) | archived (lưu trữ)</param>
 /// <param name="PhoneMasked">SĐT che giữa (0912***678).</param>
 /// <param name="LeadStatus">new | interested | hot | won | lost</param>
 public sealed record OutreachTargetResponse(
@@ -79,6 +80,7 @@ public sealed record OutreachActivityResponse(Guid TargetId, string? Name, strin
 /// <param name="StateCounts">Số người theo trạng thái (queued, invited, friend, messaged, replied, nozalo, noreply, declined, expired, stopped, failed).</param>
 /// <param name="Booked">Số người nick đã liên hệ được mà đang có lịch hẹn sắp tới.</param>
 /// <param name="Recent">Việc gần nhất của nick, mới nhất trước.</param>
+/// <param name="HoldingForReplies">Hôm nay nick đã dùng 70% lượt tin → tạm ngưng nhắn người mới, dành lượt trả lời khách đang chat.</param>
 public sealed record OutreachSummaryResponse(
     Guid ConnectionId,
     string? NickName,
@@ -90,7 +92,8 @@ public sealed record OutreachSummaryResponse(
     DateTimeOffset? NextSendAt,
     Dictionary<string, int> StateCounts,
     int Booked,
-    IReadOnlyList<OutreachActivityResponse> Recent);
+    IReadOnlyList<OutreachActivityResponse> Recent,
+    bool HoldingForReplies);
 
 internal sealed class CreateOutreachBatchRequestValidator : AbstractValidator<CreateOutreachBatchRequest>
 {
@@ -158,7 +161,7 @@ internal static class OutreachEndpoints
         return TypedResults.Ok(new OutreachBatchResponse(
             result.BatchId,
             result.Accepted,
-            result.Skipped.Select(s => new OutreachSkipResponse(s.Phone, s.Reason)).ToList(),
+            result.Skipped.Select(s => new OutreachSkipResponse(s.Phone, s.Reason, s.RetryAfter)).ToList(),
             result.EtaDays,
             result.Allocations.Select(ToResponse).ToList(),
             result.DryRun));
@@ -235,6 +238,7 @@ internal static class OutreachEndpoints
             s.NextSendAt,
             s.StateCounts.ToDictionary(kv => ChannelConnectionResponse.Lower(kv.Key), kv => kv.Value),
             s.Booked,
-            s.Recent.Select(r => new OutreachActivityResponse(r.TargetId, r.Name, r.PhoneMasked, ChannelConnectionResponse.Lower(r.State), r.At)).ToList())).ToList());
+            s.Recent.Select(r => new OutreachActivityResponse(r.TargetId, r.Name, r.PhoneMasked, ChannelConnectionResponse.Lower(r.State), r.At)).ToList(),
+            s.HoldingForReplies)).ToList());
     }
 }
