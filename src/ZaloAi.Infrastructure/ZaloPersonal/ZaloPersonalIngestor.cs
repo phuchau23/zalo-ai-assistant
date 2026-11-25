@@ -204,6 +204,16 @@ public sealed partial class ZaloPersonalIngestor(
                 ? now + OutreachTenantJob.InviteAfterReplyDelay
                 : null;
         }
+        else if (await outreach.FindRevivableByUidAsync(tenantId, route.ConnectionId, customerUid, cancellationToken) is { } late)
+        {
+            // Đã vào "Cần gọi điện" / "Đã nguội" / "Lưu trữ" mà khách tự nhắn lại → về "Đang tư vấn", rời danh sách gọi (2026-11-25).
+            late.State = OutreachState.Replied;
+            late.RepliedAt ??= now;
+            late.LastError = null;
+            late.NextActionAt = !e.IsFriend && late.FriendRequestSentAt is null && late.FirstMessageAt is not null
+                ? now + OutreachTenantJob.InviteAfterReplyDelay
+                : null;
+        }
 
         if (!await TrySaveAsync(cancellationToken))
         {
@@ -300,6 +310,16 @@ public sealed partial class ZaloPersonalIngestor(
                     // Đã nói chuyện rồi mới chấp nhận lời mời của bên mình → một câu cảm ơn + giới thiệu sơ (chủ dự án chốt 2026-11-15).
                     // Đợi vài phút: khách có thể đang chat dở, job còn kiểm hội thoại yên mới gửi.
                     replied.NextActionAt = time.GetUtcNow() + OutreachTenantJob.ThanksDelay;
+                }
+                else if (target is null
+                         && await outreach.FindRevivableByUidAsync(route.TenantId, route.ConnectionId, e.Uid, cancellationToken) is
+                         { State: OutreachState.NoReply or OutreachState.Archived, FriendRequestSentAt: not null, FirstMessageAt: not null } late
+                         && (await outreach.ContactsInActiveOutreachAsync(route.TenantId, [late.ContactId], cancellationToken)).Count == 0)
+                {
+                    // Đã vào "Cần gọi điện" rồi mới chấp nhận lời mời gửi sau tin chào → vẫn một tin cảm ơn + giới thiệu (job gửi đúng một
+                    // lần), đếm lại 2 ngày từ tin đó (2026-11-25).
+                    late.State = OutreachState.Messaged;
+                    late.NextActionAt = time.GetUtcNow() + OutreachTenantJob.ThanksDelay;
                 }
 
                 break;

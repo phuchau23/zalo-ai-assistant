@@ -247,6 +247,14 @@ public sealed partial class OutreachTenantJob(
             return;
         }
 
+        // Dành lượt tin cho khách đang chat (Backpressure, 2026-11-25): nick đã dùng 70% lượt tin hôm nay → người MỚI đợi hôm sau, khách
+        // đang hỏi luôn được trả lời. Người đã chấp nhận kết bạn (bước 2 ở trên) không bị giữ lại.
+        if (!await limiter.HasRoomAsync(connection.Id, PacingCounter.Messages, OutreachLifecycle.NewOutreachMessageCap(limits.MessagesPerDay), cancellationToken))
+        {
+            target.NextActionAt = tomorrow;
+            return;
+        }
+
         // Bước 3 (chủ dự án chốt 2026-11-25): NHẮN TRƯỚC, rồi 2–5 phút sau mời kết bạn luôn (MessagedAsync).
         // Nhắn trước bị chặn tin người lạ → mời kết bạn kèm lời chào khi có lượt. Mỗi người chỉ được liên hệ chủ động một lần.
         if (target.LastError == StrangerBlocked)
@@ -568,7 +576,7 @@ public sealed partial class OutreachTenantJob(
             target.State = OutreachState.Messaged;
             target.FirstMessageAt = now;
             target.LastError = null;
-            target.NextActionAt = null; // job dọn hằng giờ: 7 ngày không trả lời → danh sách gọi điện
+            target.NextActionAt = null; // job dọn hằng giờ: 2 ngày không trả lời → danh sách "Cần gọi điện"
             contact.LastProactiveAt = now;
             contact.ProactiveAwaitingReply = true;
             return true;
@@ -721,8 +729,11 @@ public sealed class OutreachMaintenanceSweepJob(OutreachLookup lookup, IBackgrou
 }
 
 /// <summary>
-/// Dọn hàng đợi + phanh tự động của một tenant (docs/ZALO-PERSONAL-PLAN.md mục 6.7, 7.1): khách nói "hủy" → từ chối; lời mời 14 ngày
-/// không chấp nhận → rút lời mời; tin đầu 7 ngày không trả lời → danh sách gọi điện. Phanh: chỉ GIẢM tốc khi khách phản hồi xấu.
+/// Dọn hàng đợi + phanh tự động của một tenant (docs/ZALO-PERSONAL-PLAN.md mục 6.7, 7.1) — chuyển trạng thái theo thời gian của vòng
+/// đời số điện thoại (<see cref="OutreachLifecycle"/>, chủ dự án chốt 2026-11-25): khách nói "hủy" → từ chối; có lịch hẹn / hóa đơn mới →
+/// đã thành khách; lời mời 14 ngày không chấp nhận → rút lời mời; im 2 ngày sau tin cuối bên mình → cần gọi điện; đang tư vấn mà im
+/// 14 ngày → đã nguội; nằm trong danh sách gọi 30 ngày không ai xử lý → lưu trữ. Mỗi ngày báo Telegram số người cần gọi (một lần, lúc mở
+/// khung giờ nhắn). Phanh: chỉ GIẢM tốc khi khách phản hồi xấu.
 /// </summary>
 [Queue(JobQueues.Default)]
 public sealed partial class OutreachMaintenanceJob(
@@ -733,6 +744,7 @@ public sealed partial class OutreachMaintenanceJob(
     SidecarClient sidecar,
     IBackgroundJobClient jobs,
     OutreachQueueWatcher queueWatcher,
+    CallListDigest callDigest,
     TimeProvider time,
     ILogger<OutreachMaintenanceJob> logger)
 {
@@ -760,28 +772,49 @@ public sealed partial class OutreachMaintenanceJob(
 
         await outreach.SaveChangesAsync(cancellationToken); // lưu trước: bước dưới đọc lại từ DB, không được ghi đè người đã từ chối
 
-        foreach (var target in await outreach.ListStaleAsync(tenantId, now.AddDays(-14), now.AddDays(-7), cancellationToken))
+        // Thành khách trước các bước theo thời gian: người vừa đặt lịch không bị đẩy sang "Cần gọi điện".
+        foreach (var target in await outreach.ListConvertedAsync(tenantId, cancellationToken))
         {
-            if (target.State == OutreachState.Invited)
+            target.State = OutreachState.Converted;
+            target.NextActionAt = null;
+        }
+
+        await outreach.SaveChangesAsync(cancellationToken);
+
+        foreach (var target in await outreach.ListStaleInvitesAsync(tenantId, now.AddDays(-14), cancellationToken))
+        {
+            target.State = OutreachState.Expired;
+            target.NextActionAt = null;
+            if (target.ConnectionId is { } cid && target.ZaloUid is { } uid)
             {
-                target.State = OutreachState.Expired;
-                if (target.ConnectionId is { } cid && target.ZaloUid is { } uid)
+                try
                 {
-                    try
-                    {
-                        await sidecar.UndoFriendRequestAsync(cid, uid, cancellationToken);
-                    }
-                    catch (ChannelUnavailableException)
-                    {
-                        // Không rút được lúc này thì lời mời vẫn hết hạn phía Remi; Zalo tự giữ lời mời, không gửi lại.
-                    }
+                    await sidecar.UndoFriendRequestAsync(cid, uid, cancellationToken);
+                }
+                catch (ChannelUnavailableException)
+                {
+                    // Không rút được lúc này thì lời mời vẫn hết hạn phía Remi; Zalo tự giữ lời mời, không gửi lại.
                 }
             }
-            else
-            {
-                target.State = OutreachState.NoReply; // nhân viên quyết định có gọi điện không
-            }
+        }
 
+        foreach (var target in await outreach.ListSilentAsync(tenantId, now, cancellationToken))
+        {
+            target.State = OutreachState.NoReply; // "Cần gọi điện": bot thôi nhắn, nhân viên gọi
+            target.NextActionAt = null;
+        }
+
+        foreach (var target in await outreach.ListGoneColdAsync(tenantId, now, cancellationToken))
+        {
+            target.State = OutreachState.Cold; // "Đã nguội": bot thôi nhắc, đứng đầu danh sách gọi
+            target.NextActionAt = null;
+        }
+
+        await outreach.SaveChangesAsync(cancellationToken);
+
+        foreach (var target in await outreach.ListToArchiveAsync(tenantId, now, cancellationToken))
+        {
+            target.State = OutreachState.Archived;
             target.NextActionAt = null;
         }
 
@@ -793,6 +826,7 @@ public sealed partial class OutreachMaintenanceJob(
         }
 
         await queueWatcher.CheckAsync(tenantId, cancellationToken); // danh sách SĐT sắp hết / đã hết → Telegram
+        await callDigest.CheckAsync(tenantId, cancellationToken); // mỗi ngày một tin: hôm nay có N số cần gọi
     }
 
     /// <summary>Tính mức phanh cho một nick từ số liệu 7 ngày.</summary>

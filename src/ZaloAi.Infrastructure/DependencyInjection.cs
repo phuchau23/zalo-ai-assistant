@@ -114,6 +114,8 @@ public static class DependencyInjection
         services.AddScoped<QuickReplyRepository>();
         services.AddScoped<OutreachLookup>();
         services.AddScoped<ZaloPersonal.OutreachService>();
+        services.AddScoped<ZaloPersonal.CallListService>();
+        services.AddScoped<Jobs.CallListDigest>();
         services.AddScoped<OutreachSweepJob>();
         services.AddScoped<OutreachTenantJob>();
         services.AddScoped<OutreachMaintenanceSweepJob>();
