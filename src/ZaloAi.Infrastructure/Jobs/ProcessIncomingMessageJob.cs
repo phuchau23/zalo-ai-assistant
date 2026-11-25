@@ -42,6 +42,7 @@ public sealed partial class ProcessIncomingMessageJob(
     IInboxNotifier notifier,
     ZaloPersonalRepository personal,
     ZaloPersonal.PersonalSendLimiter limiter,
+    Stickers.StickerInterpreter stickers,
     IOptions<ZaloPersonalOptions> personalOptions,
     IOptions<AiOptions> options,
     TimeProvider time,
@@ -144,7 +145,10 @@ public sealed partial class ProcessIncomingMessageJob(
             return;
         }
 
-        // Khách trả lời "ok" sau tin nhắc lịch → xác nhận lịch, không gọi AI (CRM C2).
+        // Sticker: AI xem hình (lưu nhớ theo sticker) → ghi nghĩa vào nội dung tin để bot, nhân viên và các lượt sau hiểu (2026-11-25).
+        await InterpretStickersAsync(tenantId, conversation, message, cancellationToken);
+
+        // Khách trả lời "ok" sau tin nhắc lịch → xác nhận lịch, không gọi AI (CRM C2). Sticker không khớp: chỉ lời nói rõ mới xác nhận.
         {
             var confirmReply = await booking.TryConfirmByReplyAsync(tenantId, tenant, contact, encryptor.Decrypt(message.ContentEnc), cancellationToken);
             if (confirmReply is not null)
@@ -197,7 +201,8 @@ public sealed partial class ProcessIncomingMessageJob(
         }
 
         // AI chỉ đề xuất đặt/dời/hủy; hệ thống lịch kiểm tra chỗ trống và soạn câu xác nhận (CLAUDE.md: AI chỉ đề xuất, hệ thống mới chốt).
-        if (result.Booking is not null && !result.NeedsHuman)
+        // Tin chỉ là sticker thì không bao giờ đặt/dời/hủy lịch (một hình dán không đủ rõ ý) — khách phải nói bằng lời.
+        if (result.Booking is not null && !result.NeedsHuman && !InboundText.IsSticker(encryptor.Decrypt(message.ContentEnc)))
         {
             var outcome = await booking.HandleAsync(tenantId, tenant, conversation, contact, result.Booking, cancellationToken);
             result = result with
@@ -382,6 +387,47 @@ public sealed partial class ProcessIncomingMessageJob(
                 ConversationId = conversationId,
                 ConnectionId = connectionId,
             });
+        }
+    }
+
+    /// <summary>
+    /// Các tin sticker chưa hiểu nghĩa trong lượt này (khách có thể gửi sticker rồi nhắn chữ, gom chung một lượt): đổi "[Khách gửi sticker]"
+    /// thành "[Khách gửi sticker: &lt;nghĩa&gt;]" (mã hóa như mọi tin). Không có thông tin sticker / không hiểu được → giữ nguyên, bot vẫn
+    /// trả lời theo ngữ cảnh. Chi phí AI xem hình ghi theo hội thoại + nick như các lần gọi khác.
+    /// </summary>
+    private async Task InterpretStickersAsync(Guid tenantId, Conversation conversation, Message current, CancellationToken cancellationToken)
+    {
+        var recent = (await conversations.ListMessagesAsync(tenantId, conversation.Id, conversation.SummarizedUntil, cancellationToken))
+            .Where(m => m.Sender == MessageSender.Customer)
+            .TakeLast(5)
+            .Where(m => encryptor.Decrypt(m.ContentEnc) == InboundText.Sticker)
+            .ToList();
+        var changed = false;
+        foreach (var m in recent)
+        {
+            if (await stickers.InterpretAsync(m.Id, cancellationToken) is not { } meaning)
+            {
+                continue;
+            }
+
+            var tracked = m.Id == current.Id ? current : await conversations.GetMessageAsync(tenantId, m.Id, cancellationToken);
+            if (tracked is null)
+            {
+                continue;
+            }
+
+            tracked.ContentEnc = encryptor.Encrypt(InboundText.StickerMeaning(meaning.Meaning));
+            if (meaning.Usage is { } usage)
+            {
+                AddUsage(tenantId, conversation.Id, conversation.ConnectionId, [usage]);
+            }
+
+            changed = true;
+        }
+
+        if (changed)
+        {
+            await conversations.SaveChangesAsync(cancellationToken);
         }
     }
 

@@ -31,7 +31,11 @@ public sealed record PersonalEvent(
     string? Uid = null,
     string? State = null,
     int? Code = null,
-    string? Detail = null);
+    string? Detail = null,
+    PersonalSticker? Sticker = null);
+
+/// <summary>Sticker trong tin khách (CONTRACT.md §5, 2026-11-25): mã, chữ khóa Zalo gắn, đường dẫn ảnh — sidecar lấy qua zca-js.</summary>
+public sealed record PersonalSticker(string? Id = null, string? Keyword = null, string? ImageUrl = null);
 
 /// <summary>
 /// Sự kiện từ nick Zalo cá nhân → dữ liệu CRM (docs/ZALO-PERSONAL-PLAN.md mục 6.2–6.5). Lọc chuyện riêng TRƯỚC khi lưu:
@@ -49,6 +53,7 @@ public sealed partial class ZaloPersonalIngestor(
     IFieldEncryptor encryptor,
     IBackgroundJobClient jobs,
     IInboxNotifier notifier,
+    Stickers.StickerInterpreter stickers,
     IOptions<ZaloPersonalOptions> options,
     TimeProvider time,
     ILogger<ZaloPersonalIngestor> logger)
@@ -203,6 +208,12 @@ public sealed partial class ZaloPersonalIngestor(
         if (!await TrySaveAsync(cancellationToken))
         {
             return;
+        }
+
+        // Sticker: cất mã / chữ khóa / ảnh theo mã tin; job xử lý tin cho AI xem hình rồi ghi nghĩa vào nội dung (2026-11-25).
+        if (e.Kind == "sticker" && e.Sticker is { } sticker)
+        {
+            await stickers.RememberAsync(message.Id, new Stickers.StickerInfo(sticker.Id, sticker.Keyword, sticker.ImageUrl), cancellationToken);
         }
 
         // Gom tin: job chạy sau vài giây; khách nhắn tiếp thì job của tin cũ thấy có tin mới hơn và để job tin mới trả lời gộp.
