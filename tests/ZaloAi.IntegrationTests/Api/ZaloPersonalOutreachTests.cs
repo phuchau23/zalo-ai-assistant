@@ -678,6 +678,8 @@ public sealed class ZaloPersonalOutreachTests(PostgresFixture db) : IAsyncLifeti
         var count = (await owner.GetFromJsonAsync<ZaloAi.Api.Customers.CareCountResponse>(new Uri("/care/count", UriKind.Relative)))!;
         count.ToCall.ShouldBe(1);
         count.ToCallWarm.ShouldBe(0);
+        (await owner.GetFromJsonAsync<OutreachSummaryResponse[]>(new Uri("/zalo-outreach/summary", UriKind.Relative)))!
+            .Single().ToCall.ShouldBe(1); // trang Zalo cá nhân / trang nick cũng thấy
         await using (var context = db.CreateDbContext(tenantId))
         {
             (await context.AuditLogs.CountAsync(a => a.TenantId == tenantId && a.Action == "care.call_list_viewed")).ShouldBe(1); // xem SĐT đầy đủ → ghi nhật ký

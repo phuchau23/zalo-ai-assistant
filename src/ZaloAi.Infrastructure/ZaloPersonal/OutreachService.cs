@@ -31,6 +31,7 @@ public sealed record OutreachActivity(Guid TargetId, string? Name, string? Phone
 /// <param name="StateCounts">Số người theo trạng thái (mọi đợt, kể cả đã kết thúc).</param>
 /// <param name="Booked">Số người nick đã liên hệ được mà đang có lịch hẹn sắp tới.</param>
 /// <param name="HoldingForReplies">Hôm nay nick đã dùng 70% lượt tin → tạm ngưng nhắn người mới, dành lượt trả lời khách đang chat.</param>
+/// <param name="ToCall">Người của nick đang nằm trong danh sách "Cần gọi điện".</param>
 public sealed record OutreachSummary(
     Guid ConnectionId,
     string? NickName,
@@ -43,7 +44,8 @@ public sealed record OutreachSummary(
     IReadOnlyDictionary<OutreachState, int> StateCounts,
     int Booked,
     IReadOnlyList<OutreachActivity> Recent,
-    bool HoldingForReplies = false);
+    bool HoldingForReplies = false,
+    int ToCall = 0);
 
 /// <summary>
 /// Ô dán SĐT hàng loạt + màn hình theo dõi (docs/ZALO-PERSONAL-PLAN.md mục 6.9). Chỉ người đã có quan hệ với DN: DN chọn nguồn và
@@ -261,6 +263,7 @@ public sealed class OutreachService(
         DateTimeOffset? nextSendAt = CareDecision.InSendWindow(settings, now) ? null : CareDecision.NextSendTime(settings, now);
         var counts = (await outreach.StateCountsAsync(tenantId, cancellationToken)).ToLookup(r => r.ConnectionId);
         var booked = await outreach.BookedCountsAsync(tenantId, now, cancellationToken);
+        var toCall = await outreach.CountCallListByConnectionAsync(tenantId, cancellationToken);
         var list = new List<OutreachSummary>();
         var names = (await connections.ListAsync(tenantId, cancellationToken)).ToDictionary(c => c.Id, c => c.Name);
         foreach (var account in await personal.ListAccountsAsync(tenantId, cancellationToken))
@@ -286,7 +289,8 @@ public sealed class OutreachService(
                     r.Contact.PhoneEnc is null ? null : PhoneNumber.Mask(encryptor.Decrypt(r.Contact.PhoneEnc)),
                     r.Target.State,
                     r.Target.UpdatedAt)).ToList(),
-                queued > 0 && usage.Messages >= OutreachLifecycle.NewOutreachMessageCap(limits.MessagesPerDay)));
+                queued > 0 && usage.Messages >= OutreachLifecycle.NewOutreachMessageCap(limits.MessagesPerDay),
+                toCall.GetValueOrDefault(account.ConnectionId)));
         }
 
         return list;

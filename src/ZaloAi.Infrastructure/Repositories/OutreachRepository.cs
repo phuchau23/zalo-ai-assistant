@@ -366,6 +366,17 @@ public sealed class OutreachRepository(AppDbContext db, ITenantContext tenantCon
             .SetProperty(c => c.LastCustomerMessageAt, c => c.LastCustomerMessageAt - by), cancellationToken);
     }
 
+    /// <summary>Số người cần gọi theo từng nick (trang Zalo cá nhân, trang nick).</summary>
+    public async Task<Dictionary<Guid, int>> CountCallListByConnectionAsync(Guid tenantId, CancellationToken cancellationToken)
+    {
+        EnsureTenant(tenantId);
+        return await CallListQuery(tenantId)
+            .Where(t => t.ConnectionId != null)
+            .GroupBy(t => t.ConnectionId!.Value)
+            .Select(g => new { g.Key, Count = g.Count() })
+            .ToDictionaryAsync(r => r.Key, r => r.Count, cancellationToken);
+    }
+
     private IQueryable<OutreachTarget> CallListQuery(Guid tenantId) =>
         Db.OutreachTargets.AsNoTracking()
             .Where(t => t.TenantId == tenantId && OutreachLifecycle.CallStates.Contains(t.State)
