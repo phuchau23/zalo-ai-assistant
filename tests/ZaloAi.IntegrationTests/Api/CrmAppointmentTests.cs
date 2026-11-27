@@ -72,6 +72,20 @@ public sealed class CrmAppointmentTests(PostgresFixture db)
         return staff.Id;
     }
 
+    /// <summary>Mốc 30 phút đầu tiên sau 30 phút nữa mà lịch 60 phút (massage đông y) kết thúc trong cùng ngày giờ Việt Nam; luôn trong vòng 2 giờ.</summary>
+    private static DateTimeOffset ReminderSlot(DateTimeOffset now)
+    {
+        var vn = TimeSpan.FromHours(7);
+        var t = now.AddMinutes(30);
+        t = new DateTimeOffset(t.Year, t.Month, t.Day, t.Hour, t.Minute - (t.Minute % 30), 0, TimeSpan.Zero).AddMinutes(30);
+        while (t.ToOffset(vn).Date != t.AddMinutes(60).ToOffset(vn).Date)
+        {
+            t = t.AddMinutes(30);
+        }
+
+        return t;
+    }
+
     private static CreateAppointmentRequest Booking(Guid serviceId, DateTimeOffset start, string phone = "0912345678", Guid? staffId = null) =>
         new(null, null, new NewContactRequest("Nguyễn Thị Lan", phone, "chị"), staffId, null, start, [serviceId], "Khách VIP", 1, "staff", false);
 
@@ -218,10 +232,10 @@ public sealed class CrmAppointmentTests(PostgresFixture db)
         var conversation = (await create.Content.ReadFromJsonAsync<ChatTestConversationResponse>())!;
         await SendAsync(owner, tenantId, conversation.Id, "xin chào bên mình có massage đông y 60 phút không");
 
-        // Lịch sau 90 phút (đặt tay nhưng gắn hội thoại để nhắc qua chat).
+        // Lịch trong vòng 2 giờ tới (đặt tay nhưng gắn hội thoại để nhắc qua chat), không vắt qua nửa đêm giờ Việt Nam: giờ mở cửa
+        // 00:00–23:59 theo từng ngày nên lịch 23:30–00:30 không đặt được (test từng hỏng khi chạy sau 22 giờ).
         var contactId = await db.CreateDbContext(tenantId).Conversations.Where(c => c.Id == conversation.Id).Select(c => c.ContactId).SingleAsync();
-        var raw = DateTimeOffset.UtcNow.AddMinutes(90);
-        var start = new DateTimeOffset(raw.Year, raw.Month, raw.Day, raw.Hour, raw.Minute - raw.Minute % 30, 0, TimeSpan.Zero);
+        var start = ReminderSlot(DateTimeOffset.UtcNow);
         using var created = await owner.PostAsJsonAsync(Url("/appointments"), new CreateAppointmentRequest(null, contactId, null, null, null, start, [serviceId], null));
         created.StatusCode.ShouldBe(HttpStatusCode.OK, await created.Content.ReadAsStringAsync());
         var appointment = (await created.Content.ReadFromJsonAsync<AppointmentResponse>())!;

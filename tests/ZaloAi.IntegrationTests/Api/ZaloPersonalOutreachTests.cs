@@ -864,8 +864,9 @@ public sealed class ZaloPersonalOutreachTests(PostgresFixture db) : IAsyncLifeti
         var at = WindowTime();
         using (var scope = _api.Services.CreateScope())
         {
-            // An toàn: 200 tin/ngày → người mới chỉ được dùng tới 140, phần còn lại dành cho khách đang chat.
-            var limiter = ActivatorUtilities.CreateInstance<ZaloAi.Infrastructure.ZaloPersonal.PersonalSendLimiter>(scope.ServiceProvider, new FixedClock(at));
+            // An toàn: 200 tin/ngày → người mới chỉ được dùng tới 140, phần còn lại dành cho khách đang chat. Bộ đếm lấy từ DI (đồng hồ thật)
+            // giống bộ đếm job dùng — đồng hồ cố định của job có thể là sáng mai khi test chạy ban đêm.
+            var limiter = scope.ServiceProvider.GetRequiredService<ZaloAi.Infrastructure.ZaloPersonal.PersonalSendLimiter>();
             for (var i = 0; i < 140; i++)
             {
                 await limiter.CountAsync(connectionId, ZaloAi.Infrastructure.ZaloPersonal.PacingCounter.Messages, CancellationToken.None);
