@@ -711,3 +711,18 @@ hạn mức. Chủ dự án duyệt cả gói (máy trạng thái, `OutreachLife
   đang chat luôn còn lượt. Trang nick báo "tạm ngưng nhắn người mới" (`holdingForReplies`). Ô dán SĐT cảnh báo khi hàng chờ > 14 ngày.
 - Không migration: trạng thái lưu dạng chữ, loại ghi chú `call` cũng vậy. Dev: nút "Tua nhanh thời gian" (+1/+3/+15/+31 ngày) trong
   khung Giả lập (chỉ Development + sidecar giả lập) lùi mọi mốc giờ của nick rồi chạy job hàng đợi + dọn dẹp ngay.
+
+## 2026-11-27 — Ngưỡng "Cần gọi điện" 24 giờ, báo Telegram khi khách trả lời muộn (chủ dự án chốt)
+
+- Chủ dự án hỏi lại: dán 50–100 số/ngày thì có bị nhắn dồn ngày 2, ngày 3 không. Xác nhận lại nguyên tắc: **mỗi số chỉ được bot liên hệ
+  chủ động một lần** (tin chào + 1 lời mời + 1 tin giới thiệu nếu chấp nhận), bot KHÔNG BAO GIỜ tự nhắn lại người chưa từng trả lời
+  (nick dễ bị khóa, luật chống tin rác, hiệu quả thấp) — nhân viên gọi điện thay. Ngoại lệ duy nhất: DN dán lại sau 90 ngày (1 lần cuối).
+- **Im 24 giờ** (trước: 2 ngày) sau tin cuối bên mình → "Cần gọi điện" (`OutreachLifecycle.SilentAfter`).
+- **Khách trong danh sách gọi (im 24 giờ / đã nguội / lưu trữ) tự nhắn lại** → bot tư vấn như thường, rời danh sách, và
+  `LateReplyAlertJob` báo nhóm Telegram: tên + SĐT che giữa + ngày bot nhắn chào + link hội thoại (SĐT che vì tin ra ngoài hệ thống).
+- **Trang Zalo cá nhân**: dải "N số cần gọi điện" trên các ô số liệu (dùng `/care/count`); thẻ nick + trang nick có viên "N cần gọi"
+  (`/zalo-outreach/summary` thêm `toCall` theo nick).
+- **Chạy lại dev bị nhắn lại?** Đã soát: tin khách cũ phát lại không thể trả lời trùng (unique `messages(tenant_id, external_message_id)`);
+  tin chào / giới thiệu chỉ gửi một lần. Lỗ hổng tìm thấy: câu "cảm ơn đã kết bạn" (khách trả lời rồi mới chấp nhận) chưa có khóa một
+  lần → sự kiện kết bạn đến lại sẽ gửi lần hai. Đã thêm khóa Redis `zp:accepted-thanks:{target}` 180 ngày. Tin hỏi thăm chủ động dồn
+  sau khi máy tắt là đúng thiết kế (mỗi khách tối đa 1 tin khi chưa trả lời).

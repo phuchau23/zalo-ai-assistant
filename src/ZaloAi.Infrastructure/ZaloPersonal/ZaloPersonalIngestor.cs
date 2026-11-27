@@ -196,6 +196,7 @@ public sealed partial class ZaloPersonalIngestor(
         // Người DN dán SĐT đã trả lời → từ đây bot tư vấn như khách bình thường (màn hình "Đang chăm sóc": đang tư vấn).
         // Chưa là bạn bè và chưa từng mời → vài phút sau gửi lời mời kết bạn (chủ dự án chốt 2026-11-14: mời SAU khi khách trả lời —
         // khách đã trò chuyện nên ít bị từ chối, nick an toàn hơn mời cùng tin chào). Job chăm sóc gửi, theo giới hạn lời mời/ngày.
+        (Guid TargetId, OutreachState From)? lateReply = null;
         if (await outreach.FindActiveByUidAsync(tenantId, route.ConnectionId, customerUid, cancellationToken) is { } target)
         {
             target.State = OutreachState.Replied;
@@ -206,7 +207,13 @@ public sealed partial class ZaloPersonalIngestor(
         }
         else if (await outreach.FindRevivableByUidAsync(tenantId, route.ConnectionId, customerUid, cancellationToken) is { } late)
         {
-            // Đã vào "Cần gọi điện" / "Đã nguội" / "Lưu trữ" mà khách tự nhắn lại → về "Đang tư vấn", rời danh sách gọi (2026-11-25).
+            // Đã vào "Cần gọi điện" / "Đã nguội" / "Lưu trữ" mà khách tự nhắn lại → về "Đang tư vấn", rời danh sách gọi (2026-11-25), báo
+            // Telegram để nhân viên khỏi gọi nhầm / biết khách quay lại (2026-11-27).
+            if (late.State is OutreachState.NoReply or OutreachState.Cold or OutreachState.Archived)
+            {
+                lateReply = (late.Id, late.State);
+            }
+
             late.State = OutreachState.Replied;
             late.RepliedAt ??= now;
             late.LastError = null;
@@ -218,6 +225,11 @@ public sealed partial class ZaloPersonalIngestor(
         if (!await TrySaveAsync(cancellationToken))
         {
             return;
+        }
+
+        if (lateReply is { } lr)
+        {
+            jobs.Enqueue<LateReplyAlertJob>(job => job.RunAsync(tenantId, lr.TargetId, lr.From.ToString(), CancellationToken.None));
         }
 
         // Sticker: cất mã / chữ khóa / ảnh theo mã tin; job xử lý tin cho AI xem hình rồi ghi nghĩa vào nội dung (2026-11-25).

@@ -353,6 +353,11 @@ public sealed class ZaloPersonalOutreachTests(PostgresFixture db) : IAsyncLifeti
         await RunOutreachAsync(tenantId, TimeSpan.FromMinutes(20));
         await RunOutreachAsync(tenantId, TimeSpan.FromMinutes(40));
 
+        // Sự kiện "kết bạn" đến lại (khách xóa rồi kết bạn lại / nick nối lại) → KHÔNG cảm ơn lần hai (2026-11-27).
+        await EventsAsync(connectionId, new { type = "friend", @event = "add", uid = $"u-{phone}", ts = 3L });
+        await RunOutreachAsync(tenantId, TimeSpan.FromMinutes(60));
+        await RunOutreachAsync(tenantId, TimeSpan.FromMinutes(80));
+
         var texts = await ProactiveTextsAsync(tenantId);
         texts.Count.ShouldBe(2); // tin chào + đúng 1 câu cảm ơn
         texts.Count(t => t.Contains("cảm ơn", StringComparison.Ordinal)).ShouldBe(1);
@@ -642,7 +647,7 @@ public sealed class ZaloPersonalOutreachTests(PostgresFixture db) : IAsyncLifeti
     }
 
     [Fact]
-    public async Task Two_quiet_days_after_our_last_message_move_to_the_call_list_and_opt_out_declines()
+    public async Task A_quiet_day_after_our_last_message_moves_to_the_call_list_and_opt_out_declines()
     {
         var (tenantId, owner, connectionId) = await ConnectedTenantAsync("Dọn hàng đợi");
         await InvitesPerDayAsync(owner, connectionId, 1);
@@ -651,8 +656,8 @@ public sealed class ZaloPersonalOutreachTests(PostgresFixture db) : IAsyncLifeti
         await PasteAsync(owner, $"{quiet}\n{optOut}");
         await RunOutreachAsync(tenantId);
 
-        // Tin chào 3 ngày trước nhưng hôm qua bên mình vừa nhắn thêm (tin giới thiệu / nhân viên) → chưa tính là im 2 ngày.
-        await AgeAsync(tenantId, firstMessage: TimeSpan.FromDays(3), lastMessage: TimeSpan.FromDays(1));
+        // Tin chào 3 ngày trước nhưng 12 giờ trước bên mình vừa nhắn thêm (tin giới thiệu / nhân viên) → chưa tính là im 24 giờ.
+        await AgeAsync(tenantId, firstMessage: TimeSpan.FromDays(3), lastMessage: TimeSpan.FromHours(12));
         await using (var context = db.CreateDbContext(tenantId))
         {
             (await context.Contacts.SingleAsync(c => c.ExternalUserId == $"u-{optOut}")).ProactiveOptOutAt = DateTimeOffset.UtcNow;
@@ -662,7 +667,7 @@ public sealed class ZaloPersonalOutreachTests(PostgresFixture db) : IAsyncLifeti
         await MaintenanceAsync(tenantId);
         (await TargetsAsync(owner)).Select(t => t.State).OrderBy(s => s, StringComparer.Ordinal).ShouldBe(["declined", "messaged"]);
 
-        await AgeAsync(tenantId, firstMessage: TimeSpan.FromDays(3), lastMessage: TimeSpan.FromDays(2.5));
+        await AgeAsync(tenantId, firstMessage: TimeSpan.FromDays(3), lastMessage: TimeSpan.FromHours(25));
         await MaintenanceAsync(tenantId);
         (await TargetsAsync(owner)).Select(t => t.State).OrderBy(s => s, StringComparer.Ordinal).ShouldBe(["declined", "noreply"]);
 
@@ -673,6 +678,8 @@ public sealed class ZaloPersonalOutreachTests(PostgresFixture db) : IAsyncLifeti
         var count = (await owner.GetFromJsonAsync<ZaloAi.Api.Customers.CareCountResponse>(new Uri("/care/count", UriKind.Relative)))!;
         count.ToCall.ShouldBe(1);
         count.ToCallWarm.ShouldBe(0);
+        (await owner.GetFromJsonAsync<OutreachSummaryResponse[]>(new Uri("/zalo-outreach/summary", UriKind.Relative)))!
+            .Single().ToCall.ShouldBe(1); // trang Zalo cá nhân / trang nick cũng thấy
         await using (var context = db.CreateDbContext(tenantId))
         {
             (await context.AuditLogs.CountAsync(a => a.TenantId == tenantId && a.Action == "care.call_list_viewed")).ShouldBe(1); // xem SĐT đầy đủ → ghi nhật ký
@@ -857,8 +864,9 @@ public sealed class ZaloPersonalOutreachTests(PostgresFixture db) : IAsyncLifeti
         var at = WindowTime();
         using (var scope = _api.Services.CreateScope())
         {
-            // An toàn: 200 tin/ngày → người mới chỉ được dùng tới 140, phần còn lại dành cho khách đang chat.
-            var limiter = ActivatorUtilities.CreateInstance<ZaloAi.Infrastructure.ZaloPersonal.PersonalSendLimiter>(scope.ServiceProvider, new FixedClock(at));
+            // An toàn: 200 tin/ngày → người mới chỉ được dùng tới 140, phần còn lại dành cho khách đang chat. Bộ đếm lấy từ DI (đồng hồ thật)
+            // giống bộ đếm job dùng — đồng hồ cố định của job có thể là sáng mai khi test chạy ban đêm.
+            var limiter = scope.ServiceProvider.GetRequiredService<ZaloAi.Infrastructure.ZaloPersonal.PersonalSendLimiter>();
             for (var i = 0; i < 140; i++)
             {
                 await limiter.CountAsync(connectionId, ZaloAi.Infrastructure.ZaloPersonal.PacingCounter.Messages, CancellationToken.None);

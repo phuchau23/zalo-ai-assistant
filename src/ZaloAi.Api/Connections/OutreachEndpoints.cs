@@ -81,6 +81,7 @@ public sealed record OutreachActivityResponse(Guid TargetId, string? Name, strin
 /// <param name="Booked">Số người nick đã liên hệ được mà đang có lịch hẹn sắp tới.</param>
 /// <param name="Recent">Việc gần nhất của nick, mới nhất trước.</param>
 /// <param name="HoldingForReplies">Hôm nay nick đã dùng 70% lượt tin → tạm ngưng nhắn người mới, dành lượt trả lời khách đang chat.</param>
+/// <param name="ToCall">Người của nick đang nằm trong danh sách "Cần gọi điện" (trang Cần chăm sóc).</param>
 public sealed record OutreachSummaryResponse(
     Guid ConnectionId,
     string? NickName,
@@ -93,7 +94,8 @@ public sealed record OutreachSummaryResponse(
     Dictionary<string, int> StateCounts,
     int Booked,
     IReadOnlyList<OutreachActivityResponse> Recent,
-    bool HoldingForReplies);
+    bool HoldingForReplies,
+    int ToCall);
 
 internal sealed class CreateOutreachBatchRequestValidator : AbstractValidator<CreateOutreachBatchRequest>
 {
@@ -239,6 +241,7 @@ internal static class OutreachEndpoints
             s.StateCounts.ToDictionary(kv => ChannelConnectionResponse.Lower(kv.Key), kv => kv.Value),
             s.Booked,
             s.Recent.Select(r => new OutreachActivityResponse(r.TargetId, r.Name, r.PhoneMasked, ChannelConnectionResponse.Lower(r.State), r.At)).ToList(),
-            s.HoldingForReplies)).ToList());
+            s.HoldingForReplies,
+            s.ToCall)).ToList());
     }
 }

@@ -8,7 +8,7 @@ namespace ZaloAi.Infrastructure.ZaloPersonal;
 /// <code>
 /// Chờ lượt → Đã liên hệ (chào + mời + giới thiệu, hết) ─┬─ khách trả lời ─→ Đang tư vấn ─┬─ có lịch hẹn / hóa đơn → Đã thành khách
 ///                                                       │                                ├─ im 14 ngày → Đã nguội ─┐
-///                                                       └─ im 2 ngày ─→ Cần gọi điện ←───┴─────────────────────────┘ (danh sách gọi)
+///                                                       └─ im 24 giờ ─→ Cần gọi điện ←───┴─────────────────────────┘ (danh sách gọi)
 /// Cần gọi điện / Đã nguội / Không có Zalo: nhân viên gọi → Quan tâm (về Đang tư vấn) | Không quan tâm (ngừng hẳn) | Không nghe máy;
 /// 30 ngày không ai xử lý → Lưu trữ. Khách tự nhắn lại → về Đang tư vấn.
 /// </code>
@@ -17,8 +17,8 @@ namespace ZaloAi.Infrastructure.ZaloPersonal;
 /// </summary>
 public static class OutreachLifecycle
 {
-    /// <summary>Im chừng này sau tin cuối bên mình gửi → "Cần gọi điện" (trước 2026-11-25 là 7 ngày).</summary>
-    public static readonly TimeSpan SilentAfter = TimeSpan.FromDays(2);
+    /// <summary>Im chừng này sau tin cuối bên mình gửi → "Cần gọi điện" (chủ dự án chốt 2026-11-27; trước đó 2 ngày, ban đầu 7 ngày).</summary>
+    public static readonly TimeSpan SilentAfter = TimeSpan.FromHours(24);
 
     /// <summary>Đang tư vấn mà khách im chừng này → "Đã nguội".</summary>
     public static readonly TimeSpan ColdAfter = TimeSpan.FromDays(14);
