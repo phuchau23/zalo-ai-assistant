@@ -1673,7 +1673,7 @@
           "who": "Chủ DN",
           "where": "Hộp thư → hội thoại anh Bình",
           "steps": ["Anh Bình đang Đã nhắn, chờ trả lời: không trả lời gì.","Đợi 20–30 phút."],
-          "expect": ["Hộp thư anh Bình chỉ có: tin chào + (nếu đã chấp nhận kết bạn) đúng MỘT tin cảm ơn + giới thiệu. Không có tin thứ ba.","2 ngày im thì chuyển Cần gọi điện (nhóm “Vòng đời số & danh sách gọi”)."],
+          "expect": ["Hộp thư anh Bình chỉ có: tin chào + (nếu đã chấp nhận kết bạn) đúng MỘT tin cảm ơn + giới thiệu. Không có tin thứ ba.","24 giờ im thì chuyển Cần gọi điện (nhóm “Vòng đời số & danh sách gọi”); bot không bao giờ nhắn lại."],
           "tags": ["fake-mode", "safety"]
         },
         {
@@ -1775,16 +1775,16 @@
     {
       "id": "zalo-ca-nhan-vong-doi",
       "title": "Zalo cá nhân: vòng đời số & danh sách Cần gọi điện",
-      "summary": "Số im 2 ngày vào danh sách gọi, đang tư vấn im 14 ngày thành đã nguội, có lịch hẹn thành khách, 30 ngày không ai xử lý thì lưu trữ; dán lại số cũ bị chặn 90 ngày. Dùng nút Tua nhanh thời gian để khỏi chờ.",
+      "summary": "Số im 24 giờ vào danh sách gọi, đang tư vấn im 14 ngày thành đã nguội, có lịch hẹn thành khách, 30 ngày không ai xử lý thì lưu trữ; dán lại số cũ bị chặn 90 ngày. Dùng nút Tua nhanh thời gian để khỏi chờ.",
       "minutes": 40,
       "cases": [
         {
           "id": "zvd.1",
-          "title": "Im 2 ngày → Cần gọi điện",
+          "title": "Im 24 giờ → Cần gọi điện",
           "who": "Chủ DN",
           "where": "Zalo cá nhân → Nick A (khung Giả lập) + Cần chăm sóc + Tổng quan",
           "steps": ["Thêm số cho Nick A: 0900127001, chị Mai và 0900127002, anh Tùng → nguồn Khách cũ → tích xác nhận → Bắt đầu chăm sóc. Đợi 1–2 phút (cả hai Đã nhắn, chờ trả lời).","Trang Nick A → khung Giả lập → Tua nhanh thời gian → +3 ngày.","Xem tab Đang chăm sóc, rồi trang Cần chăm sóc, rồi Tổng quan."],
-          "expect": ["Chị Mai, anh Tùng: Cần gọi điện (bot thôi nhắn).","Cần chăm sóc có khu “Cần gọi điện” kèm số: mỗi người có SĐT đầy đủ (bấm trên điện thoại là gọi), “Đã nhắn chào dd/mm · khách chưa trả lời”, nick đã nhắn, nguồn. 0900124000 (zpo.3) nằm cuối với nhãn “Không có Zalo”.","Menu Cần chăm sóc có huy hiệu số; Tổng quan có ô “Số cần gọi điện”."],
+          "expect": ["Chị Mai, anh Tùng: Cần gọi điện (bot thôi nhắn).","Cần chăm sóc có khu “Cần gọi điện” kèm số: mỗi người có SĐT đầy đủ (bấm trên điện thoại là gọi), “Đã nhắn chào dd/mm · khách chưa trả lời”, nick đã nhắn, nguồn. 0900124000 (zpo.3) nằm cuối với nhãn “Không có Zalo”.","Menu Cần chăm sóc có huy hiệu số; Tổng quan có ô “Số cần gọi điện”.","Trang Zalo cá nhân: dải cam “N số cần gọi điện” trên các ô số liệu (bấm → khu Cần gọi điện); thẻ Nick A và trang nick có viên “N cần gọi”."],
           "tags": ["fake-mode","new"],
           "warn": "Tua nhanh dồn thời gian của MỌI người trong nick đó (kể cả người các bước trước). Làm nhóm này sau nhóm Zalo cá nhân: bot tự đi chăm sóc. Bấm trong khung giờ được nhắn (08:00–20:00)."
         },
@@ -1794,7 +1794,7 @@
           "who": "Khách (giả lập)",
           "where": "Nick A → khung Giả lập + Cần chăm sóc",
           "steps": ["Khung Giả lập: uid fake-0900127001, tên chị Mai, nội dung: giờ chị mới đọc, gói cổ vai gáy bao nhiêu em → Gửi tin của khách.","Tải lại trang Cần chăm sóc."],
-          "expect": ["Chị Mai về Đang tư vấn, bot trả lời như khách bình thường.","Khu Cần gọi điện không còn chị Mai (nhân viên không gọi người đang chat với bot)."],
+          "expect": ["Chị Mai về Đang tư vấn, bot trả lời như khách bình thường.","Khu Cần gọi điện không còn chị Mai (nhân viên không gọi người đang chat với bot).","DN đã kết nối Telegram: nhóm nhận “📩 chị Mai (090***001) — bot nhắn chào dd/mm, hôm nay mới trả lời — Sửa nhà An Phát / Đã rời danh sách Cần gọi điện, bot đang tư vấn (không cần gọi nữa). / Mở hội thoại: …” (SĐT che giữa)."],
           "tags": ["fake-mode","new"]
         },
         {
@@ -1803,7 +1803,7 @@
           "who": "Chủ DN",
           "where": "Nick A → khung Giả lập + Cần chăm sóc + Tổng quan",
           "steps": ["Tua nhanh thời gian → +15 ngày.","Xem Đang chăm sóc, khu Cần gọi điện, ô Số cần gọi điện ở Tổng quan."],
-          "expect": ["Chị Mai: Đã nguội – gọi điện.","Khu Cần gọi điện: chị Mai ĐỨNG ĐẦU, nhãn “Từng tư vấn – đã nguội”, dòng “Khách từng hỏi: “giờ chị mới đọc, gói cổ vai gáy…” · nhắn lần cuối dd/mm”; nút Xem hội thoại mở đúng Hộp thư.","Ô Tổng quan ghi “1 khách từng tư vấn — gọi trước”."],
+          "expect": ["Chị Mai: Đã nguội – gọi điện.","Khu Cần gọi điện: chị Mai ĐỨNG ĐẦU, nhãn “Từng tư vấn – đã nguội”, dòng “Khách từng hỏi: “giờ chị mới đọc, gói cổ vai gáy…” · nhắn lần cuối dd/mm”; nút Xem hội thoại mở đúng Hộp thư.","Ô Tổng quan ghi “1 khách từng tư vấn — gọi trước”.","Khung Giả lập cho chị Mai nhắn lại (vd: em ơi chị hỏi tiếp) → Telegram báo “📩 chị Mai (…) — từng tư vấn rồi im, hôm nay nhắn lại…”; chị Mai về Đang tư vấn. Tua nhanh +15 ngày lần nữa để chị Mai nguội lại cho zvd.4."],
           "tags": ["fake-mode","new"]
         },
         {
@@ -1868,6 +1868,15 @@
           "where": "Cần chăm sóc (tài khoản nhân viên), rồi tài khoản DN khác",
           "steps": ["Đăng nhập nhân viên của DN này → Cần chăm sóc.","Bấm Không nghe máy cho một người.","Đăng nhập chủ một DN khác → Cần chăm sóc."],
           "expect": ["Nhân viên thấy khu Cần gọi điện và ghi kết quả được.","DN khác không thấy ai của DN này."],
+          "tags": ["fake-mode","new","safety"]
+        },
+        {
+          "id": "zvd.11",
+          "title": "Chạy lại dev không nhắn lại; kết bạn lại không cảm ơn lần hai",
+          "who": "Chủ DN",
+          "where": "PowerShell + Hộp thư + Nick A → khung Giả lập",
+          "steps": ["Ghi lại số tin của 2–3 hội thoại trong Hộp thư (người đã nhận tin chào, người đã trả lời).",".\\stop rồi .\\dev, đợi 5 phút trong khung giờ được nhắn.","Khung Giả lập: uid của một người đã trả lời và đã nhận câu cảm ơn kết bạn (vd chị Thu ở zpo.7) → Hủy kết bạn → Kết bạn với khách → đợi 5 phút."],
+          "expect": ["Sau khi chạy lại: không ai nhận lại tin chào / tin giới thiệu / câu cảm ơn. Chỉ có tin hỏi thăm (nếu có) cho người đã trả lời rồi im ≥ 6 giờ — mỗi người tối đa 1 tin khi chưa trả lời.","Kết bạn lại: KHÔNG có câu cảm ơn thứ hai.","Nếu vẫn thấy tin bị gửi lại: chụp hội thoại đó (tin nào, lúc nào) gửi Claude."],
           "tags": ["fake-mode","new","safety"]
         }
       ]

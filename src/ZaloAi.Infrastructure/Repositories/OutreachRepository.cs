@@ -224,7 +224,7 @@ public sealed class OutreachRepository(AppDbContext db, ITenantContext tenantCon
     }
 
     /// <summary>
-    /// Đã nhận tin bên mình mà im 2 ngày tính từ tin CUỐI bên mình gửi (tin chào / tin giới thiệu / nhân viên nhắn) → "Cần gọi điện"
+    /// Đã nhận tin bên mình mà im 24 giờ tính từ tin CUỐI bên mình gửi (tin chào / tin giới thiệu / nhân viên nhắn) → "Cần gọi điện"
     /// (được track). Còn việc sắp chạy (giới thiệu ngay sau khi khách chấp nhận kết bạn) thì đợi việc đó xong.
     /// </summary>
     public async Task<IReadOnlyList<OutreachTarget>> ListSilentAsync(Guid tenantId, DateTimeOffset now, CancellationToken cancellationToken)
@@ -364,6 +364,17 @@ public sealed class OutreachRepository(AppDbContext db, ITenantContext tenantCon
             .SetProperty(c => c.CreatedAt, c => c.CreatedAt - by)
             .SetProperty(c => c.LastMessageAt, c => c.LastMessageAt - by)
             .SetProperty(c => c.LastCustomerMessageAt, c => c.LastCustomerMessageAt - by), cancellationToken);
+    }
+
+    /// <summary>Số người cần gọi theo từng nick (trang Zalo cá nhân, trang nick).</summary>
+    public async Task<Dictionary<Guid, int>> CountCallListByConnectionAsync(Guid tenantId, CancellationToken cancellationToken)
+    {
+        EnsureTenant(tenantId);
+        return await CallListQuery(tenantId)
+            .Where(t => t.ConnectionId != null)
+            .GroupBy(t => t.ConnectionId!.Value)
+            .Select(g => new { g.Key, Count = g.Count() })
+            .ToDictionaryAsync(r => r.Key, r => r.Count, cancellationToken);
     }
 
     private IQueryable<OutreachTarget> CallListQuery(Guid tenantId) =>
