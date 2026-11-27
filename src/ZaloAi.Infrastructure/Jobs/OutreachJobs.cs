@@ -432,8 +432,14 @@ public sealed partial class OutreachTenantJob(
             .TakeLast(6)
             .Select(m => new BotHistoryTurn(m.Sender, encryptor.Decrypt(m.ContentEnc)))
             .ToList();
+        // Đúng một lần cho mỗi người (2026-11-27): sự kiện "kết bạn" đến lại (khách xóa rồi kết bạn lại, nick nối lại) không gửi câu cảm ơn lần hai.
+        target.NextActionAt = null;
+        if (!await store.SetIfNotExistsAsync($"zp:accepted-thanks:{target.Id:N}", "1", TimeSpan.FromDays(180), cancellationToken))
+        {
+            return;
+        }
+
         var texts = await ComposeAsync(tenant, contact, OutreachMessageKind.AcceptedThanks, new Intro("customer", null, null), recent, conversation.Id, conversation.ConnectionId, cancellationToken);
-        target.NextActionAt = null; // gửi đúng một lần: lưu cùng tin trước khi gửi
         var messages = AddProactive(tenantId, conversation, texts);
         await conversations.SaveChangesAsync(cancellationToken);
         await DeliverAllAsync(tenantId, conversation, contact, messages, cancellationToken);

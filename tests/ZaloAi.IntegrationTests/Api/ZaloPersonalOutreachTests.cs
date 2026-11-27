@@ -353,6 +353,11 @@ public sealed class ZaloPersonalOutreachTests(PostgresFixture db) : IAsyncLifeti
         await RunOutreachAsync(tenantId, TimeSpan.FromMinutes(20));
         await RunOutreachAsync(tenantId, TimeSpan.FromMinutes(40));
 
+        // Sự kiện "kết bạn" đến lại (khách xóa rồi kết bạn lại / nick nối lại) → KHÔNG cảm ơn lần hai (2026-11-27).
+        await EventsAsync(connectionId, new { type = "friend", @event = "add", uid = $"u-{phone}", ts = 3L });
+        await RunOutreachAsync(tenantId, TimeSpan.FromMinutes(60));
+        await RunOutreachAsync(tenantId, TimeSpan.FromMinutes(80));
+
         var texts = await ProactiveTextsAsync(tenantId);
         texts.Count.ShouldBe(2); // tin chào + đúng 1 câu cảm ơn
         texts.Count(t => t.Contains("cảm ơn", StringComparison.Ordinal)).ShouldBe(1);
