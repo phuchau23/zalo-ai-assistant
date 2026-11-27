@@ -576,7 +576,7 @@ public sealed partial class OutreachTenantJob(
             target.State = OutreachState.Messaged;
             target.FirstMessageAt = now;
             target.LastError = null;
-            target.NextActionAt = null; // job dọn hằng giờ: 2 ngày không trả lời → danh sách "Cần gọi điện"
+            target.NextActionAt = null; // job dọn hằng giờ: 24 giờ không trả lời → danh sách "Cần gọi điện"
             contact.LastProactiveAt = now;
             contact.ProactiveAwaitingReply = true;
             return true;
@@ -731,7 +731,7 @@ public sealed class OutreachMaintenanceSweepJob(OutreachLookup lookup, IBackgrou
 /// <summary>
 /// Dọn hàng đợi + phanh tự động của một tenant (docs/ZALO-PERSONAL-PLAN.md mục 6.7, 7.1) — chuyển trạng thái theo thời gian của vòng
 /// đời số điện thoại (<see cref="OutreachLifecycle"/>, chủ dự án chốt 2026-11-25): khách nói "hủy" → từ chối; có lịch hẹn / hóa đơn mới →
-/// đã thành khách; lời mời 14 ngày không chấp nhận → rút lời mời; im 2 ngày sau tin cuối bên mình → cần gọi điện; đang tư vấn mà im
+/// đã thành khách; lời mời 14 ngày không chấp nhận → rút lời mời; im 24 giờ sau tin cuối bên mình → cần gọi điện; đang tư vấn mà im
 /// 14 ngày → đã nguội; nằm trong danh sách gọi 30 ngày không ai xử lý → lưu trữ. Mỗi ngày báo Telegram số người cần gọi (một lần, lúc mở
 /// khung giờ nhắn). Phanh: chỉ GIẢM tốc khi khách phản hồi xấu.
 /// </summary>

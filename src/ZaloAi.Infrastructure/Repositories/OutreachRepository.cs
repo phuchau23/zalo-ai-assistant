@@ -224,7 +224,7 @@ public sealed class OutreachRepository(AppDbContext db, ITenantContext tenantCon
     }
 
     /// <summary>
-    /// Đã nhận tin bên mình mà im 2 ngày tính từ tin CUỐI bên mình gửi (tin chào / tin giới thiệu / nhân viên nhắn) → "Cần gọi điện"
+    /// Đã nhận tin bên mình mà im 24 giờ tính từ tin CUỐI bên mình gửi (tin chào / tin giới thiệu / nhân viên nhắn) → "Cần gọi điện"
     /// (được track). Còn việc sắp chạy (giới thiệu ngay sau khi khách chấp nhận kết bạn) thì đợi việc đó xong.
     /// </summary>
     public async Task<IReadOnlyList<OutreachTarget>> ListSilentAsync(Guid tenantId, DateTimeOffset now, CancellationToken cancellationToken)

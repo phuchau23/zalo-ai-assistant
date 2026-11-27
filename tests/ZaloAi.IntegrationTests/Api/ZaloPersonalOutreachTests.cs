@@ -642,7 +642,7 @@ public sealed class ZaloPersonalOutreachTests(PostgresFixture db) : IAsyncLifeti
     }
 
     [Fact]
-    public async Task Two_quiet_days_after_our_last_message_move_to_the_call_list_and_opt_out_declines()
+    public async Task A_quiet_day_after_our_last_message_moves_to_the_call_list_and_opt_out_declines()
     {
         var (tenantId, owner, connectionId) = await ConnectedTenantAsync("Dọn hàng đợi");
         await InvitesPerDayAsync(owner, connectionId, 1);
@@ -651,8 +651,8 @@ public sealed class ZaloPersonalOutreachTests(PostgresFixture db) : IAsyncLifeti
         await PasteAsync(owner, $"{quiet}\n{optOut}");
         await RunOutreachAsync(tenantId);
 
-        // Tin chào 3 ngày trước nhưng hôm qua bên mình vừa nhắn thêm (tin giới thiệu / nhân viên) → chưa tính là im 2 ngày.
-        await AgeAsync(tenantId, firstMessage: TimeSpan.FromDays(3), lastMessage: TimeSpan.FromDays(1));
+        // Tin chào 3 ngày trước nhưng 12 giờ trước bên mình vừa nhắn thêm (tin giới thiệu / nhân viên) → chưa tính là im 24 giờ.
+        await AgeAsync(tenantId, firstMessage: TimeSpan.FromDays(3), lastMessage: TimeSpan.FromHours(12));
         await using (var context = db.CreateDbContext(tenantId))
         {
             (await context.Contacts.SingleAsync(c => c.ExternalUserId == $"u-{optOut}")).ProactiveOptOutAt = DateTimeOffset.UtcNow;
@@ -662,7 +662,7 @@ public sealed class ZaloPersonalOutreachTests(PostgresFixture db) : IAsyncLifeti
         await MaintenanceAsync(tenantId);
         (await TargetsAsync(owner)).Select(t => t.State).OrderBy(s => s, StringComparer.Ordinal).ShouldBe(["declined", "messaged"]);
 
-        await AgeAsync(tenantId, firstMessage: TimeSpan.FromDays(3), lastMessage: TimeSpan.FromDays(2.5));
+        await AgeAsync(tenantId, firstMessage: TimeSpan.FromDays(3), lastMessage: TimeSpan.FromHours(25));
         await MaintenanceAsync(tenantId);
         (await TargetsAsync(owner)).Select(t => t.State).OrderBy(s => s, StringComparer.Ordinal).ShouldBe(["declined", "noreply"]);
 

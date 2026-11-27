@@ -28,8 +28,8 @@ public enum OutreachState
     Expired,
 
     /// <summary>
-    /// "Cần gọi điện": 2 ngày sau tin cuối bên mình gửi mà khách vẫn im (chủ dự án chốt 2026-11-25, trước là 7 ngày) → bot thôi nhắn,
-    /// vào danh sách gọi điện ở trang Cần chăm sóc. Khách trả lời muộn → tự về <see cref="Replied"/>.
+    /// "Cần gọi điện": 24 giờ sau tin cuối bên mình gửi mà khách vẫn im (chủ dự án chốt 2026-11-27; trước là 2 ngày, ban đầu 7 ngày) →
+    /// bot thôi nhắn, vào danh sách gọi điện ở trang Cần chăm sóc. Khách trả lời muộn → tự về <see cref="Replied"/> + báo Telegram.
     /// </summary>
     NoReply,
 
